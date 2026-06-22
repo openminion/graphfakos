@@ -1,0 +1,15 @@
+include LICENSE
+include NOTICE
+include CODE_OF_CONDUCT.md
+include CODE_QUALITY.md
+include CONTRIBUTING.md
+include SECURITY.md
+include SUPPORT.md
+recursive-include scripts *.py
+recursive-include docs *.md
+include API_COMPATIBILITY.md
+include README.md
+include RELEASING.md
+include src/graphfakos/py.typed
+recursive-exclude * __pycache__ *.py[cod]
+prune src/*.egg-info

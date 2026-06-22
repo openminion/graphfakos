@@ -1,0 +1,65 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "graphfakos"
+version = "0.0.1"
+description = "Reusable graph viewer and provider contract for agent memory, source graphs, and knowledge graph workbenches"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "GraphFakos Contributors" }]
+keywords = [
+  "agent",
+  "knowledge-graph",
+  "graph-viewer",
+  "memory",
+  "source-graph",
+  "visualization",
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.11",
+  "Typing :: Typed",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+  "Topic :: Scientific/Engineering :: Visualization",
+]
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/openminion/graphfakos"
+Repository = "https://github.com/openminion/graphfakos"
+Issues = "https://github.com/openminion/graphfakos/issues"
+Documentation = "https://github.com/openminion/graphfakos/tree/main/docs"
+Download = "https://pypi.org/project/graphfakos/"
+
+[project.optional-dependencies]
+dev = [
+  "build>=1,<2",
+  "pytest>=8,<9",
+  "ruff>=0.11,<1",
+  "twine>=5,<7",
+]
+
+[project.scripts]
+graphfakos = "graphfakos.__main__:main"
+graphfakos-smoke = "graphfakos.__main__:main"
+graphfakos-ui = "graphfakos.__main__:ui_preview_main"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+graphfakos = ["py.typed"]
+
+[tool.pytest.ini_options]
+addopts = "--import-mode=importlib"

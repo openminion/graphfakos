@@ -207,6 +207,43 @@ class GraphFakosGraph:
 
 
 @dataclass(frozen=True, slots=True)
+class GraphFakosDiagnostics:
+    node_count: int
+    edge_count: int
+    provenance_count: int
+    citation_count: int
+    orphan_node_ids: tuple[str, ...] = ()
+    duplicate_edge_ids: tuple[str, ...] = ()
+    unknown_provenance_ids: tuple[str, ...] = ()
+    unknown_citation_ids: tuple[str, ...] = ()
+    warnings: tuple[str, ...] = ()
+
+    @property
+    def healthy(self) -> bool:
+        return not (
+            self.orphan_node_ids
+            or self.duplicate_edge_ids
+            or self.unknown_provenance_ids
+            or self.unknown_citation_ids
+            or self.warnings
+        )
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "healthy": self.healthy,
+            "node_count": self.node_count,
+            "edge_count": self.edge_count,
+            "provenance_count": self.provenance_count,
+            "citation_count": self.citation_count,
+            "orphan_node_ids": list(self.orphan_node_ids),
+            "duplicate_edge_ids": list(self.duplicate_edge_ids),
+            "unknown_provenance_ids": list(self.unknown_provenance_ids),
+            "unknown_citation_ids": list(self.unknown_citation_ids),
+            "warnings": list(self.warnings),
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class GraphFakosRequest:
     screen: GraphFakosScreen = "explore"
     query: str = ""
@@ -256,6 +293,7 @@ class GraphFakosRequest:
 
 __all__ = [
     "GraphFakosCitation",
+    "GraphFakosDiagnostics",
     "GraphFakosEdge",
     "GraphFakosGraph",
     "GraphFakosNode",

@@ -42,7 +42,8 @@ and `graphfakos.ui`.
 ## Source
 
 - `src/graphfakos/models.py`: provider-neutral graph DTOs
-- `src/graphfakos/provider.py`: provider protocol and validation helpers
+- `src/graphfakos/provider.py`: provider protocol, validation helpers, and
+  provider-neutral diagnostics
 - `src/graphfakos/contracts.py`: public adapter/DTO contract exports
 - `src/graphfakos/render.py`: public viewer rendering exports
 - `src/graphfakos/static.py`: static HTML rendering entrypoints

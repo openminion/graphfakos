@@ -22,7 +22,9 @@ def test_graphfakos_package_imports() -> None:
     assert "graphfakos.models" in graphfakos.STABLE_IMPORT_ROOTS
     assert "graphfakos.contracts" in graphfakos.STABLE_IMPORT_ROOTS
     assert "graphfakos.render" in graphfakos.STABLE_IMPORT_ROOTS
+    assert "GraphFakosDiagnostics" in graphfakos.__all__
     assert "GraphFakosGraph" in graphfakos.__all__
+    assert "diagnose_graph" in graphfakos.__all__
     assert "FixtureGraphProvider" in graphfakos.adapters.__all__
     assert "render_graph_viewer" in graphfakos.ui.__all__
     assert "GraphFakosProvider" in graphfakos.contracts.__all__

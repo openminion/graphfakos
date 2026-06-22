@@ -2,6 +2,7 @@
 
 from .models import (
     GraphFakosCitation,
+    GraphFakosDiagnostics,
     GraphFakosEdge,
     GraphFakosGraph,
     GraphFakosNode,
@@ -10,10 +11,16 @@ from .models import (
     GraphFakosScreen,
     GraphFakosVisual,
 )
-from .provider import GraphFakosProvider, load_provider_graph, validate_graph
+from .provider import (
+    GraphFakosProvider,
+    diagnose_graph,
+    load_provider_graph,
+    validate_graph,
+)
 
 __all__ = [
     "GraphFakosCitation",
+    "GraphFakosDiagnostics",
     "GraphFakosEdge",
     "GraphFakosGraph",
     "GraphFakosNode",
@@ -22,6 +29,7 @@ __all__ = [
     "GraphFakosRequest",
     "GraphFakosScreen",
     "GraphFakosVisual",
+    "diagnose_graph",
     "load_provider_graph",
     "validate_graph",
 ]

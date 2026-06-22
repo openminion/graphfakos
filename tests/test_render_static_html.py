@@ -25,6 +25,8 @@ def test_provider_status_screen_renders_capabilities() -> None:
     )
 
     assert "Provider Status" in html
+    assert "Graph Health" in html
+    assert "healthy" in html
     assert "static_export" in html
     assert "local_preview" in html
 

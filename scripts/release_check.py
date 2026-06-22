@@ -161,7 +161,8 @@ def main(argv: list[str] | None = None) -> int:
                     (
                         "from importlib.resources import files; "
                         "from graphfakos import GraphFakosGraph, "
-                        "GraphFakosProvider, FixtureGraphProvider, "
+                        "GraphFakosDiagnostics, GraphFakosProvider, "
+                        "FixtureGraphProvider, diagnose_graph, "
                         "render_static_html, screen_manifest; "
                         "from graphfakos.contracts import GraphFakosRequest; "
                         "from graphfakos.render import render_graph_viewer; "

@@ -8,6 +8,7 @@ from graphfakos import (
     GraphFakosGraph,
     GraphFakosNode,
     GraphFakosRequest,
+    diagnose_graph,
     load_provider_graph,
     validate_graph,
 )
@@ -45,6 +46,81 @@ def test_validate_graph_rejects_unknown_edge_references() -> None:
 
     with pytest.raises(ValueError, match="unknown target"):
         validate_graph(graph)
+
+
+def test_validate_graph_rejects_duplicate_edge_ids() -> None:
+    graph = GraphFakosGraph(
+        graph_id="bad",
+        label="Bad Graph",
+        provider_id="bad",
+        provider_label="Bad Provider",
+        graph_role="third_party",
+        capabilities=(),
+        nodes=(
+            GraphFakosNode(id="one", label="One", kind="node"),
+            GraphFakosNode(id="two", label="Two", kind="node"),
+        ),
+        edges=(
+            GraphFakosEdge(
+                id="duplicate",
+                source_id="one",
+                target_id="two",
+                kind="relates",
+            ),
+            GraphFakosEdge(
+                id="duplicate",
+                source_id="two",
+                target_id="one",
+                kind="relates",
+            ),
+        ),
+    )
+
+    with pytest.raises(ValueError, match="duplicate edge ids"):
+        validate_graph(graph)
+
+
+def test_diagnose_graph_reports_provider_neutral_health() -> None:
+    graph = GraphFakosGraph(
+        graph_id="diagnostic",
+        label="Diagnostic Graph",
+        provider_id="diagnostic",
+        provider_label="Diagnostic Provider",
+        graph_role="third_party",
+        capabilities=(),
+        nodes=(
+            GraphFakosNode(
+                id="one",
+                label="One",
+                kind="node",
+                provenance_ids=("missing-provenance",),
+            ),
+            GraphFakosNode(id="two", label="Two", kind="node"),
+            GraphFakosNode(
+                id="orphan",
+                label="Orphan",
+                kind="node",
+                citation_ids=("missing-citation",),
+            ),
+        ),
+        edges=(
+            GraphFakosEdge(
+                id="edge",
+                source_id="one",
+                target_id="two",
+                kind="relates",
+            ),
+        ),
+        warnings=("provider warning",),
+    )
+
+    diagnostics = diagnose_graph(graph)
+
+    assert diagnostics.healthy is False
+    assert diagnostics.orphan_node_ids == ("orphan",)
+    assert diagnostics.unknown_provenance_ids == ("missing-provenance",)
+    assert diagnostics.unknown_citation_ids == ("missing-citation",)
+    assert diagnostics.to_dict()["warnings"] == ["provider warning"]
 
 
 def test_graph_to_dict_is_provider_neutral() -> None:

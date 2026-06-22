@@ -56,6 +56,8 @@ python3.11 -m pip install -e .
   Sophiagraph, PragmaGraph, or OpenMinion
 - a local graph workbench with explore, neighborhood, path, provenance,
   timeline, provider-status, and context-preview screens
+- provider-neutral graph diagnostics for orphan nodes, duplicate edges,
+  missing provenance/citation references, and provider warnings
 - dependency-free navigation for node selection, edge inspection, query search,
   node-kind, edge-kind, tag, source, and score filters
 - depth-aware neighborhood expansion and path source/target controls

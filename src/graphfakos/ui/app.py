@@ -7,6 +7,7 @@ from math import cos, pi, sin
 from urllib.parse import urlencode
 
 from graphfakos.models import (
+    GraphFakosDiagnostics,
     GraphFakosEdge,
     GraphFakosGraph,
     GraphFakosNode,
@@ -14,7 +15,7 @@ from graphfakos.models import (
     GraphFakosRequest,
     GraphFakosScreen,
 )
-from graphfakos.provider import GraphFakosProvider, load_provider_graph
+from graphfakos.provider import GraphFakosProvider, diagnose_graph, load_provider_graph
 
 _SCREEN_NAV: tuple[tuple[GraphFakosScreen, str], ...] = (
     ("explore", "Explore"),
@@ -330,6 +331,7 @@ def _render_timeline(graph: GraphFakosGraph) -> str:
 
 
 def _render_provider_status(graph: GraphFakosGraph) -> str:
+    diagnostics = diagnose_graph(graph)
     status = {
         "provider_id": graph.provider_id,
         "provider_label": graph.provider_label,
@@ -343,9 +345,46 @@ def _render_provider_status(graph: GraphFakosGraph) -> str:
     }
     return _split(
         _panel("Provider Status", _key_values(status)),
-        _panel("Sample Nodes", _node_cards(graph.nodes[:5]))
+        _panel("Graph Health", _graph_health(diagnostics))
+        + _panel("Sample Nodes", _node_cards(graph.nodes[:5]))
         + _panel("Warnings", _list(graph.warnings)),
     )
+
+
+def _graph_health(diagnostics: GraphFakosDiagnostics) -> str:
+    tone = "accent" if diagnostics.healthy else "blue"
+    summary = (
+        _badges(
+            (
+                ("healthy" if diagnostics.healthy else "needs review", tone),
+                (f"{diagnostics.node_count} nodes", "neutral"),
+                (f"{diagnostics.edge_count} edges", "neutral"),
+            )
+        )
+        + _key_values(
+            {
+                "provenance": diagnostics.provenance_count,
+                "citations": diagnostics.citation_count,
+                "orphan nodes": len(diagnostics.orphan_node_ids),
+                "duplicate edges": len(diagnostics.duplicate_edge_ids),
+                "unknown provenance refs": len(diagnostics.unknown_provenance_ids),
+                "unknown citation refs": len(diagnostics.unknown_citation_ids),
+            }
+        )
+    )
+    details = (
+        _diagnostic_list("Orphan nodes", diagnostics.orphan_node_ids)
+        + _diagnostic_list("Duplicate edge ids", diagnostics.duplicate_edge_ids)
+        + _diagnostic_list("Unknown provenance ids", diagnostics.unknown_provenance_ids)
+        + _diagnostic_list("Unknown citation ids", diagnostics.unknown_citation_ids)
+    )
+    return summary + (details if details else _empty("No graph diagnostics."))
+
+
+def _diagnostic_list(title: str, items: tuple[str, ...]) -> str:
+    if not items:
+        return ""
+    return f"<h4>{escape(title)}</h4>{_list(items)}"
 
 
 def _render_context_preview(graph: GraphFakosGraph) -> str:

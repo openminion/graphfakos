@@ -35,6 +35,7 @@ and `graphfakos.ui`.
 ## Docs
 
 - `docs/README.md`: package-local docs index and integration model
+- `docs/custom-provider-example.md`: package-neutral third-party provider example
 - `docs/ui-contracts.md`: shared viewer contract, wrapper responsibilities,
   and provider-adapter expectations
 - `docs/source-tree-owner-map.md`: this source-tree owner map
@@ -51,7 +52,8 @@ and `graphfakos.ui`.
 - `src/graphfakos/cli.py`: command-line parsing and execution
 - `src/graphfakos/py.typed`: PEP 561 marker for typed package consumers
 - `src/graphfakos/ui/`: viewer rendering primitives, screen manifest,
-  filter controls, graph canvas, node/edge inspectors, and screen layouts
+  filter controls, graph canvas, node/edge inspectors, guidance panels, and
+  screen layouts
 - `src/graphfakos/adapters/fixture.py`: fake third-party provider
 - `src/graphfakos/testing/assertions.py`: reusable viewer assertions
 

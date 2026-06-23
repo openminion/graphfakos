@@ -35,9 +35,15 @@ def test_graphfakos_screen_manifest_is_public() -> None:
     import graphfakos
 
     manifest = graphfakos.screen_manifest()
+    explore = next(item for item in manifest if item["screen"] == "explore")
+    context = next(item for item in manifest if item["screen"] == "context_preview")
 
-    assert {"screen": "explore", "label": "Explore"} in manifest
-    assert {"screen": "context_preview", "label": "Context"} in manifest
+    assert explore["label"] == "Explore"
+    assert explore["route"] == "/explore"
+    assert "Filter the graph" in explore["summary"]
+    assert context["label"] == "Context"
+    assert context["route"] == "/context_preview"
+    assert "graph context" in context["summary"]
 
 
 def test_version_metadata_matches_pyproject() -> None:

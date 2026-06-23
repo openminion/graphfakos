@@ -24,6 +24,7 @@ release note says otherwise:
 - DTO class names
 - provider protocol method names
 - provider-neutral `diagnose_graph()` output shape
+- `screen_manifest()` keys for `screen`, `label`, `route`, and `summary`
 - console script names
 - local preview server helper names
 - screen manifest helper names

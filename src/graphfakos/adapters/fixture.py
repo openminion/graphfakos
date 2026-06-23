@@ -129,6 +129,16 @@ def build_fixture_graph(request: GraphFakosRequest | None = None) -> GraphFakosG
         warnings=(),
         stats={"request_screen": request.screen, "node_count": len(nodes)},
         generated_at="2026-06-22T00:00:00+00:00",
+        provider_payload={
+            "integration_summary": (
+                "This fixture shows how a package-local provider can publish "
+                "viewer-ready graph DTOs without importing any host runtime."
+            ),
+            "integration_commands": (
+                "graphfakos-ui --screen explore --html-out graphfakos-ui-preview.html --json",
+                "graphfakos-ui --screen provider_status --serve --open",
+            ),
+        },
     )
 
 

@@ -42,11 +42,12 @@ Allowed package-local responsibilities:
 GraphFakos-owned responsibilities:
 
 1. shared screen names and navigation behavior,
-2. static export and local preview server behavior,
-3. graph filtering, selection, and inspection controls,
-4. provider status and capability presentation,
-5. context-preview layout,
-6. common smoke assertions.
+2. provider-neutral screen metadata such as route labels and summaries,
+3. static export and local preview server behavior,
+4. graph filtering, selection, and inspection controls,
+5. provider status and capability presentation,
+6. context-preview layout,
+7. common smoke assertions.
 
 ## Provider Adapter Shape
 
@@ -59,7 +60,8 @@ The graph envelope should contain:
 3. edges with stable ids, endpoints, kind, label, score, weight, provenance,
    citations, and provider payloads,
 4. optional selected node or selected edge hints,
-5. optional integration commands for host packages such as OpenMinion.
+5. optional integration commands and short integration summaries for host
+   packages or standalone previews.
 
 Provider-only semantics belong in `provider_payload` unless the field is part
 of the stable common DTO model.

@@ -1,0 +1,98 @@
+# Custom Provider Example
+
+GraphFakos is meant to work with packages that do not import Sophiagraph,
+PragmaGraph, or OpenMinion. A custom package only needs to emit
+provider-neutral DTOs and implement `GraphFakosProvider`.
+
+## Minimal provider
+
+```python
+from graphfakos import (
+    GraphFakosEdge,
+    GraphFakosGraph,
+    GraphFakosNode,
+    GraphFakosProvider,
+    GraphFakosRequest,
+)
+
+
+class PackageGraphProvider(GraphFakosProvider):
+    provider_id = "package_graph"
+    provider_label = "Package Graph"
+    graph_role = "third_party"
+    capabilities = (
+        "search",
+        "neighborhood",
+        "path",
+        "provider_status",
+        "static_export",
+    )
+
+    def load_graph(self, request: GraphFakosRequest) -> GraphFakosGraph:
+        nodes = (
+            GraphFakosNode(
+                id="node:guide",
+                label="Integration Guide",
+                kind="document",
+                summary="Package-specific graph documentation.",
+                tags=("guide", "docs"),
+                source="package_docs",
+            ),
+            GraphFakosNode(
+                id="node:service",
+                label="Graph Service",
+                kind="service",
+                summary="A package-local graph producer.",
+                tags=("service",),
+                source="package_runtime",
+            ),
+        )
+        edges = (
+            GraphFakosEdge(
+                id="edge:service-docs",
+                source_id="node:service",
+                target_id="node:guide",
+                kind="documents",
+                label="documents",
+            ),
+        )
+        return GraphFakosGraph(
+            graph_id="package_graph",
+            label="Package Graph",
+            provider_id=self.provider_id,
+            provider_label=self.provider_label,
+            graph_role=self.graph_role,
+            capabilities=self.capabilities,
+            nodes=nodes,
+            edges=edges,
+            provider_payload={
+                "integration_summary": (
+                    "This package publishes graph DTOs directly into the "
+                    "shared GraphFakos viewer."
+                ),
+                "integration_commands": (
+                    "python -m package_graph preview --screen explore --serve",
+                ),
+            },
+        )
+```
+
+## Provider-neutral rules
+
+- Put stable graph facts in DTO fields such as ids, labels, kinds, tags,
+  scores, provenance, citations, and sources.
+- Put package-specific semantics in `provider_payload`.
+- Keep host/runtime policy outside GraphFakos.
+- Keep package-local preview commands thin: provider construction, defaults,
+  and package labels belong there; shared viewer behavior belongs in
+  GraphFakos.
+
+## Validation loop
+
+Use the same local proof shape as the fixture provider:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 .venv/bin/python3.11 -m ruff check src tests scripts
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src .venv/bin/python3.11 -m pytest -q
+.venv/bin/python3.11 scripts/release_check.py --skip-twine --skip-wheel-smoke
+```

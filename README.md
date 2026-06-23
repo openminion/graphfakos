@@ -56,6 +56,7 @@ python3.11 -m pip install -e .
   Sophiagraph, PragmaGraph, or OpenMinion
 - a local graph workbench with explore, neighborhood, path, provenance,
   timeline, provider-status, and context-preview screens
+- a public screen manifest with provider-neutral routes, labels, and summaries
 - provider-neutral graph diagnostics for orphan nodes, duplicate edges,
   missing provenance/citation references, and provider warnings
 - dependency-free navigation for node selection, edge inspection, query search,
@@ -149,6 +150,7 @@ same DTOs.
 - [API compatibility](API_COMPATIBILITY.md)
 - [Release process](RELEASING.md)
 - [Package docs](docs/README.md)
+- [Custom provider example](docs/custom-provider-example.md)
 - [UI contracts](docs/ui-contracts.md)
 - [Source tree owner map](docs/source-tree-owner-map.md)
 

@@ -10,6 +10,7 @@ from graphfakos import (
     GraphFakosRequest,
     diagnose_graph,
     load_provider_graph,
+    render_static_html,
     validate_graph,
 )
 
@@ -131,3 +132,74 @@ def test_graph_to_dict_is_provider_neutral() -> None:
     assert payload["graph_role"] == "third_party"
     assert len(payload["nodes"]) == 4
     assert len(payload["edges"]) == 4
+
+
+def test_custom_provider_can_render_all_shared_screens() -> None:
+    class CustomProvider:
+        provider_id = "custom"
+        provider_label = "Custom Provider"
+        graph_role = "third_party"
+        capabilities = (
+            "search",
+            "neighborhood",
+            "path",
+            "provenance",
+            "timeline",
+            "provider_status",
+            "context_preview",
+            "static_export",
+        )
+
+        def load_graph(self, request: GraphFakosRequest) -> GraphFakosGraph:
+            return GraphFakosGraph(
+                graph_id="custom",
+                label="Custom Graph",
+                provider_id=self.provider_id,
+                provider_label=self.provider_label,
+                graph_role=self.graph_role,
+                capabilities=self.capabilities,
+                nodes=(
+                    GraphFakosNode(
+                        id="one",
+                        label="One",
+                        kind="record",
+                        summary="First custom node.",
+                        score=0.9,
+                        source="custom",
+                    ),
+                    GraphFakosNode(
+                        id="two",
+                        label="Two",
+                        kind="record",
+                        summary="Second custom node.",
+                        score=0.8,
+                        source="custom",
+                    ),
+                ),
+                edges=(
+                    GraphFakosEdge(
+                        id="one-two",
+                        source_id="one",
+                        target_id="two",
+                        kind="connects",
+                        label="connects",
+                    ),
+                ),
+                provider_payload={
+                    "integration_summary": "Custom provider preview.",
+                    "integration_commands": ("python -m custom_graph preview --serve",),
+                },
+            )
+
+    for screen in (
+        "explore",
+        "neighborhood",
+        "path",
+        "provenance",
+        "timeline",
+        "provider_status",
+        "context_preview",
+    ):
+        html = render_static_html(CustomProvider(), GraphFakosRequest(screen=screen))
+        assert "Custom Provider" in html
+        assert "Integration Commands" in html

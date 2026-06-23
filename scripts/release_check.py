@@ -52,6 +52,7 @@ def _assert_package_docs_shape(root: Path) -> None:
         root / "API_COMPATIBILITY.md",
         root / "RELEASING.md",
         root / "docs" / "README.md",
+        root / "docs" / "custom-provider-example.md",
         root / "docs" / "source-tree-owner-map.md",
         root / "docs" / "ui-contracts.md",
         root / "src" / "graphfakos" / "__init__.py",

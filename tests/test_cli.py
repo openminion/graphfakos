@@ -44,7 +44,7 @@ def test_python_m_graphfakos_ui_preview_writes_html(tmp_path) -> None:
     assert payload["node_count"] == 4
     assert "GraphFakos" in html
     assert "Fixture Provider" in html
-    assert "OpenMinion Integration" in html
+    assert "Integration Commands" in html
 
 
 def test_graphfakos_ui_preview_accepts_graph_filters(tmp_path) -> None:

@@ -7,6 +7,7 @@ Start with:
 
 - [Source tree owner map](source-tree-owner-map.md)
 - [UI contracts](ui-contracts.md)
+- [Custom provider example](custom-provider-example.md)
 - [API compatibility](../API_COMPATIBILITY.md)
 - [Release process](../RELEASING.md)
 
@@ -32,6 +33,7 @@ It supports:
 
 - explore, neighborhood, path, provenance, timeline, provider-status, and
   context-preview screens,
+- provider-neutral screen metadata for routes, labels, and summaries,
 - search plus node-kind, edge-kind, tag, source, and score filters,
 - clickable nodes and edges with inspector details,
 - depth-aware neighborhoods,
@@ -100,3 +102,6 @@ class MyGraphProvider(GraphFakosProvider):
     def load_graph(self, request: GraphFakosRequest) -> GraphFakosGraph:
         ...
 ```
+
+For a fuller third-party example, see
+[Custom provider example](custom-provider-example.md).

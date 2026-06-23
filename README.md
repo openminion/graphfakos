@@ -1,6 +1,28 @@
-# GraphFakos
+<p align="center">
+  <img src="https://www.openminion.com/brand/openminion-logo.png" alt="OpenMinion logo" width="128" />
+</p>
 
-GraphFakos is a reusable graph lens for agent memory and source knowledge
+<h1 align="center">GraphFakos</h1>
+
+<p align="center">
+  <strong>Standalone provider-neutral graph lens for shared package viewers.</strong>
+</p>
+
+<p align="center">
+  <a href="https://github.com/openminion/graphfakos">GitHub</a>
+  · <a href="https://pypi.org/project/graphfakos/">PyPI</a>
+  · <a href="https://www.openminion.com">Website</a>
+  · <a href="https://x.com/OpenMinion">X</a>
+</p>
+
+<p align="center">
+  <a href="https://pypi.org/project/graphfakos/"><img alt="PyPI" src="https://img.shields.io/pypi/v/graphfakos?color=3775A9"></a>
+  <a href="https://pypi.org/project/graphfakos/"><img alt="Python" src="https://img.shields.io/pypi/pyversions/graphfakos"></a>
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-blue"></a>
+  <img alt="Status" src="https://img.shields.io/badge/status-publish--ready%20alpha-5B8DEF">
+</p>
+
+`graphfakos` is a reusable graph lens for agent memory and source knowledge
 graphs. It provides provider-neutral graph DTOs, adapter protocols, static HTML
 rendering, local preview serving, and test helpers for package-owned graph
 viewers.
@@ -24,7 +46,15 @@ scripts, and reusable viewer assertions.
 
 ## Trust and Brand Safety
 
-GraphFakos is a viewer and adapter-contract package. It does not infer facts,
+- Official GitHub: `https://github.com/openminion/graphfakos`
+- Official website: `https://www.openminion.com`
+- Official X account: `https://x.com/OpenMinion`
+
+`graphfakos` has no official token, coin, NFT, airdrop, staking program,
+treasury product, or investment offering. Any claim otherwise is unauthorized
+and should be treated as a scam.
+
+`graphfakos` is a viewer and adapter-contract package. It does not infer facts,
 extract memories, ingest repositories, enforce OpenMinion runtime policy, or
 decide which graph items are true. Providers own their graph semantics and pass
 explicit nodes, edges, provenance, citations, and provider payloads into

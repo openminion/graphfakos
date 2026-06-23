@@ -9,6 +9,11 @@ GraphFakos exists so packages such as Sophiagraph, PragmaGraph, OpenMinion, and
 third-party graph providers can share a visual graph workbench without sharing
 their internal graph truth or lifecycle semantics.
 
+The name comes from Greek `fakós` (`φακός`), meaning lens; in this package it
+frames the shared graph workbench as a provider-neutral lens over nodes, edges,
+provenance, citations, and package-owned graph semantics rather than as a graph
+builder or memory store.
+
 ## Initial Release Status
 
 GraphFakos is a `0.0.1` semantic-alpha package. The initial public release is

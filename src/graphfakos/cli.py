@@ -8,7 +8,7 @@ import json
 from .adapters import FixtureGraphProvider
 from .models import GraphFakosRequest, GraphFakosScreen
 from .server import serve_local_viewer
-from .static import write_static_html
+from .static import write_embeddable_html, write_graph_report, write_static_html
 from .ui import render_provider_path
 
 _SCREENS: tuple[GraphFakosScreen, ...] = (
@@ -17,6 +17,7 @@ _SCREENS: tuple[GraphFakosScreen, ...] = (
     "path",
     "provenance",
     "timeline",
+    "diff",
     "provider_status",
     "context_preview",
 )
@@ -63,10 +64,12 @@ def _request_from_args(args: argparse.Namespace) -> GraphFakosRequest:
         selected_edge_id=args.selected_edge_id,
         source_node_id=args.source_node_id,
         target_node_id=args.target_node_id,
+        comparison_graph_id=args.comparison_graph_id,
         max_depth=args.max_depth,
         filters=filters,
         layout=args.layout,
         limit=args.limit,
+        render_limit=args.render_limit,
     )
 
 
@@ -85,6 +88,7 @@ def ui_preview_main(argv: list[str] | None = None) -> int:
     parser.add_argument("--selected-edge-id")
     parser.add_argument("--source-node-id")
     parser.add_argument("--target-node-id")
+    parser.add_argument("--comparison-graph-id")
     parser.add_argument("--max-depth", type=int, default=1)
     parser.add_argument("--node-kind", default="")
     parser.add_argument("--edge-kind", default="")
@@ -93,7 +97,10 @@ def ui_preview_main(argv: list[str] | None = None) -> int:
     parser.add_argument("--min-score", default="")
     parser.add_argument("--layout", default="force")
     parser.add_argument("--limit", type=int, default=25)
+    parser.add_argument("--render-limit", type=int, default=120)
     parser.add_argument("--html-out", default="graphfakos-ui-preview.html")
+    parser.add_argument("--embed-out", default="")
+    parser.add_argument("--report-out", default="")
     parser.add_argument("--serve", action="store_true")
     parser.add_argument("--open", action="store_true")
     parser.add_argument("--host", default="127.0.0.1")
@@ -125,12 +132,17 @@ def ui_preview_main(argv: list[str] | None = None) -> int:
         args.html_out,
         open_browser=args.open,
     )
+    if args.embed_out:
+        payload["embed"] = write_embeddable_html(provider, request, args.embed_out)
+    if args.report_out:
+        payload["report"] = write_graph_report(provider, request, args.report_out)
     graph = provider.load_graph(request)
     payload.update(
         {
             "provider_id": graph.provider_id,
             "node_count": len(graph.nodes),
             "edge_count": len(graph.edges),
+            "route": f"/{request.screen}",
         }
     )
     _print_payload(payload, as_json=args.json)

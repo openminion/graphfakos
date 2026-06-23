@@ -1,6 +1,11 @@
 from __future__ import annotations
 
-from graphfakos import FixtureGraphProvider, GraphFakosRequest, render_static_html
+from graphfakos import (
+    FixtureGraphProvider,
+    GraphFakosRequest,
+    render_embeddable_html,
+    render_static_html,
+)
 from graphfakos.testing import assert_graph_viewer_contract
 
 
@@ -31,6 +36,8 @@ def test_provider_status_screen_renders_capabilities() -> None:
     assert "healthy" in html
     assert "static_export" in html
     assert "local_preview" in html
+    assert "Capability Notes" in html
+    assert "Overlay Provider" in html
 
 
 def test_explore_screen_renders_filter_controls_and_edge_inspector() -> None:
@@ -93,3 +100,27 @@ def test_context_preview_screen_renders_ranked_context_cards() -> None:
     assert "Context Assembly Preview" in html
     assert "Top 4 node(s) are ranked" in html
     assert "score 0.98" in html
+
+
+def test_diff_screen_renders_snapshot_comparison() -> None:
+    html = render_static_html(
+        FixtureGraphProvider(),
+        GraphFakosRequest(screen="diff"),
+    )
+
+    assert "Snapshot Diff" in html
+    assert "Fixture Baseline" in html
+    assert "Added nodes" in html
+    assert "Overlay Providers" in html
+
+
+def test_embeddable_html_renders_fragment_only() -> None:
+    html = render_embeddable_html(
+        FixtureGraphProvider(),
+        GraphFakosRequest(screen="explore", query="kind:provider"),
+    )
+
+    assert "data-graphfakos-embed='true'" in html
+    assert "<main class='gf-content gf-embed-root'" in html
+    assert "<!doctype html>" not in html
+    assert "Deep link:" in html

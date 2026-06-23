@@ -18,6 +18,24 @@ class GraphFakosProvider(Protocol):
         """Return one provider-neutral graph for the viewer request."""
 
 
+@runtime_checkable
+class GraphFakosComparisonProvider(Protocol):
+    def load_comparison_graph(
+        self,
+        request: GraphFakosRequest,
+    ) -> GraphFakosGraph | None:
+        """Return one comparison snapshot for diff-oriented screens."""
+
+
+@runtime_checkable
+class GraphFakosOverlayProvider(Protocol):
+    def load_overlay_graphs(
+        self,
+        request: GraphFakosRequest,
+    ) -> tuple[GraphFakosGraph, ...]:
+        """Return provider graphs that should be compared or overlaid."""
+
+
 def validate_graph(graph: GraphFakosGraph) -> None:
     """Validate graph references that the viewer relies on."""
     node_ids = {node.id for node in graph.nodes}
@@ -88,9 +106,38 @@ def load_provider_graph(
     return graph
 
 
+def load_comparison_graph(
+    provider: GraphFakosProvider,
+    request: GraphFakosRequest,
+) -> GraphFakosGraph | None:
+    if not isinstance(provider, GraphFakosComparisonProvider):
+        return None
+    graph = provider.load_comparison_graph(request)
+    if graph is None:
+        return None
+    validate_graph(graph)
+    return graph
+
+
+def load_overlay_graphs(
+    provider: GraphFakosProvider,
+    request: GraphFakosRequest,
+) -> tuple[GraphFakosGraph, ...]:
+    if not isinstance(provider, GraphFakosOverlayProvider):
+        return ()
+    graphs = provider.load_overlay_graphs(request)
+    for graph in graphs:
+        validate_graph(graph)
+    return graphs
+
+
 __all__ = [
     "diagnose_graph",
+    "GraphFakosComparisonProvider",
+    "GraphFakosOverlayProvider",
     "GraphFakosProvider",
+    "load_comparison_graph",
+    "load_overlay_graphs",
     "load_provider_graph",
     "validate_graph",
 ]

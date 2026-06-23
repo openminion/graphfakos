@@ -163,10 +163,12 @@ def main(argv: list[str] | None = None) -> int:
                         "from importlib.resources import files; "
                         "from graphfakos import GraphFakosGraph, "
                         "GraphFakosDiagnostics, GraphFakosProvider, "
-                        "FixtureGraphProvider, diagnose_graph, "
+                        "FixtureGraphProvider, build_graph_report, "
+                        "diagnose_graph, render_embeddable_html, "
                         "render_static_html, screen_manifest; "
                         "from graphfakos.contracts import GraphFakosRequest; "
-                        "from graphfakos.render import render_graph_viewer; "
+                        "from graphfakos.render import render_graph_fragment, "
+                        "render_graph_viewer; "
                         "assert files('graphfakos').joinpath('py.typed').is_file()"
                     ),
                 ],
@@ -177,9 +179,13 @@ def main(argv: list[str] | None = None) -> int:
                 [
                     str(ui_preview),
                     "--screen",
-                    "provider_status",
+                    "diff",
                     "--html-out",
                     str(tmp / "graphfakos-ui.html"),
+                    "--embed-out",
+                    str(tmp / "graphfakos-ui-embed.html"),
+                    "--report-out",
+                    str(tmp / "graphfakos-report.json"),
                     "--json",
                 ],
                 cwd=root,

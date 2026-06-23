@@ -11,6 +11,7 @@ GraphFakosScreen = Literal[
     "path",
     "provenance",
     "timeline",
+    "diff",
     "provider_status",
     "context_preview",
 ]
@@ -179,6 +180,9 @@ class GraphFakosGraph:
     warnings: tuple[str, ...] = ()
     stats: dict[str, object] = field(default_factory=dict)
     generated_at: str = ""
+    provider_details: dict[str, str] = field(default_factory=dict)
+    capability_details: dict[str, str] = field(default_factory=dict)
+    available_facets: dict[str, tuple[str, ...]] = field(default_factory=dict)
     provider_payload: dict[str, object] = field(default_factory=dict)
 
     def node_map(self) -> dict[str, GraphFakosNode]:
@@ -202,6 +206,11 @@ class GraphFakosGraph:
             "warnings": list(self.warnings),
             "stats": dict(self.stats),
             "generated_at": self.generated_at,
+            "provider_details": dict(self.provider_details),
+            "capability_details": dict(self.capability_details),
+            "available_facets": {
+                key: list(values) for key, values in self.available_facets.items()
+            },
             "provider_payload": dict(self.provider_payload),
         }
 
@@ -251,12 +260,14 @@ class GraphFakosRequest:
     selected_edge_id: str | None = None
     source_node_id: str | None = None
     target_node_id: str | None = None
+    comparison_graph_id: str | None = None
     max_depth: int = 1
     filters: dict[str, str] = field(default_factory=dict)
     layout: str = "force"
     include_provenance: bool = True
     include_provider_payload: bool = True
     limit: int = 25
+    render_limit: int = 120
 
     def with_screen(self, screen: GraphFakosScreen) -> GraphFakosRequest:
         return GraphFakosRequest(
@@ -266,12 +277,14 @@ class GraphFakosRequest:
             selected_edge_id=self.selected_edge_id,
             source_node_id=self.source_node_id,
             target_node_id=self.target_node_id,
+            comparison_graph_id=self.comparison_graph_id,
             max_depth=self.max_depth,
             filters=dict(self.filters),
             layout=self.layout,
             include_provenance=self.include_provenance,
             include_provider_payload=self.include_provider_payload,
             limit=self.limit,
+            render_limit=self.render_limit,
         )
 
     def to_dict(self) -> dict[str, object]:
@@ -282,12 +295,14 @@ class GraphFakosRequest:
             "selected_edge_id": self.selected_edge_id,
             "source_node_id": self.source_node_id,
             "target_node_id": self.target_node_id,
+            "comparison_graph_id": self.comparison_graph_id,
             "max_depth": self.max_depth,
             "filters": dict(self.filters),
             "layout": self.layout,
             "include_provenance": self.include_provenance,
             "include_provider_payload": self.include_provider_payload,
             "limit": self.limit,
+            "render_limit": self.render_limit,
         }
 
 

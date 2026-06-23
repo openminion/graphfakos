@@ -4,11 +4,14 @@ import pytest
 
 from graphfakos import (
     FixtureGraphProvider,
+    build_graph_report,
     GraphFakosEdge,
     GraphFakosGraph,
     GraphFakosNode,
     GraphFakosRequest,
     diagnose_graph,
+    load_comparison_graph,
+    load_overlay_graphs,
     load_provider_graph,
     render_static_html,
     validate_graph,
@@ -24,6 +27,8 @@ def test_fixture_provider_satisfies_provider_contract() -> None:
     assert len(graph.edges) == 4
     assert graph.provenance
     assert graph.citations
+    assert graph.provider_details["owner"] == "OpenMinion fixture"
+    assert "diff" in graph.capability_details
 
 
 def test_validate_graph_rejects_unknown_edge_references() -> None:
@@ -132,6 +137,35 @@ def test_graph_to_dict_is_provider_neutral() -> None:
     assert payload["graph_role"] == "third_party"
     assert len(payload["nodes"]) == 4
     assert len(payload["edges"]) == 4
+    assert payload["available_facets"]["node_kind"] == [
+        "artifact",
+        "document",
+        "memory",
+        "provider",
+    ]
+
+
+def test_fixture_provider_exposes_comparison_and_overlay_graphs() -> None:
+    provider = FixtureGraphProvider()
+    request = GraphFakosRequest(screen="diff")
+
+    comparison = load_comparison_graph(provider, request)
+    overlays = load_overlay_graphs(provider, request)
+
+    assert comparison is not None
+    assert comparison.provider_label == "Fixture Baseline"
+    assert len(comparison.nodes) == 3
+    assert overlays
+    assert overlays[0].provider_label == "Overlay Provider"
+
+
+def test_build_graph_report_includes_overlay_and_comparison() -> None:
+    report = build_graph_report(FixtureGraphProvider(), GraphFakosRequest(screen="diff"))
+
+    assert report["diagnostics"]["healthy"] is True
+    assert report["comparison_graph"]["provider_label"] == "Fixture Baseline"
+    assert report["overlay_graphs"][0]["provider_label"] == "Overlay Provider"
+    assert report["request"]["screen"] == "diff"
 
 
 def test_custom_provider_can_render_all_shared_screens() -> None:
@@ -197,6 +231,7 @@ def test_custom_provider_can_render_all_shared_screens() -> None:
         "path",
         "provenance",
         "timeline",
+        "diff",
         "provider_status",
         "context_preview",
     ):

@@ -7,6 +7,7 @@ from math import cos, pi, sin
 from urllib.parse import urlencode
 
 from graphfakos.models import (
+    GraphFakosDiagnostics,
     GraphFakosEdge,
     GraphFakosGraph,
     GraphFakosNode,
@@ -14,7 +15,7 @@ from graphfakos.models import (
     GraphFakosRequest,
     GraphFakosScreen,
 )
-from graphfakos.provider import GraphFakosProvider, load_provider_graph
+from graphfakos.provider import GraphFakosProvider, diagnose_graph, load_provider_graph
 
 _SCREEN_NAV: tuple[tuple[GraphFakosScreen, str], ...] = (
     ("explore", "Explore"),
@@ -28,7 +29,24 @@ _SCREEN_NAV: tuple[tuple[GraphFakosScreen, str], ...] = (
 
 
 def screen_manifest() -> tuple[dict[str, str], ...]:
-    return tuple({"screen": screen, "label": label} for screen, label in _SCREEN_NAV)
+    summaries = {
+        "explore": "Filter the graph, select nodes, and inspect relationships.",
+        "neighborhood": "Expand one focus node to inspect nearby graph structure.",
+        "path": "Trace the shortest visible path between two graph nodes.",
+        "provenance": "Review provenance records and graph citations together.",
+        "timeline": "Scan graph timestamps and freshness-oriented metadata.",
+        "provider_status": "Inspect provider metadata, capabilities, and graph health.",
+        "context_preview": "Preview the graph context most likely to be surfaced.",
+    }
+    return tuple(
+        {
+            "screen": screen,
+            "label": label,
+            "route": f"/{screen}",
+            "summary": summaries[screen],
+        }
+        for screen, label in _SCREEN_NAV
+    )
 
 
 def render_provider_path(
@@ -143,12 +161,16 @@ def _integration_panel(graph: GraphFakosGraph) -> str:
     role = _role_description(graph.graph_role)
     capabilities = tuple(graph.capabilities[:4])
     commands = _integration_commands(graph)
+    summary = _integration_summary(graph)
     command_list = "".join(f"<code>{escape(command)}</code>" for command in commands)
     return (
         "<section class='gf-panel gf-integration' "
-        "aria-label='OpenMinion integration'>"
-        "<div><h3>OpenMinion Integration</h3>"
+        "aria-label='Package integration'>"
+        "<div><h3>Integration Commands</h3>"
         f"<p class='gf-empty'>{escape(role)}</p>"
+        f"<p>{escape(summary)}</p>"
+        "<p class='gf-note'>OpenMinion Integration and other host previews can "
+        "reuse the same provider-neutral routes.</p>"
         f"{_badges([(capability, 'blue') for capability in capabilities])}"
         "</div><div class='gf-code-list'>"
         f"{command_list}</div></section>"
@@ -180,6 +202,16 @@ def _integration_commands(graph: GraphFakosGraph) -> tuple[str, ...]:
     )
 
 
+def _integration_summary(graph: GraphFakosGraph) -> str:
+    summary = graph.provider_payload.get("integration_summary")
+    if isinstance(summary, str) and summary.strip():
+        return summary.strip()
+    return (
+        f"Use these commands to preview the {graph.provider_label} graph through "
+        "the shared GraphFakos workbench."
+    )
+
+
 def _render_screen(graph: GraphFakosGraph, request: GraphFakosRequest) -> str:
     if request.screen == "neighborhood":
         return _render_neighborhood(graph, request)
@@ -203,6 +235,7 @@ def _render_explore(graph: GraphFakosGraph, request: GraphFakosRequest) -> str:
     primary = (
         f"{_filter_toolbar(graph, request, '/explore')}"
         f"{_graph_canvas(filtered_graph, focus.id if focus else None, selected_edge.id if selected_edge else None)}"
+        f"{_selection_summary(filtered_graph, focus, selected_edge)}"
         "<section class='gf-panel'><h3>Visible Nodes</h3>"
         f"{_node_cards(filtered_graph.nodes[: request.limit])}</section>"
     )
@@ -213,7 +246,10 @@ def _render_explore(graph: GraphFakosGraph, request: GraphFakosRequest) -> str:
 def _render_neighborhood(graph: GraphFakosGraph, request: GraphFakosRequest) -> str:
     focus = _selected_node(graph, request, tuple(graph.nodes))
     if focus is None:
-        return _panel("Neighborhood", _empty("No nodes are available."))
+        return _panel(
+            "Neighborhood",
+            _empty("No nodes are available for neighborhood expansion."),
+        )
     visible_ids = _neighborhood_node_ids(graph, focus.id, max(request.max_depth, 1))
     neighbor_ids = visible_ids - {focus.id}
     neighbors = tuple(node for node in graph.nodes if node.id in neighbor_ids)
@@ -233,7 +269,7 @@ def _render_neighborhood(graph: GraphFakosGraph, request: GraphFakosRequest) -> 
     primary += _panel(
         f"Around {focus.label}",
         f"<p class='gf-empty'>Depth {max(request.max_depth, 1)} neighborhood.</p>"
-        f"{_node_cards(neighbors)}",
+        f"{_node_cards(neighbors) if neighbors else _empty('No neighboring nodes match this view yet.')}",
     )
     secondary = _inspector(graph, focus, _selected_edge(graph, request))
     return _split(primary, secondary)
@@ -263,7 +299,10 @@ def _neighborhood_node_ids(
 def _render_path(graph: GraphFakosGraph, request: GraphFakosRequest) -> str:
     source, target = _path_nodes(graph, request)
     if source is None or target is None:
-        return _panel("Path", _empty("At least two nodes are required."))
+        return _panel(
+            "Path",
+            _empty("At least two graph nodes are required before a path can be explored."),
+        )
     path_edges = _shortest_path_edges(graph, source.id, target.id)
     path_node_ids = {source.id, target.id}
     for edge in path_edges:
@@ -277,7 +316,7 @@ def _render_path(graph: GraphFakosGraph, request: GraphFakosRequest) -> str:
     )
     primary += _panel(
         f"{source.label} to {target.label}",
-        _edge_list(tuple(path_edges)) if path_edges else _empty("No bounded path found."),
+        _path_summary(source, target, path_edges),
     )
     return _split(primary, _inspector(graph, source, _selected_edge(graph, request)))
 
@@ -316,8 +355,18 @@ def _render_provenance(graph: GraphFakosGraph) -> str:
         for citation in graph.citations
     )
     return _split(
-        _panel("Provenance", items or _empty("No provenance provided.")),
-        _panel("Citations", citations or _empty("No citations provided.")),
+        _panel(
+            "Provenance",
+            _summary_note(
+                f"{len(graph.provenance)} provenance record(s) support this graph view."
+            )
+            + (items or _empty("No provenance provided.")),
+        ),
+        _panel(
+            "Citations",
+            _summary_note(f"{len(graph.citations)} citation reference(s) are available.")
+            + (citations or _empty("No citations provided.")),
+        ),
     )
 
 
@@ -326,10 +375,17 @@ def _render_timeline(graph: GraphFakosGraph) -> str:
     for node in graph.nodes:
         for key, value in sorted(node.timestamps.items()):
             rows.append(f"{value} - {node.label} ({key})")
-    return _panel("Timeline and Freshness", _list(rows))
+    return _panel(
+        "Timeline and Freshness",
+        _summary_note(
+            f"{len(rows)} timestamp event(s) are visible across {len(graph.nodes)} node(s)."
+        )
+        + _list(rows),
+    )
 
 
 def _render_provider_status(graph: GraphFakosGraph) -> str:
+    diagnostics = diagnose_graph(graph)
     status = {
         "provider_id": graph.provider_id,
         "provider_label": graph.provider_label,
@@ -343,22 +399,64 @@ def _render_provider_status(graph: GraphFakosGraph) -> str:
     }
     return _split(
         _panel("Provider Status", _key_values(status)),
-        _panel("Sample Nodes", _node_cards(graph.nodes[:5]))
+        _panel("Graph Health", _graph_health(diagnostics))
+        + _panel("Sample Nodes", _node_cards(graph.nodes[:5]))
         + _panel("Warnings", _list(graph.warnings)),
     )
 
 
+def _graph_health(diagnostics: GraphFakosDiagnostics) -> str:
+    tone = "accent" if diagnostics.healthy else "blue"
+    summary = (
+        _badges(
+            (
+                ("healthy" if diagnostics.healthy else "needs review", tone),
+                (f"{diagnostics.node_count} nodes", "neutral"),
+                (f"{diagnostics.edge_count} edges", "neutral"),
+            )
+        )
+        + _key_values(
+            {
+                "provenance": diagnostics.provenance_count,
+                "citations": diagnostics.citation_count,
+                "orphan nodes": len(diagnostics.orphan_node_ids),
+                "duplicate edges": len(diagnostics.duplicate_edge_ids),
+                "unknown provenance refs": len(diagnostics.unknown_provenance_ids),
+                "unknown citation refs": len(diagnostics.unknown_citation_ids),
+            }
+        )
+    )
+    details = (
+        _diagnostic_list("Orphan nodes", diagnostics.orphan_node_ids)
+        + _diagnostic_list("Duplicate edge ids", diagnostics.duplicate_edge_ids)
+        + _diagnostic_list("Unknown provenance ids", diagnostics.unknown_provenance_ids)
+        + _diagnostic_list("Unknown citation ids", diagnostics.unknown_citation_ids)
+    )
+    return summary + (details if details else _empty("No graph diagnostics."))
+
+
+def _diagnostic_list(title: str, items: tuple[str, ...]) -> str:
+    if not items:
+        return ""
+    return f"<h4>{escape(title)}</h4>{_list(items)}"
+
+
 def _render_context_preview(graph: GraphFakosGraph) -> str:
-    items = [
-        f"{node.label} - {node.kind} - score={node.score if node.score is not None else 'n/a'}"
-        for node in sorted(
+    ranked_nodes = tuple(
+        sorted(
             graph.nodes,
             key=lambda item: item.score if item.score is not None else 0,
             reverse=True,
         )[:8]
-    ]
+    )
     return _split(
-        _panel("Context Assembly Preview", _list(items)),
+        _panel(
+            "Context Assembly Preview",
+            _summary_note(
+                f"Top {len(ranked_nodes)} node(s) are ranked for reusable viewer context."
+            )
+            + _context_cards(ranked_nodes),
+        ),
         _panel(
             "Provider Contribution",
             _key_values(
@@ -366,6 +464,7 @@ def _render_context_preview(graph: GraphFakosGraph) -> str:
                     "provider": graph.provider_label,
                     "role": graph.graph_role,
                     "capabilities": ", ".join(graph.capabilities),
+                    "warnings": len(graph.warnings),
                 }
             ),
         ),
@@ -645,14 +744,14 @@ def _graph_canvas(
             "</a>"
         )
     node_marks = ""
-    for node in graph.nodes:
+    for index, node in enumerate(graph.nodes):
         x, y = positions[node.id]
         selected = "true" if node.id == selected_id else "false"
         node_marks += (
             f"<a href='{_explore_href(focus_node_id=node.id)}'>"
             f"<g class='gf-node' data-kind='{escape(node.kind)}' data-selected='{selected}'>"
             f"<circle cx='{x:.1f}' cy='{y:.1f}' r='{_node_radius(node)}'></circle>"
-            f"<text x='{x:.1f}' y='{y + 28:.1f}' text-anchor='middle'>{escape(node.label[:24])}</text>"
+            f"<text x='{x:.1f}' y='{_node_label_y(index, y):.1f}' text-anchor='middle'>{escape(_node_label(node))}</text>"
             f"<title>{escape(node.summary or node.label)}</title></g></a>"
         )
     return (
@@ -683,6 +782,36 @@ def _node_radius(node: GraphFakosNode) -> int:
     if node.score is None:
         return 18
     return max(16, min(28, int(16 + node.score * 10)))
+
+
+def _node_label(node: GraphFakosNode) -> str:
+    return node.label[:22] + ("..." if len(node.label) > 22 else "")
+
+
+def _node_label_y(index: int, y: float) -> float:
+    return y - 24 if index % 2 else y + 28
+
+
+def _selection_summary(
+    graph: GraphFakosGraph,
+    focus: GraphFakosNode | None,
+    selected_edge: GraphFakosEdge | None,
+) -> str:
+    payload: dict[str, object] = {
+        "visible nodes": len(graph.nodes),
+        "visible edges": len(graph.edges),
+    }
+    if focus is not None:
+        payload["focus node"] = focus.label
+    if selected_edge is not None:
+        payload["selected edge"] = selected_edge.label or selected_edge.kind
+    return _panel(
+        "Visible Graph",
+        _summary_note(
+            "Selections made here carry into the shared inspector and graph routes."
+        )
+        + _key_values(payload),
+    )
 
 
 def _inspector(
@@ -769,6 +898,22 @@ def _node_cards(nodes: tuple[GraphFakosNode, ...]) -> str:
     return cards
 
 
+def _context_cards(nodes: tuple[GraphFakosNode, ...]) -> str:
+    if not nodes:
+        return _empty("No ranked context nodes are available.")
+    cards = ""
+    for node in nodes:
+        score = node.score if node.score is not None else "n/a"
+        cards += (
+            "<article class='gf-card'>"
+            f"<div>{_badge(node.kind, 'accent')}{_badge(f'score {score}', 'blue')}</div>"
+            f"<h4><a href='{_explore_href(focus_node_id=node.id)}'>{escape(node.label)}</a></h4>"
+            f"<p>{escape(node.summary or node.id)}</p>"
+            f"{_badges([(tag, 'blue') for tag in node.tags[:3]])}</article>"
+        )
+    return cards
+
+
 def _edge_list(edges: tuple[GraphFakosEdge, ...]) -> str:
     if not edges:
         return _empty("No edges.")
@@ -777,6 +922,30 @@ def _edge_list(edges: tuple[GraphFakosEdge, ...]) -> str:
             f"{edge.source_id} -> {edge.target_id} ({edge.label or edge.kind})"
             for edge in edges
         ]
+    )
+
+
+def _path_summary(
+    source: GraphFakosNode,
+    target: GraphFakosNode,
+    path_edges: list[GraphFakosEdge],
+) -> str:
+    if not path_edges:
+        return _empty(
+            f"No bounded path connects {source.label} to {target.label} in the current graph view."
+        )
+    hop_count = len(path_edges)
+    return (
+        _summary_note(
+            f"{hop_count} edge hop(s) connect {source.label} to {target.label}."
+        )
+        + _list(
+            [
+                f"{edge.source_id} -> {edge.target_id} ({edge.label or edge.kind})"
+                for edge in path_edges
+            ]
+        )
+        + f"<p class='gf-empty'>Route starts at {escape(source.id)} and ends at {escape(target.id)}.</p>"
     )
 
 
@@ -816,6 +985,10 @@ def _key_values(payload: dict[str, object]) -> str:
 
 def _empty(text: str) -> str:
     return f"<p class='gf-empty'>{escape(text)}</p>"
+
+
+def _summary_note(text: str) -> str:
+    return f"<p class='gf-note'>{escape(text)}</p>"
 
 
 def _badges(items: list[tuple[str, str]] | tuple[tuple[str, str], ...]) -> str:
@@ -938,6 +1111,10 @@ body.gf-page {
   margin: 0 0 12px;
   font-size: 16px;
 }
+.gf-note {
+  margin: 0 0 12px;
+  color: var(--gf-muted);
+}
 .gf-toolbar { margin-bottom: 16px; }
 .gf-toolbar form {
   display: grid;
@@ -994,6 +1171,10 @@ body.gf-page {
   fill: var(--gf-ink);
   font-size: 12px;
   font-weight: 700;
+  paint-order: stroke;
+  stroke: #fbfcfa;
+  stroke-width: 5px;
+  stroke-linejoin: round;
 }
 .gf-card {
   border: 1px solid var(--gf-line);

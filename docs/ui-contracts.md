@@ -19,7 +19,8 @@ GraphFakos owns the reusable viewer layer:
 7. node and edge inspectors,
 8. search and filter controls,
 9. provenance and citation panels,
-10. reusable viewer test assertions.
+10. provider-neutral graph diagnostics,
+11. reusable viewer test assertions.
 
 Provider packages own their data semantics and adapter mapping. They should not
 fork GraphFakos viewer HTML, duplicate local-server behavior, or create a
@@ -41,11 +42,12 @@ Allowed package-local responsibilities:
 GraphFakos-owned responsibilities:
 
 1. shared screen names and navigation behavior,
-2. static export and local preview server behavior,
-3. graph filtering, selection, and inspection controls,
-4. provider status and capability presentation,
-5. context-preview layout,
-6. common smoke assertions.
+2. provider-neutral screen metadata such as route labels and summaries,
+3. static export and local preview server behavior,
+4. graph filtering, selection, and inspection controls,
+5. provider status and capability presentation,
+6. context-preview layout,
+7. common smoke assertions.
 
 ## Provider Adapter Shape
 
@@ -58,10 +60,16 @@ The graph envelope should contain:
 3. edges with stable ids, endpoints, kind, label, score, weight, provenance,
    citations, and provider payloads,
 4. optional selected node or selected edge hints,
-5. optional integration commands for host packages such as OpenMinion.
+5. optional integration commands and short integration summaries for host
+   packages or standalone previews.
 
 Provider-only semantics belong in `provider_payload` unless the field is part
 of the stable common DTO model.
+
+Diagnostics should stay structural and provider-neutral. GraphFakos can report
+orphan nodes, duplicate edge ids, unknown provenance ids, unknown citation ids,
+and provider-supplied warnings. It must not decide whether a memory claim is
+true, whether a source file is fresh, or whether an item should be promoted.
 
 ## Package Alignment
 
@@ -89,10 +97,11 @@ Within the `0.0.x` line, changes should preserve:
 2. public DTO names,
 3. `GraphFakosProvider.load_graph()` behavior,
 4. console script names,
-5. supported screen names,
-6. local preview and static-export behavior,
-7. package adapter compatibility for Sophiagraph and PragmaGraph,
-8. typed package marker availability through `graphfakos/py.typed`.
+5. provider-neutral `diagnose_graph()` output keys,
+6. supported screen names,
+7. local preview and static-export behavior,
+8. package adapter compatibility for Sophiagraph and PragmaGraph,
+9. typed package marker availability through `graphfakos/py.typed`.
 
 If a viewer contract change requires Sophiagraph or PragmaGraph updates, land
 adapter tests in those packages with the GraphFakos change.

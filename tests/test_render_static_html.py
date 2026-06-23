@@ -16,6 +16,7 @@ def test_static_viewer_renders_graph_canvas_and_inspector() -> None:
     )
     assert "Neighborhood" in html
     assert "Provider Status" in html
+    assert "Visible Graph" in html
 
 
 def test_provider_status_screen_renders_capabilities() -> None:
@@ -25,6 +26,9 @@ def test_provider_status_screen_renders_capabilities() -> None:
     )
 
     assert "Provider Status" in html
+    assert "Graph Health" in html
+    assert "Integration Commands" in html
+    assert "healthy" in html
     assert "static_export" in html
     assert "local_preview" in html
 
@@ -76,4 +80,16 @@ def test_path_screen_renders_source_target_controls() -> None:
     assert "aria-label='Path controls'" in html
     assert "Source node" in html
     assert "Target node" in html
-    assert "provider:third-party -&gt; artifact:static-export" in html
+    assert "edge hop(s) connect" in html
+    assert "Route starts at provider:third-party" in html
+
+
+def test_context_preview_screen_renders_ranked_context_cards() -> None:
+    html = render_static_html(
+        FixtureGraphProvider(),
+        GraphFakosRequest(screen="context_preview"),
+    )
+
+    assert "Context Assembly Preview" in html
+    assert "Top 4 node(s) are ranked" in html
+    assert "score 0.98" in html

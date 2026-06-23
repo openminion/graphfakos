@@ -13,7 +13,7 @@ def assert_graph_viewer_contract(
 ) -> None:
     assert "GraphFakos" in html
     assert "Graph Canvas" in html
-    assert "OpenMinion Integration" in html
+    assert "Integration Commands" in html
     assert expected_role in html
     assert expected_provider in html
     assert expected_node in html

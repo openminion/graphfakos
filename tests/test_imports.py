@@ -22,7 +22,9 @@ def test_graphfakos_package_imports() -> None:
     assert "graphfakos.models" in graphfakos.STABLE_IMPORT_ROOTS
     assert "graphfakos.contracts" in graphfakos.STABLE_IMPORT_ROOTS
     assert "graphfakos.render" in graphfakos.STABLE_IMPORT_ROOTS
+    assert "GraphFakosDiagnostics" in graphfakos.__all__
     assert "GraphFakosGraph" in graphfakos.__all__
+    assert "diagnose_graph" in graphfakos.__all__
     assert "FixtureGraphProvider" in graphfakos.adapters.__all__
     assert "render_graph_viewer" in graphfakos.ui.__all__
     assert "GraphFakosProvider" in graphfakos.contracts.__all__
@@ -33,9 +35,15 @@ def test_graphfakos_screen_manifest_is_public() -> None:
     import graphfakos
 
     manifest = graphfakos.screen_manifest()
+    explore = next(item for item in manifest if item["screen"] == "explore")
+    context = next(item for item in manifest if item["screen"] == "context_preview")
 
-    assert {"screen": "explore", "label": "Explore"} in manifest
-    assert {"screen": "context_preview", "label": "Context"} in manifest
+    assert explore["label"] == "Explore"
+    assert explore["route"] == "/explore"
+    assert "Filter the graph" in explore["summary"]
+    assert context["label"] == "Context"
+    assert context["route"] == "/context_preview"
+    assert "graph context" in context["summary"]
 
 
 def test_version_metadata_matches_pyproject() -> None:

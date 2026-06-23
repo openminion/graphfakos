@@ -52,6 +52,7 @@ def _assert_package_docs_shape(root: Path) -> None:
         root / "API_COMPATIBILITY.md",
         root / "RELEASING.md",
         root / "docs" / "README.md",
+        root / "docs" / "custom-provider-example.md",
         root / "docs" / "source-tree-owner-map.md",
         root / "docs" / "ui-contracts.md",
         root / "src" / "graphfakos" / "__init__.py",
@@ -161,7 +162,8 @@ def main(argv: list[str] | None = None) -> int:
                     (
                         "from importlib.resources import files; "
                         "from graphfakos import GraphFakosGraph, "
-                        "GraphFakosProvider, FixtureGraphProvider, "
+                        "GraphFakosDiagnostics, GraphFakosProvider, "
+                        "FixtureGraphProvider, diagnose_graph, "
                         "render_static_html, screen_manifest; "
                         "from graphfakos.contracts import GraphFakosRequest; "
                         "from graphfakos.render import render_graph_viewer; "

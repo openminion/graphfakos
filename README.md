@@ -9,6 +9,11 @@ GraphFakos exists so packages such as Sophiagraph, PragmaGraph, OpenMinion, and
 third-party graph providers can share a visual graph workbench without sharing
 their internal graph truth or lifecycle semantics.
 
+The name comes from Greek `fakós` (`φακός`), meaning lens; in this package it
+frames the shared graph workbench as a provider-neutral lens over nodes, edges,
+provenance, citations, and package-owned graph semantics rather than as a graph
+builder or memory store.
+
 ## Initial Release Status
 
 GraphFakos is a `0.0.1` semantic-alpha package. The initial public release is
@@ -56,6 +61,9 @@ python3.11 -m pip install -e .
   Sophiagraph, PragmaGraph, or OpenMinion
 - a local graph workbench with explore, neighborhood, path, provenance,
   timeline, provider-status, and context-preview screens
+- a public screen manifest with provider-neutral routes, labels, and summaries
+- provider-neutral graph diagnostics for orphan nodes, duplicate edges,
+  missing provenance/citation references, and provider warnings
 - dependency-free navigation for node selection, edge inspection, query search,
   node-kind, edge-kind, tag, source, and score filters
 - depth-aware neighborhood expansion and path source/target controls
@@ -147,6 +155,7 @@ same DTOs.
 - [API compatibility](API_COMPATIBILITY.md)
 - [Release process](RELEASING.md)
 - [Package docs](docs/README.md)
+- [Custom provider example](docs/custom-provider-example.md)
 - [UI contracts](docs/ui-contracts.md)
 - [Source tree owner map](docs/source-tree-owner-map.md)
 

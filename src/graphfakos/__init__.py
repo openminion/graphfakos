@@ -3,6 +3,7 @@
 from .adapters import FixtureGraphProvider, build_fixture_graph
 from .models import (
     GraphFakosCitation,
+    GraphFakosDiagnostics,
     GraphFakosEdge,
     GraphFakosGraph,
     GraphFakosNode,
@@ -11,7 +12,12 @@ from .models import (
     GraphFakosScreen,
     GraphFakosVisual,
 )
-from .provider import GraphFakosProvider, load_provider_graph, validate_graph
+from .provider import (
+    GraphFakosProvider,
+    diagnose_graph,
+    load_provider_graph,
+    validate_graph,
+)
 from .server import (
     LocalViewerHttpServer,
     LocalViewerServerResult,
@@ -43,6 +49,7 @@ __all__ = [
     "__version__",
     "FixtureGraphProvider",
     "GraphFakosCitation",
+    "GraphFakosDiagnostics",
     "GraphFakosEdge",
     "GraphFakosGraph",
     "GraphFakosNode",
@@ -55,6 +62,7 @@ __all__ = [
     "LocalViewerServerResult",
     "RenderPath",
     "build_fixture_graph",
+    "diagnose_graph",
     "load_provider_graph",
     "make_local_viewer_server",
     "render_graph_viewer",

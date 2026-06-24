@@ -24,8 +24,12 @@ def test_graphfakos_package_imports() -> None:
     assert "graphfakos.render" in graphfakos.STABLE_IMPORT_ROOTS
     assert "GraphFakosDiagnostics" in graphfakos.__all__
     assert "GraphFakosGraph" in graphfakos.__all__
+    assert "build_graph_report" in graphfakos.__all__
+    assert "build_viewer_route" in graphfakos.__all__
     assert "diagnose_graph" in graphfakos.__all__
     assert "FixtureGraphProvider" in graphfakos.adapters.__all__
+    assert "query_syntax_reference" in graphfakos.ui.__all__
+    assert "render_graph_fragment" in graphfakos.ui.__all__
     assert "render_graph_viewer" in graphfakos.ui.__all__
     assert "GraphFakosProvider" in graphfakos.contracts.__all__
     assert "screen_manifest" in graphfakos.render.__all__
@@ -36,11 +40,14 @@ def test_graphfakos_screen_manifest_is_public() -> None:
 
     manifest = graphfakos.screen_manifest()
     explore = next(item for item in manifest if item["screen"] == "explore")
+    diff = next(item for item in manifest if item["screen"] == "diff")
     context = next(item for item in manifest if item["screen"] == "context_preview")
 
     assert explore["label"] == "Explore"
     assert explore["route"] == "/explore"
     assert "Filter the graph" in explore["summary"]
+    assert diff["label"] == "Diff"
+    assert "Compare one graph snapshot" in diff["summary"]
     assert context["label"] == "Context"
     assert context["route"] == "/context_preview"
     assert "graph context" in context["summary"]

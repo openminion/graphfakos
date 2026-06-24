@@ -1,6 +1,11 @@
 """Reusable graph lens for agent memory and source knowledge graphs."""
 
-from .adapters import FixtureGraphProvider, build_fixture_graph
+from .adapters import (
+    FixtureGraphProvider,
+    build_fixture_baseline_graph,
+    build_fixture_graph,
+    build_fixture_overlay_graphs,
+)
 from .models import (
     GraphFakosCitation,
     GraphFakosDiagnostics,
@@ -10,11 +15,16 @@ from .models import (
     GraphFakosProvenance,
     GraphFakosRequest,
     GraphFakosScreen,
+    GraphFakosSnapshot,
     GraphFakosVisual,
 )
 from .provider import (
+    GraphFakosComparisonProvider,
+    GraphFakosOverlayProvider,
     GraphFakosProvider,
     diagnose_graph,
+    load_comparison_graph,
+    load_overlay_graphs,
     load_provider_graph,
     validate_graph,
 )
@@ -25,8 +35,25 @@ from .server import (
     make_local_viewer_server,
     serve_local_viewer,
 )
-from .static import render_static_html, write_static_html
-from .ui import render_graph_viewer, render_provider_path, screen_manifest
+from .static import (
+    build_graph_report,
+    render_embeddable_html,
+    render_graph_markdown_report,
+    render_static_html,
+    write_embeddable_html,
+    write_graph_markdown_report,
+    write_graph_report,
+    write_static_html,
+)
+from .ui import (
+    build_viewer_route,
+    parse_viewer_request,
+    query_syntax_reference,
+    render_graph_fragment,
+    render_graph_viewer,
+    render_provider_path,
+    screen_manifest,
+)
 
 __version__ = "0.0.1"
 PACKAGE_STATUS = "semantic-alpha"
@@ -48,28 +75,45 @@ __all__ = [
     "STABLE_IMPORT_ROOTS",
     "__version__",
     "FixtureGraphProvider",
+    "GraphFakosComparisonProvider",
     "GraphFakosCitation",
     "GraphFakosDiagnostics",
     "GraphFakosEdge",
     "GraphFakosGraph",
     "GraphFakosNode",
+    "GraphFakosOverlayProvider",
     "GraphFakosProvider",
     "GraphFakosProvenance",
     "GraphFakosRequest",
     "GraphFakosScreen",
+    "GraphFakosSnapshot",
     "GraphFakosVisual",
     "LocalViewerHttpServer",
     "LocalViewerServerResult",
     "RenderPath",
+    "build_fixture_baseline_graph",
     "build_fixture_graph",
+    "build_fixture_overlay_graphs",
+    "build_graph_report",
+    "build_viewer_route",
     "diagnose_graph",
+    "load_comparison_graph",
+    "load_overlay_graphs",
     "load_provider_graph",
     "make_local_viewer_server",
+    "parse_viewer_request",
+    "query_syntax_reference",
+    "render_embeddable_html",
+    "render_graph_markdown_report",
+    "render_graph_fragment",
     "render_graph_viewer",
     "render_provider_path",
     "render_static_html",
     "screen_manifest",
     "serve_local_viewer",
     "validate_graph",
+    "write_embeddable_html",
+    "write_graph_markdown_report",
+    "write_graph_report",
     "write_static_html",
 ]

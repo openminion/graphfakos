@@ -31,15 +31,25 @@ viewer contract tests belong here.
 The initial workbench is dependency-free static HTML with local-server routing.
 It supports:
 
-- explore, neighborhood, path, provenance, timeline, provider-status, and
-  context-preview screens,
+- explore, neighborhood, path, provenance, timeline, diff, provider-status,
+  and context-preview screens,
 - provider-neutral screen metadata for routes, labels, and summaries,
 - search plus node-kind, edge-kind, tag, source, and score filters,
+- public deep-link helpers for building or parsing stable viewer routes,
+- public query syntax guidance for `kind:`, `tag:`, `source:`, `edge:`,
+  `id:`, `label:`, `summary:`, and `has:` tokens,
 - clickable nodes and edges with inspector details,
 - depth-aware neighborhoods,
 - path source/target controls,
+- snapshot metadata plus provider-owned comparison and overlay workflows,
 - provenance and citation panels, and
 - provider capability/status summaries.
+
+GraphFakos also exposes:
+
+- embeddable HTML fragments for package-local UI shells,
+- JSON graph reports, and
+- Markdown graph reports for issue attachments or review notes.
 
 GraphFakos does not interpret provider-specific semantics. Adapters should put
 provider-only fields in `provider_payload` unless the field belongs in a stable
@@ -51,6 +61,18 @@ Fake third-party provider:
 
 ```bash
 graphfakos-ui --screen explore --html-out graphfakos-ui-preview.html --json
+```
+
+Diff plus embed/report example:
+
+```bash
+graphfakos-ui \
+  --screen diff \
+  --comparison-graph-id fixture-baseline \
+  --embed-out graphfakos-embed.html \
+  --report-out graphfakos-report.json \
+  --markdown-report-out graphfakos-report.md \
+  --json
 ```
 
 Sophiagraph second-brain provider:
@@ -70,7 +92,10 @@ PragmaGraph third-brain provider:
 cd ../pragmagraph
 PYTHONPATH=../graphfakos/src:src \
   .venv/bin/python3.11 -m pragmagraph ui-preview \
-  --screen provider_status \
+  --screen diff \
+  --comparison structural_baseline \
+  --report-out pragmagraph-graph-report.json \
+  --embed-out pragmagraph-graph-embed.html \
   --html-out pragmagraph-graphfakos.html \
   --json
 ```
@@ -105,3 +130,22 @@ class MyGraphProvider(GraphFakosProvider):
 
 For a fuller third-party example, see
 [Custom provider example](custom-provider-example.md).
+
+## Public route and query helpers
+
+GraphFakos exposes package-level helpers for shareable routes:
+
+```python
+from graphfakos import GraphFakosRequest, build_viewer_route, parse_viewer_request
+
+request = GraphFakosRequest(
+    screen="diff",
+    query="kind:file has:provenance",
+    comparison_graph_id="structural_baseline",
+)
+route = build_viewer_route(request)
+parsed = parse_viewer_request("/diff", {"query": ["kind:file has:provenance"]})
+```
+
+The public `query_syntax_reference()` helper returns the documented token set
+that package-local UIs can surface in their own help or docs.

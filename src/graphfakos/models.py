@@ -11,6 +11,7 @@ GraphFakosScreen = Literal[
     "path",
     "provenance",
     "timeline",
+    "diff",
     "provider_status",
     "context_preview",
 ]
@@ -99,6 +100,28 @@ class GraphFakosProvenance:
 
 
 @dataclass(frozen=True, slots=True)
+class GraphFakosSnapshot:
+    snapshot_id: str
+    label: str = ""
+    created_at: str = ""
+    source_label: str = ""
+    source_uri: str = ""
+    comparison_ids: tuple[str, ...] = ()
+    provider_payload: dict[str, object] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "snapshot_id": self.snapshot_id,
+            "label": self.label,
+            "created_at": self.created_at,
+            "source_label": self.source_label,
+            "source_uri": self.source_uri,
+            "comparison_ids": list(self.comparison_ids),
+            "provider_payload": dict(self.provider_payload),
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class GraphFakosNode:
     id: str
     label: str
@@ -179,6 +202,10 @@ class GraphFakosGraph:
     warnings: tuple[str, ...] = ()
     stats: dict[str, object] = field(default_factory=dict)
     generated_at: str = ""
+    snapshot: GraphFakosSnapshot | None = None
+    provider_details: dict[str, str] = field(default_factory=dict)
+    capability_details: dict[str, str] = field(default_factory=dict)
+    available_facets: dict[str, tuple[str, ...]] = field(default_factory=dict)
     provider_payload: dict[str, object] = field(default_factory=dict)
 
     def node_map(self) -> dict[str, GraphFakosNode]:
@@ -202,6 +229,12 @@ class GraphFakosGraph:
             "warnings": list(self.warnings),
             "stats": dict(self.stats),
             "generated_at": self.generated_at,
+            "snapshot": self.snapshot.to_dict() if self.snapshot is not None else None,
+            "provider_details": dict(self.provider_details),
+            "capability_details": dict(self.capability_details),
+            "available_facets": {
+                key: list(values) for key, values in self.available_facets.items()
+            },
             "provider_payload": dict(self.provider_payload),
         }
 
@@ -251,12 +284,14 @@ class GraphFakosRequest:
     selected_edge_id: str | None = None
     source_node_id: str | None = None
     target_node_id: str | None = None
+    comparison_graph_id: str | None = None
     max_depth: int = 1
     filters: dict[str, str] = field(default_factory=dict)
     layout: str = "force"
     include_provenance: bool = True
     include_provider_payload: bool = True
     limit: int = 25
+    render_limit: int = 120
 
     def with_screen(self, screen: GraphFakosScreen) -> GraphFakosRequest:
         return GraphFakosRequest(
@@ -266,12 +301,14 @@ class GraphFakosRequest:
             selected_edge_id=self.selected_edge_id,
             source_node_id=self.source_node_id,
             target_node_id=self.target_node_id,
+            comparison_graph_id=self.comparison_graph_id,
             max_depth=self.max_depth,
             filters=dict(self.filters),
             layout=self.layout,
             include_provenance=self.include_provenance,
             include_provider_payload=self.include_provider_payload,
             limit=self.limit,
+            render_limit=self.render_limit,
         )
 
     def to_dict(self) -> dict[str, object]:
@@ -282,12 +319,14 @@ class GraphFakosRequest:
             "selected_edge_id": self.selected_edge_id,
             "source_node_id": self.source_node_id,
             "target_node_id": self.target_node_id,
+            "comparison_graph_id": self.comparison_graph_id,
             "max_depth": self.max_depth,
             "filters": dict(self.filters),
             "layout": self.layout,
             "include_provenance": self.include_provenance,
             "include_provider_payload": self.include_provider_payload,
             "limit": self.limit,
+            "render_limit": self.render_limit,
         }
 
 
@@ -300,5 +339,6 @@ __all__ = [
     "GraphFakosProvenance",
     "GraphFakosRequest",
     "GraphFakosScreen",
+    "GraphFakosSnapshot",
     "GraphFakosVisual",
 ]

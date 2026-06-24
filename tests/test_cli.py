@@ -83,6 +83,7 @@ def test_graphfakos_ui_preview_writes_embed_and_report_outputs(tmp_path) -> None
     output_path = tmp_path / "graphfakos-diff.html"
     embed_path = tmp_path / "graphfakos-embed.html"
     report_path = tmp_path / "graphfakos-report.json"
+    markdown_path = tmp_path / "graphfakos-report.md"
     result = subprocess.run(
         [
             sys.executable,
@@ -97,6 +98,8 @@ def test_graphfakos_ui_preview_writes_embed_and_report_outputs(tmp_path) -> None
             str(embed_path),
             "--report-out",
             str(report_path),
+            "--markdown-report-out",
+            str(markdown_path),
             "--json",
         ],
         check=True,
@@ -108,7 +111,9 @@ def test_graphfakos_ui_preview_writes_embed_and_report_outputs(tmp_path) -> None
     assert payload["screen"] == "diff"
     assert payload["embed"]["embedded"] is True
     assert payload["report"]["report"] is True
+    assert payload["markdown_report"]["markdown_report"] is True
     assert "Snapshot Diff" in output_path.read_text(encoding="utf-8")
     assert "data-graphfakos-embed='true'" in embed_path.read_text(encoding="utf-8")
     report = json.loads(report_path.read_text(encoding="utf-8"))
     assert report["comparison_graph"]["provider_label"] == "Fixture Baseline"
+    assert "# GraphFakos Report" in markdown_path.read_text(encoding="utf-8")

@@ -10,6 +10,7 @@ def test_release_check_script_covers_viewer_contract() -> None:
     assert "graphfakos-smoke" in release_check
     assert "graphfakos-ui" in release_check
     assert "graphfakos-report.json" in release_check
+    assert "graphfakos-report.md" in release_check
     assert "graphfakos-ui-embed.html" in release_check
     assert "GraphFakosDiagnostics" in release_check
     assert "GraphFakosGraph" in release_check

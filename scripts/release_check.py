@@ -186,6 +186,8 @@ def main(argv: list[str] | None = None) -> int:
                     str(tmp / "graphfakos-ui-embed.html"),
                     "--report-out",
                     str(tmp / "graphfakos-report.json"),
+                    "--markdown-report-out",
+                    str(tmp / "graphfakos-report.md"),
                     "--json",
                 ],
                 cwd=root,

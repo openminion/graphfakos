@@ -90,14 +90,22 @@ python3.11 -m pip install -e .
 - a provider protocol that graph packages can implement without importing
   Sophiagraph, PragmaGraph, or OpenMinion
 - a local graph workbench with explore, neighborhood, path, provenance,
-  timeline, provider-status, and context-preview screens
+  timeline, diff, provider-status, and context-preview screens
 - a public screen manifest with provider-neutral routes, labels, and summaries
 - provider-neutral graph diagnostics for orphan nodes, duplicate edges,
   missing provenance/citation references, and provider warnings
 - dependency-free navigation for node selection, edge inspection, query search,
-  node-kind, edge-kind, tag, source, and score filters
+  node-kind, edge-kind, tag, source, and score filters plus public deep-link
+  route helpers
 - depth-aware neighborhood expansion and path source/target controls
+- public query syntax guidance for `kind:`, `tag:`, `source:`, `edge:`,
+  `id:`, `label:`, `summary:`, and `has:` tokens
+- snapshot metadata on graph envelopes plus provider-owned comparison and
+  overlay workflows
 - static HTML export for portable inspection
+- embeddable HTML fragments for host package shells
+- JSON and Markdown graph reports for CI proof, issue attachments, and
+  package-local review flows
 - a local HTTP preview server for interactive package development
 - a fake fixture provider for tests and third-party adapter examples
 - shared test assertions for graph viewer contracts
@@ -156,6 +164,18 @@ Render the built-in third-party fixture:
 graphfakos-ui --screen explore --html-out graphfakos-ui-preview.html --json
 ```
 
+Render a diff view plus export machine-readable and Markdown reports:
+
+```bash
+graphfakos-ui \
+  --screen diff \
+  --comparison-graph-id fixture-baseline \
+  --embed-out graphfakos-embed.html \
+  --report-out graphfakos-report.json \
+  --markdown-report-out graphfakos-report.md \
+  --json
+```
+
 Serve the local viewer:
 
 ```bash
@@ -172,6 +192,20 @@ graphfakos-ui \
   --selected-edge-id edge:provider-serves-spec \
   --html-out graphfakos-filtered.html \
   --json
+```
+
+Build or parse a shareable viewer route from Python:
+
+```python
+from graphfakos import GraphFakosRequest, build_viewer_route, parse_viewer_request
+
+request = GraphFakosRequest(
+    screen="diff",
+    query="kind:file has:provenance",
+    comparison_graph_id="structural_baseline",
+)
+route = build_viewer_route(request)
+parsed = parse_viewer_request("/diff", {"query": ["kind:file has:provenance"]})
 ```
 
 Sophiagraph should expose a second-brain adapter that maps durable memories,

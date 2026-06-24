@@ -9,6 +9,7 @@ from .models import (
     GraphFakosProvenance,
     GraphFakosRequest,
     GraphFakosScreen,
+    GraphFakosSnapshot,
     GraphFakosVisual,
 )
 from .provider import (
@@ -34,6 +35,7 @@ __all__ = [
     "GraphFakosProvenance",
     "GraphFakosRequest",
     "GraphFakosScreen",
+    "GraphFakosSnapshot",
     "GraphFakosVisual",
     "diagnose_graph",
     "load_comparison_graph",

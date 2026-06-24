@@ -23,8 +23,12 @@ release note says otherwise:
 
 - DTO class names
 - provider protocol method names
+- optional `GraphFakosSnapshot` field names and top-level graph snapshot keys
 - provider-neutral `diagnose_graph()` output shape
 - `screen_manifest()` keys for `screen`, `label`, `route`, and `summary`
+- `build_viewer_route()`, `parse_viewer_request()`, and
+  `query_syntax_reference()` helper names
+- report helper names in `graphfakos.static` / `graphfakos.render`
 - console script names
 - local preview server helper names
 - screen manifest helper names

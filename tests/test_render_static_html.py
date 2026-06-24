@@ -4,6 +4,7 @@ from graphfakos import (
     FixtureGraphProvider,
     GraphFakosRequest,
     render_embeddable_html,
+    render_graph_markdown_report,
     render_static_html,
 )
 from graphfakos.testing import assert_graph_viewer_contract
@@ -124,3 +125,15 @@ def test_embeddable_html_renders_fragment_only() -> None:
     assert "<main class='gf-content gf-embed-root'" in html
     assert "<!doctype html>" not in html
     assert "Deep link:" in html
+
+
+def test_markdown_report_renders_snapshot_and_comparison() -> None:
+    markdown = render_graph_markdown_report(
+        FixtureGraphProvider(),
+        GraphFakosRequest(screen="diff"),
+    )
+
+    assert "# GraphFakos Report" in markdown
+    assert "- Screen: `diff`" in markdown
+    assert "- Snapshot: `fixture-current`" in markdown
+    assert "- Comparison: `Fixture Baseline`" in markdown

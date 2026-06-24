@@ -25,8 +25,10 @@ def test_graphfakos_package_imports() -> None:
     assert "GraphFakosDiagnostics" in graphfakos.__all__
     assert "GraphFakosGraph" in graphfakos.__all__
     assert "build_graph_report" in graphfakos.__all__
+    assert "build_viewer_route" in graphfakos.__all__
     assert "diagnose_graph" in graphfakos.__all__
     assert "FixtureGraphProvider" in graphfakos.adapters.__all__
+    assert "query_syntax_reference" in graphfakos.ui.__all__
     assert "render_graph_fragment" in graphfakos.ui.__all__
     assert "render_graph_viewer" in graphfakos.ui.__all__
     assert "GraphFakosProvider" in graphfakos.contracts.__all__

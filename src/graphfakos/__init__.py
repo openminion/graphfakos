@@ -15,6 +15,7 @@ from .models import (
     GraphFakosProvenance,
     GraphFakosRequest,
     GraphFakosScreen,
+    GraphFakosSnapshot,
     GraphFakosVisual,
 )
 from .provider import (
@@ -37,12 +38,17 @@ from .server import (
 from .static import (
     build_graph_report,
     render_embeddable_html,
+    render_graph_markdown_report,
     render_static_html,
     write_embeddable_html,
+    write_graph_markdown_report,
     write_graph_report,
     write_static_html,
 )
 from .ui import (
+    build_viewer_route,
+    parse_viewer_request,
+    query_syntax_reference,
     render_graph_fragment,
     render_graph_viewer,
     render_provider_path,
@@ -80,6 +86,7 @@ __all__ = [
     "GraphFakosProvenance",
     "GraphFakosRequest",
     "GraphFakosScreen",
+    "GraphFakosSnapshot",
     "GraphFakosVisual",
     "LocalViewerHttpServer",
     "LocalViewerServerResult",
@@ -88,12 +95,16 @@ __all__ = [
     "build_fixture_graph",
     "build_fixture_overlay_graphs",
     "build_graph_report",
+    "build_viewer_route",
     "diagnose_graph",
     "load_comparison_graph",
     "load_overlay_graphs",
     "load_provider_graph",
     "make_local_viewer_server",
+    "parse_viewer_request",
+    "query_syntax_reference",
     "render_embeddable_html",
+    "render_graph_markdown_report",
     "render_graph_fragment",
     "render_graph_viewer",
     "render_provider_path",
@@ -102,6 +113,7 @@ __all__ = [
     "serve_local_viewer",
     "validate_graph",
     "write_embeddable_html",
+    "write_graph_markdown_report",
     "write_graph_report",
     "write_static_html",
 ]

@@ -9,6 +9,7 @@ from graphfakos.models import (
     GraphFakosNode,
     GraphFakosProvenance,
     GraphFakosRequest,
+    GraphFakosSnapshot,
 )
 
 
@@ -142,6 +143,13 @@ def build_fixture_graph(request: GraphFakosRequest | None = None) -> GraphFakosG
         warnings=(),
         stats={"request_screen": request.screen, "node_count": len(nodes)},
         generated_at="2026-06-22T00:00:00+00:00",
+        snapshot=GraphFakosSnapshot(
+            snapshot_id="fixture-current",
+            label="Fixture Current Snapshot",
+            created_at="2026-06-22T00:00:00+00:00",
+            source_label="Fixture provider graph",
+            comparison_ids=("fixture-baseline",),
+        ),
         provider_details={
             "owner": "OpenMinion fixture",
             "comparison_mode": "baseline snapshot",
@@ -208,6 +216,12 @@ def build_fixture_baseline_graph(
         warnings=("baseline snapshot",),
         stats={"request_screen": request.screen, "node_count": len(baseline_nodes)},
         generated_at="2026-06-18T00:00:00+00:00",
+        snapshot=GraphFakosSnapshot(
+            snapshot_id="fixture-baseline",
+            label="Fixture Baseline Snapshot",
+            created_at="2026-06-18T00:00:00+00:00",
+            source_label="Fixture baseline graph",
+        ),
         provider_details=graph.provider_details,
         capability_details=graph.capability_details,
         available_facets=graph.available_facets,
@@ -244,6 +258,12 @@ def build_fixture_overlay_graphs(
         warnings=("overlay companion",),
         stats={"request_screen": request.screen, "node_count": len(companion_nodes)},
         generated_at="2026-06-21T00:00:00+00:00",
+        snapshot=GraphFakosSnapshot(
+            snapshot_id="fixture-overlay",
+            label="Overlay Snapshot",
+            created_at="2026-06-21T00:00:00+00:00",
+            source_label="Overlay provider graph",
+        ),
         provider_details={"owner": "Overlay fixture"},
         capability_details={"overlay": "Expose a comparison-ready provider summary."},
         available_facets=overlay.available_facets,

@@ -100,6 +100,28 @@ class GraphFakosProvenance:
 
 
 @dataclass(frozen=True, slots=True)
+class GraphFakosSnapshot:
+    snapshot_id: str
+    label: str = ""
+    created_at: str = ""
+    source_label: str = ""
+    source_uri: str = ""
+    comparison_ids: tuple[str, ...] = ()
+    provider_payload: dict[str, object] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "snapshot_id": self.snapshot_id,
+            "label": self.label,
+            "created_at": self.created_at,
+            "source_label": self.source_label,
+            "source_uri": self.source_uri,
+            "comparison_ids": list(self.comparison_ids),
+            "provider_payload": dict(self.provider_payload),
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class GraphFakosNode:
     id: str
     label: str
@@ -180,6 +202,7 @@ class GraphFakosGraph:
     warnings: tuple[str, ...] = ()
     stats: dict[str, object] = field(default_factory=dict)
     generated_at: str = ""
+    snapshot: GraphFakosSnapshot | None = None
     provider_details: dict[str, str] = field(default_factory=dict)
     capability_details: dict[str, str] = field(default_factory=dict)
     available_facets: dict[str, tuple[str, ...]] = field(default_factory=dict)
@@ -206,6 +229,7 @@ class GraphFakosGraph:
             "warnings": list(self.warnings),
             "stats": dict(self.stats),
             "generated_at": self.generated_at,
+            "snapshot": self.snapshot.to_dict() if self.snapshot is not None else None,
             "provider_details": dict(self.provider_details),
             "capability_details": dict(self.capability_details),
             "available_facets": {
@@ -315,5 +339,6 @@ __all__ = [
     "GraphFakosProvenance",
     "GraphFakosRequest",
     "GraphFakosScreen",
+    "GraphFakosSnapshot",
     "GraphFakosVisual",
 ]

@@ -159,6 +159,41 @@ def _first_query_value(query: dict[str, list[str]], key: str) -> str | None:
     return values[0] if values and values[0] else None
 
 
+def build_viewer_route(
+    request: GraphFakosRequest,
+    *,
+    screen: GraphFakosScreen | None = None,
+    overrides: dict[str, str | int | None] | None = None,
+) -> str:
+    return _route_href(request, screen=screen, overrides=overrides)
+
+
+def parse_viewer_request(
+    path: str,
+    query: dict[str, list[str]],
+    *,
+    base_request: GraphFakosRequest | None = None,
+) -> GraphFakosRequest:
+    request = base_request or GraphFakosRequest()
+    screen = _screen_from_path(path) or request.screen
+    return _request_from_query(request.with_screen(screen), query)
+
+
+def query_syntax_reference() -> tuple[dict[str, str], ...]:
+    return (
+        {"token": "kind:<value>", "meaning": "Filter nodes by provider-neutral node kind."},
+        {"token": "tag:<value>", "meaning": "Filter nodes that include one graph tag."},
+        {"token": "source:<value>", "meaning": "Filter nodes by provider-declared source label."},
+        {"token": "id:<value>", "meaning": "Match node ids directly."},
+        {"token": "label:<value>", "meaning": "Match node labels directly."},
+        {"token": "summary:<value>", "meaning": "Match node summaries directly."},
+        {"token": "edge:<value>", "meaning": "Filter visible edges by edge kind."},
+        {"token": "has:provenance", "meaning": "Require provenance references on matched nodes."},
+        {"token": "has:citation", "meaning": "Require citation references on matched nodes."},
+        {"token": "has:score", "meaning": "Require scored nodes."},
+    )
+
+
 def render_graph_fragment(
     graph: GraphFakosGraph,
     request: GraphFakosRequest,
@@ -227,12 +262,19 @@ def _header(
     diff_summary = ""
     if comparison_graph is not None:
         diff_summary = _badge(f"compare {comparison_graph.provider_label}", "neutral")
+    snapshot_note = ""
+    if graph.snapshot is not None:
+        snapshot_note = (
+            f"<p class='gf-note'>Snapshot {escape(graph.snapshot.label or graph.snapshot.snapshot_id)}"
+            f"{' generated ' + escape(graph.snapshot.created_at) if graph.snapshot.created_at else ''}.</p>"
+        )
     return (
         "<header class='gf-header'>"
         "<div><p class='gf-eyebrow'>Graph lens</p>"
         f"<h2>{escape(_screen_title(request.screen))}</h2>"
         f"<p>{escape(graph.label)}</p>"
-        f"<p class='gf-note'>{escape(_layout_description(request.layout))}</p></div>"
+        f"<p class='gf-note'>{escape(_layout_description(request.layout))}</p>"
+        f"{snapshot_note}</div>"
         "<div class='gf-summary'>"
         f"{_badge(graph.graph_role, 'accent')}"
         f"{_badge(f'{len(graph.nodes)} nodes', 'blue')}"
@@ -299,6 +341,7 @@ def _integration_panel(
         f"{command_list}"
         f"<code>Deep link: {escape(deep_link)}</code>"
         f"<code>Embed route: {escape(embed_path)}</code>"
+        f"<code>Query syntax: {escape(', '.join(item['token'] for item in query_syntax_reference()[:4]))}</code>"
         "</div></section>"
     )
 
@@ -476,6 +519,7 @@ def _graph_with_items(
         warnings=graph.warnings,
         stats=graph.stats,
         generated_at=graph.generated_at,
+        snapshot=graph.snapshot,
         provider_details=graph.provider_details,
         capability_details=graph.capability_details,
         available_facets=graph.available_facets,
@@ -562,6 +606,9 @@ def _render_provider_status(
         "citations": len(graph.citations),
         "generated_at": graph.generated_at,
     }
+    if graph.snapshot is not None:
+        status["snapshot"] = graph.snapshot.label or graph.snapshot.snapshot_id
+        status["snapshot_created_at"] = graph.snapshot.created_at
     return _split(
         _panel(
             "Provider Status",
@@ -573,6 +620,7 @@ def _render_provider_status(
         _panel("Graph Health", _graph_health(diagnostics))
         + _panel("Sample Nodes", _node_cards(graph.nodes[:5], GraphFakosRequest(screen="provider_status")))
         + _panel("Overlay Providers", _overlay_summary(overlay_graphs))
+        + _panel("Query Syntax", _query_syntax_panel())
         + _panel("Warnings", _list(graph.warnings)),
     )
 
@@ -961,6 +1009,12 @@ def _query_summary(items: tuple[str, ...]) -> str:
     if not items:
         return _panel("Active Query", _empty("Using the default graph view."))
     return _panel("Active Query", _badges([(item, "neutral") for item in items]))
+
+
+def _query_syntax_panel() -> str:
+    return _list(
+        [f"{item['token']} - {item['meaning']}" for item in query_syntax_reference()]
+    )
 
 
 def _selected_node(
@@ -1818,6 +1872,9 @@ a {
 
 
 __all__ = [
+    "build_viewer_route",
+    "parse_viewer_request",
+    "query_syntax_reference",
     "render_graph_fragment",
     "render_graph_viewer",
     "render_provider_path",

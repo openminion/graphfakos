@@ -1,6 +1,7 @@
 """Reusable graph viewer rendering primitives."""
 
 from .app import (
+    build_graph_diff,
     build_viewer_route,
     parse_viewer_request,
     query_syntax_reference,
@@ -11,6 +12,7 @@ from .app import (
 )
 
 __all__ = [
+    "build_graph_diff",
     "build_viewer_route",
     "parse_viewer_request",
     "query_syntax_reference",

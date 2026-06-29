@@ -37,7 +37,8 @@ It supports:
 - search plus node-kind, edge-kind, tag, source, and score filters,
 - public deep-link helpers for building or parsing stable viewer routes,
 - public query syntax guidance for `kind:`, `tag:`, `source:`, `edge:`,
-  `id:`, `label:`, `summary:`, and `has:` tokens,
+  `id:`, `label:`, `summary:`, `has:`, quoted phrases, `score>=`, and
+  `time>=` tokens,
 - clickable nodes and edges with inspector details,
 - depth-aware neighborhoods,
 - path source/target controls,
@@ -47,6 +48,7 @@ It supports:
 
 GraphFakos also exposes:
 
+- persisted graph artifact helpers plus a file-backed provider adapter,
 - embeddable HTML fragments for package-local UI shells,
 - JSON graph reports, and
 - Markdown graph reports for issue attachments or review notes.
@@ -69,9 +71,21 @@ Diff plus embed/report example:
 graphfakos-ui \
   --screen diff \
   --comparison-graph-id fixture-baseline \
+  --artifact-out graphfakos-artifact.json \
   --embed-out graphfakos-embed.html \
   --report-out graphfakos-report.json \
   --markdown-report-out graphfakos-report.md \
+  --json
+```
+
+Artifact-backed standalone replay:
+
+```bash
+graphfakos-ui \
+  --graph-json graphfakos-artifact.json \
+  --comparison-graph-json graphfakos-baseline.json \
+  --screen diff \
+  --html-out graphfakos-artifact-view.html \
   --json
 ```
 
@@ -149,3 +163,26 @@ parsed = parse_viewer_request("/diff", {"query": ["kind:file has:provenance"]})
 
 The public `query_syntax_reference()` helper returns the documented token set
 that package-local UIs can surface in their own help or docs.
+
+## Persisted graph artifacts
+
+GraphFakos now exposes a provider-neutral artifact surface for portable review
+workflows:
+
+```python
+from graphfakos import (
+    FixtureGraphProvider,
+    GraphFakosRequest,
+    load_graph_artifact,
+    load_provider_graph,
+    write_graph_artifact,
+)
+
+graph = load_provider_graph(FixtureGraphProvider(), GraphFakosRequest())
+write_graph_artifact(graph, "graphfakos-artifact.json")
+reloaded = load_graph_artifact("graphfakos-artifact.json")
+```
+
+The public `graph_artifact_schema()` helper returns the package-owned JSON
+schema description for that artifact shape, and `FileGraphProvider` lets the
+standalone CLI reopen those artifacts without custom code.

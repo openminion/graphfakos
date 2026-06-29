@@ -7,10 +7,12 @@ from .static import (
     render_static_html,
     write_embeddable_html,
     write_graph_markdown_report,
+    write_provider_graph_artifact,
     write_graph_report,
     write_static_html,
 )
 from .ui import (
+    build_graph_diff,
     build_viewer_route,
     parse_viewer_request,
     query_syntax_reference,
@@ -22,6 +24,7 @@ from .ui import (
 
 __all__ = [
     "build_graph_report",
+    "build_graph_diff",
     "build_viewer_route",
     "parse_viewer_request",
     "query_syntax_reference",
@@ -34,6 +37,7 @@ __all__ = [
     "screen_manifest",
     "write_embeddable_html",
     "write_graph_markdown_report",
+    "write_provider_graph_artifact",
     "write_graph_report",
     "write_static_html",
 ]

@@ -99,9 +99,12 @@ python3.11 -m pip install -e .
   route helpers
 - depth-aware neighborhood expansion and path source/target controls
 - public query syntax guidance for `kind:`, `tag:`, `source:`, `edge:`,
-  `id:`, `label:`, `summary:`, and `has:` tokens
+  `id:`, `label:`, `summary:`, `has:`, quoted phrases, `score>=`, and `time>=`
+  tokens
 - snapshot metadata on graph envelopes plus provider-owned comparison and
   overlay workflows
+- persisted graph artifact helpers plus a file-backed provider adapter for
+  standalone review flows
 - static HTML export for portable inspection
 - embeddable HTML fragments for host package shells
 - JSON and Markdown graph reports for CI proof, issue attachments, and
@@ -170,6 +173,7 @@ Render a diff view plus export machine-readable and Markdown reports:
 graphfakos-ui \
   --screen diff \
   --comparison-graph-id fixture-baseline \
+  --artifact-out graphfakos-artifact.json \
   --embed-out graphfakos-embed.html \
   --report-out graphfakos-report.json \
   --markdown-report-out graphfakos-report.md \
@@ -208,11 +212,50 @@ route = build_viewer_route(request)
 parsed = parse_viewer_request("/diff", {"query": ["kind:file has:provenance"]})
 ```
 
+Render from a persisted GraphFakos artifact instead of the built-in fixture:
+
+```bash
+graphfakos-ui \
+  --graph-json graphfakos-artifact.json \
+  --comparison-graph-json graphfakos-baseline.json \
+  --screen diff \
+  --html-out graphfakos-from-artifact.html \
+  --json
+```
+
+Render from a real provider module:
+
+```bash
+graphfakos-ui \
+  --provider-module my_package.graph_provider \
+  --provider-class MyGraphProvider \
+  --provider-config-json '{"workspace": ".graph-workspace"}' \
+  --screen provider_status \
+  --html-out graphfakos-provider.html \
+  --json
+```
+
 Sophiagraph should expose a second-brain adapter that maps durable memories,
 candidates, trust signals, structural links, and provenance into GraphFakos
 DTOs. PragmaGraph should expose a third-brain adapter that maps source files,
 documents, symbols, chunks, citations, freshness, and provider status into the
 same DTOs.
+
+Persist and reload one provider-neutral graph artifact from Python:
+
+```python
+from graphfakos import (
+    FixtureGraphProvider,
+    GraphFakosRequest,
+    load_graph_artifact,
+    load_provider_graph,
+    write_graph_artifact,
+)
+
+graph = load_provider_graph(FixtureGraphProvider(), GraphFakosRequest())
+write_graph_artifact(graph, "graphfakos-artifact.json")
+reloaded = load_graph_artifact("graphfakos-artifact.json")
+```
 
 ## Docs and Release
 

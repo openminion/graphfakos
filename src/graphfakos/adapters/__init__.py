@@ -1,5 +1,6 @@
 """GraphFakos adapter helpers."""
 
+from .file import FileGraphProvider
 from .fixture import (
     FixtureGraphProvider,
     build_fixture_baseline_graph,
@@ -8,6 +9,7 @@ from .fixture import (
 )
 
 __all__ = [
+    "FileGraphProvider",
     "FixtureGraphProvider",
     "build_fixture_baseline_graph",
     "build_fixture_graph",

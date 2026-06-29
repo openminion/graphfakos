@@ -60,6 +60,18 @@ def test_explore_screen_renders_filter_controls_and_edge_inspector() -> None:
     assert "Third-party Provider" in html
 
 
+def test_explore_screen_supports_quoted_score_and_time_queries() -> None:
+    html = render_static_html(
+        FixtureGraphProvider(),
+        GraphFakosRequest(
+            query='"Operator Preference" score>=0.9 time>=2026-06-20',
+        ),
+    )
+
+    assert "Operator Preference" in html
+    assert "Third-party Provider" not in html
+
+
 def test_neighborhood_screen_uses_depth_controls() -> None:
     html = render_static_html(
         FixtureGraphProvider(),
@@ -112,6 +124,8 @@ def test_diff_screen_renders_snapshot_comparison() -> None:
     assert "Snapshot Diff" in html
     assert "Fixture Baseline" in html
     assert "Added nodes" in html
+    assert "Changed nodes" in html
+    assert "Snapshot changes" in html
     assert "Overlay Providers" in html
 
 
@@ -137,3 +151,4 @@ def test_markdown_report_renders_snapshot_and_comparison() -> None:
     assert "- Screen: `diff`" in markdown
     assert "- Snapshot: `fixture-current`" in markdown
     assert "- Comparison: `Fixture Baseline`" in markdown
+    assert "## Diff Summary" in markdown

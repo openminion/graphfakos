@@ -131,6 +131,7 @@ def test_diagnose_graph_reports_provider_neutral_health() -> None:
     assert diagnostics.orphan_node_ids == ("orphan",)
     assert diagnostics.unknown_provenance_ids == ("missing-provenance",)
     assert diagnostics.unknown_citation_ids == ("missing-citation",)
+    assert diagnostics.disconnected_node_ids == ("orphan",)
     assert diagnostics.to_dict()["warnings"] == ["provider warning"]
 
 
@@ -169,6 +170,7 @@ def test_build_graph_report_includes_overlay_and_comparison() -> None:
 
     assert report["diagnostics"]["healthy"] is True
     assert report["comparison_graph"]["provider_label"] == "Fixture Baseline"
+    assert report["comparison_diff"]["summary"]["changed node count"] == 0
     assert report["overlay_graphs"][0]["provider_label"] == "Overlay Provider"
     assert report["request"]["screen"] == "diff"
     assert report["graph"]["snapshot"]["snapshot_id"] == "fixture-current"
@@ -205,6 +207,8 @@ def test_query_syntax_reference_documents_tokens() -> None:
 
     assert any(item["token"] == "kind:<value>" for item in syntax)
     assert any(item["token"] == "has:provenance" for item in syntax)
+    assert any(item["token"] == "score>=0.8" for item in syntax)
+    assert any(item["token"] == '"quoted phrase"' for item in syntax)
 
 
 def test_custom_provider_can_render_all_shared_screens() -> None:

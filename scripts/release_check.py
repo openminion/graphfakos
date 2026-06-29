@@ -55,6 +55,7 @@ def _assert_package_docs_shape(root: Path) -> None:
         root / "docs" / "custom-provider-example.md",
         root / "docs" / "source-tree-owner-map.md",
         root / "docs" / "ui-contracts.md",
+        root / "src" / "graphfakos" / "artifacts.py",
         root / "src" / "graphfakos" / "__init__.py",
         root / "src" / "graphfakos" / "contracts.py",
         root / "src" / "graphfakos" / "models.py",
@@ -95,6 +96,8 @@ def _assert_smoke_payload(stdout: str) -> None:
         raise RuntimeError(f"models import root missing from smoke: {payload!r}")
     if "graphfakos.render" not in payload.get("stable_import_roots", []):
         raise RuntimeError(f"render import root missing from smoke: {payload!r}")
+    if "graphfakos.artifacts" not in payload.get("stable_import_roots", []):
+        raise RuntimeError(f"artifacts import root missing from smoke: {payload!r}")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -163,18 +166,22 @@ def main(argv: list[str] | None = None) -> int:
                         "from importlib.resources import files; "
                         "from graphfakos import GraphFakosGraph, "
                         "GraphFakosDiagnostics, GraphFakosProvider, "
-                        "FixtureGraphProvider, build_graph_report, "
+                        "FileGraphProvider, FixtureGraphProvider, "
+                        "build_graph_report, build_graph_diff, "
                         "diagnose_graph, render_embeddable_html, "
                         "render_static_html, screen_manifest; "
+                        "from graphfakos.artifacts import graph_artifact_schema, "
+                        "write_graph_artifact; "
                         "from graphfakos.contracts import GraphFakosRequest; "
                         "from graphfakos.render import render_graph_fragment, "
-                        "render_graph_viewer; "
+                        "render_graph_viewer, write_provider_graph_artifact; "
                         "assert files('graphfakos').joinpath('py.typed').is_file()"
                     ),
                 ],
                 cwd=root,
             )
             _assert_smoke_payload(_run_capture([str(smoke), "--json"], cwd=root))
+            artifact_path = tmp / "graphfakos-artifact.json"
             _run_capture(
                 [
                     str(ui_preview),
@@ -188,6 +195,23 @@ def main(argv: list[str] | None = None) -> int:
                     str(tmp / "graphfakos-report.json"),
                     "--markdown-report-out",
                     str(tmp / "graphfakos-report.md"),
+                    "--artifact-out",
+                    str(artifact_path),
+                    "--json",
+                ],
+                cwd=root,
+            )
+            _run_capture(
+                [
+                    str(ui_preview),
+                    "--screen",
+                    "diff",
+                    "--graph-json",
+                    str(artifact_path),
+                    "--comparison-graph-json",
+                    str(artifact_path),
+                    "--html-out",
+                    str(tmp / "graphfakos-artifact-ui.html"),
                     "--json",
                 ],
                 cwd=root,

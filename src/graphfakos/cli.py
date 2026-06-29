@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import argparse
+import importlib
 import json
+from typing import Any
 
-from .adapters import FixtureGraphProvider
+from .adapters import FileGraphProvider, FixtureGraphProvider
+from .artifacts import write_graph_artifact
 from .models import GraphFakosRequest, GraphFakosScreen
+from .provider import load_provider_graph
 from .server import serve_local_viewer
 from .static import (
     write_embeddable_html,
@@ -14,7 +18,7 @@ from .static import (
     write_graph_report,
     write_static_html,
 )
-from .ui import render_provider_path
+from .ui import build_viewer_route, render_provider_path
 
 _SCREENS: tuple[GraphFakosScreen, ...] = (
     "explore",
@@ -37,6 +41,7 @@ def smoke_payload() -> dict[str, object]:
         "openminion_imports": False,
         "stable_import_roots": [
             "graphfakos",
+            "graphfakos.artifacts",
             "graphfakos.adapters",
             "graphfakos.contracts",
             "graphfakos.models",
@@ -85,6 +90,30 @@ def _print_payload(payload: object, *, as_json: bool) -> None:
     print(payload)
 
 
+def _provider_from_args(args: argparse.Namespace) -> object:
+    if args.graph_json:
+        return FileGraphProvider(
+            args.graph_json,
+            comparison_graph_path=args.comparison_graph_json,
+            overlay_graph_paths=tuple(args.overlay_graph_json),
+        )
+    if args.provider_module:
+        module = importlib.import_module(args.provider_module)
+        provider_type = getattr(module, args.provider_class)
+        kwargs = _provider_config(args.provider_config_json)
+        return provider_type(**kwargs)
+    return FixtureGraphProvider()
+
+
+def _provider_config(raw_payload: str) -> dict[str, Any]:
+    if not raw_payload:
+        return {}
+    payload = json.loads(raw_payload)
+    if not isinstance(payload, dict):
+        raise ValueError("--provider-config-json must decode to an object")
+    return payload
+
+
 def ui_preview_main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="GraphFakos local graph viewer")
     parser.add_argument("--screen", choices=_SCREENS, default="explore")
@@ -104,9 +133,16 @@ def ui_preview_main(argv: list[str] | None = None) -> int:
     parser.add_argument("--limit", type=int, default=25)
     parser.add_argument("--render-limit", type=int, default=120)
     parser.add_argument("--html-out", default="graphfakos-ui-preview.html")
+    parser.add_argument("--artifact-out", default="")
     parser.add_argument("--embed-out", default="")
     parser.add_argument("--report-out", default="")
     parser.add_argument("--markdown-report-out", default="")
+    parser.add_argument("--graph-json", default="")
+    parser.add_argument("--comparison-graph-json", default="")
+    parser.add_argument("--overlay-graph-json", action="append", default=[])
+    parser.add_argument("--provider-module", default="")
+    parser.add_argument("--provider-class", default="FixtureGraphProvider")
+    parser.add_argument("--provider-config-json", default="")
     parser.add_argument("--serve", action="store_true")
     parser.add_argument("--open", action="store_true")
     parser.add_argument("--host", default="127.0.0.1")
@@ -114,7 +150,7 @@ def ui_preview_main(argv: list[str] | None = None) -> int:
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
 
-    provider = FixtureGraphProvider()
+    provider = _provider_from_args(args)
     request = _request_from_args(args)
     if args.serve:
         result = serve_local_viewer(
@@ -138,6 +174,9 @@ def ui_preview_main(argv: list[str] | None = None) -> int:
         args.html_out,
         open_browser=args.open,
     )
+    graph = load_provider_graph(provider, request)
+    if args.artifact_out:
+        payload["artifact"] = write_graph_artifact(graph, args.artifact_out)
     if args.embed_out:
         payload["embed"] = write_embeddable_html(provider, request, args.embed_out)
     if args.report_out:
@@ -148,13 +187,12 @@ def ui_preview_main(argv: list[str] | None = None) -> int:
             request,
             args.markdown_report_out,
         )
-    graph = provider.load_graph(request)
     payload.update(
         {
             "provider_id": graph.provider_id,
             "node_count": len(graph.nodes),
             "edge_count": len(graph.edges),
-            "route": f"/{request.screen}",
+            "route": build_viewer_route(request),
         }
     )
     _print_payload(payload, as_json=args.json)

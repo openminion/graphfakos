@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 import webbrowser
 
+from .artifacts import write_graph_artifact
 from .models import GraphFakosRequest
 from .provider import (
     GraphFakosProvider,
@@ -14,7 +15,12 @@ from .provider import (
     load_overlay_graphs,
     load_provider_graph,
 )
-from .ui import render_graph_fragment, render_graph_viewer, screen_manifest
+from .ui import (
+    build_graph_diff,
+    render_graph_fragment,
+    render_graph_viewer,
+    screen_manifest,
+)
 
 
 def render_static_html(
@@ -59,6 +65,7 @@ def build_graph_report(
     }
     if comparison_graph is not None:
         report["comparison_graph"] = comparison_graph.to_dict()
+        report["comparison_diff"] = build_graph_diff(graph, comparison_graph)
     return report
 
 
@@ -86,6 +93,7 @@ def render_graph_markdown_report(
         comparison = report["comparison_graph"]
         if isinstance(comparison, dict):
             lines.append(f"- Comparison: `{comparison.get('provider_label', '')}`")
+    comparison_diff = report.get("comparison_diff")
     lines.extend(
         [
             "",
@@ -95,8 +103,32 @@ def render_graph_markdown_report(
             f"- Duplicate edges: `{len(diagnostics.get('duplicate_edge_ids', []))}`",
             f"- Unknown provenance refs: `{len(diagnostics.get('unknown_provenance_ids', []))}`",
             f"- Unknown citation refs: `{len(diagnostics.get('unknown_citation_ids', []))}`",
+            f"- Self-loop edges: `{len(diagnostics.get('self_loop_edge_ids', []))}`",
+            f"- Secondary-component nodes: `{len(diagnostics.get('disconnected_node_ids', []))}`",
         ]
     )
+    if isinstance(comparison_diff, dict):
+        summary = comparison_diff.get("summary", {})
+        lines.extend(
+            [
+                "",
+                "## Diff Summary",
+                "",
+                f"- Changed nodes: `{summary.get('changed node count', 0)}`",
+                f"- Changed edges: `{summary.get('changed edge count', 0)}`",
+                f"- Snapshot changes: `{summary.get('snapshot change count', 0)}`",
+            ]
+        )
+        for title, key in (
+            ("Changed nodes", "changed_nodes"),
+            ("Changed edges", "changed_edges"),
+            ("Snapshot changes", "snapshot_changes"),
+        ):
+            items = comparison_diff.get(key, [])
+            if not items:
+                continue
+            lines.extend(["", f"### {title}", ""])
+            lines.extend(f"- {item}" for item in items)
     return "\n".join(lines) + "\n"
 
 
@@ -167,6 +199,15 @@ def write_graph_markdown_report(
     }
 
 
+def write_provider_graph_artifact(
+    provider: GraphFakosProvider,
+    request: GraphFakosRequest,
+    output_path: str,
+) -> dict[str, object]:
+    graph = load_provider_graph(provider, request)
+    return write_graph_artifact(graph, output_path)
+
+
 __all__ = [
     "build_graph_report",
     "render_embeddable_html",
@@ -174,6 +215,7 @@ __all__ = [
     "render_static_html",
     "write_embeddable_html",
     "write_graph_markdown_report",
+    "write_provider_graph_artifact",
     "write_graph_report",
     "write_static_html",
 ]

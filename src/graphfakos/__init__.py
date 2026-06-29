@@ -1,6 +1,15 @@
 """Reusable graph lens for agent memory and source knowledge graphs."""
 
+from .artifacts import (
+    GRAPHFAKOS_ARTIFACT_SCHEMA,
+    graph_artifact_schema,
+    graph_from_dict,
+    load_graph_artifact,
+    validate_graph_artifact_payload,
+    write_graph_artifact,
+)
 from .adapters import (
+    FileGraphProvider,
     FixtureGraphProvider,
     build_fixture_baseline_graph,
     build_fixture_graph,
@@ -42,10 +51,12 @@ from .static import (
     render_static_html,
     write_embeddable_html,
     write_graph_markdown_report,
+    write_provider_graph_artifact,
     write_graph_report,
     write_static_html,
 )
 from .ui import (
+    build_graph_diff,
     build_viewer_route,
     parse_viewer_request,
     query_syntax_reference,
@@ -58,6 +69,7 @@ from .ui import (
 __version__ = "0.0.1"
 PACKAGE_STATUS = "semantic-alpha"
 STABLE_IMPORT_ROOTS = (
+    "graphfakos.artifacts",
     "graphfakos",
     "graphfakos.adapters",
     "graphfakos.contracts",
@@ -74,7 +86,9 @@ __all__ = [
     "PACKAGE_STATUS",
     "STABLE_IMPORT_ROOTS",
     "__version__",
+    "FileGraphProvider",
     "FixtureGraphProvider",
+    "GRAPHFAKOS_ARTIFACT_SCHEMA",
     "GraphFakosComparisonProvider",
     "GraphFakosCitation",
     "GraphFakosDiagnostics",
@@ -95,9 +109,13 @@ __all__ = [
     "build_fixture_graph",
     "build_fixture_overlay_graphs",
     "build_graph_report",
+    "build_graph_diff",
     "build_viewer_route",
     "diagnose_graph",
+    "graph_artifact_schema",
+    "graph_from_dict",
     "load_comparison_graph",
+    "load_graph_artifact",
     "load_overlay_graphs",
     "load_provider_graph",
     "make_local_viewer_server",
@@ -111,9 +129,12 @@ __all__ = [
     "render_static_html",
     "screen_manifest",
     "serve_local_viewer",
+    "validate_graph_artifact_payload",
     "validate_graph",
+    "write_graph_artifact",
     "write_embeddable_html",
     "write_graph_markdown_report",
+    "write_provider_graph_artifact",
     "write_graph_report",
     "write_static_html",
 ]

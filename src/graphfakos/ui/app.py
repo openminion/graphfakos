@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import defaultdict, deque
 from html import escape
 from math import cos, pi, sin
+import shlex
 from urllib.parse import urlencode
 
 from graphfakos.models import (
@@ -191,6 +192,9 @@ def query_syntax_reference() -> tuple[dict[str, str], ...]:
         {"token": "has:provenance", "meaning": "Require provenance references on matched nodes."},
         {"token": "has:citation", "meaning": "Require citation references on matched nodes."},
         {"token": "has:score", "meaning": "Require scored nodes."},
+        {"token": "\"quoted phrase\"", "meaning": "Keep whitespace together in one free-text match."},
+        {"token": "score>=0.8", "meaning": "Filter nodes by numeric score comparisons."},
+        {"token": "time>=2026-06-01", "meaning": "Filter nodes by ISO-like timestamp comparisons."},
     )
 
 
@@ -574,17 +578,23 @@ def _render_diff(
             ),
             _panel("Overlay Providers", _overlay_summary(overlay_graphs)),
         )
-    diff = _graph_diff(graph, comparison_graph)
-    left = _panel(
-        "Snapshot Diff",
+    diff = build_graph_diff(graph, comparison_graph)
+    body = (
         _summary_note(
             f"Comparing {graph.provider_label} against {comparison_graph.provider_label}."
         )
         + _key_values(diff["summary"])
         + _diff_section("Added nodes", diff["added_nodes"])
         + _diff_section("Removed nodes", diff["removed_nodes"])
+        + _diff_section("Changed nodes", diff["changed_nodes"])
         + _diff_section("Added edges", diff["added_edges"])
-        + _diff_section("Removed edges", diff["removed_edges"]),
+        + _diff_section("Removed edges", diff["removed_edges"])
+        + _diff_section("Changed edges", diff["changed_edges"])
+        + _diff_section("Snapshot changes", diff["snapshot_changes"])
+    )
+    left = _panel(
+        "Snapshot Diff",
+        body,
     )
     right = _panel("Overlay Providers", _overlay_summary(overlay_graphs))
     return _split(left, right)
@@ -643,6 +653,8 @@ def _graph_health(diagnostics: GraphFakosDiagnostics) -> str:
                 "duplicate edges": len(diagnostics.duplicate_edge_ids),
                 "unknown provenance refs": len(diagnostics.unknown_provenance_ids),
                 "unknown citation refs": len(diagnostics.unknown_citation_ids),
+                "self-loop edges": len(diagnostics.self_loop_edge_ids),
+                "secondary-component nodes": len(diagnostics.disconnected_node_ids),
             }
         )
     )
@@ -651,8 +663,13 @@ def _graph_health(diagnostics: GraphFakosDiagnostics) -> str:
         + _diagnostic_list("Duplicate edge ids", diagnostics.duplicate_edge_ids)
         + _diagnostic_list("Unknown provenance ids", diagnostics.unknown_provenance_ids)
         + _diagnostic_list("Unknown citation ids", diagnostics.unknown_citation_ids)
+        + _diagnostic_list("Self-loop edge ids", diagnostics.self_loop_edge_ids)
+        + _diagnostic_list(
+            "Secondary-component nodes",
+            diagnostics.disconnected_node_ids,
+        )
     )
-    return summary + (details if details else _empty("No graph diagnostics."))
+    return summary + (details or _empty("No graph diagnostics."))
 
 
 def _diagnostic_list(title: str, items: tuple[str, ...]) -> str:
@@ -730,7 +747,7 @@ def _filter_toolbar(
         "<section class='gf-toolbar' aria-label='Graph filters'>"
         f"<form method='get' action='{escape(action)}'>"
         f"<input name='query' value='{escape(request.query)}' "
-        "placeholder='Search or use kind:, tag:, source:, id:, has:'>"
+        "placeholder='Search or use kind:, tag:, has:, score>=, time>='>"
         f"{_select('node_kind', 'Node kind', _facet_values(graph, 'node_kind'), filters.get('node_kind', ''))}"
         f"{_select('edge_kind', 'Edge kind', _facet_values(graph, 'edge_kind'), filters.get('edge_kind', ''))}"
         f"{_select('tag', 'Tag', _facet_values(graph, 'tag'), filters.get('tag', ''))}"
@@ -902,6 +919,10 @@ def _node_matches_query(node: GraphFakosNode, parsed_query: dict[str, tuple[str,
             return False
         if value == "score" and node.score is None:
             return False
+    if not _node_matches_score_filters(node, parsed_query["score"]):
+        return False
+    if not _node_matches_time_filters(node, parsed_query["time"]):
+        return False
     if parsed_query["terms"] or any(parsed_query[key] for key in parsed_query if key != "terms"):
         return True
     return True
@@ -931,9 +952,7 @@ def _node_matches_filters(
         return False
     if filters.get("source") and node.source != filters["source"]:
         return False
-    if min_score is not None and (node.score is None or node.score < min_score):
-        return False
-    return True
+    return min_score is None or (node.score is not None and node.score >= min_score)
 
 
 def _filter_edges_by_request(
@@ -962,7 +981,16 @@ def _min_score(value: str) -> float | None:
 
 def _parse_query(query: str) -> dict[str, tuple[str, ...]]:
     buckets: dict[str, list[str]] = defaultdict(list)
-    for raw_token in query.split():
+    try:
+        tokens = shlex.split(query)
+    except ValueError:
+        tokens = query.split()
+    for raw_token in tokens:
+        comparison = _comparison_token(raw_token)
+        if comparison is not None:
+            name, normalized = comparison
+            buckets[name].append(normalized)
+            continue
         if ":" not in raw_token:
             buckets["terms"].append(raw_token.casefold())
             continue
@@ -987,8 +1015,86 @@ def _parse_query(query: str) -> dict[str, tuple[str, ...]]:
             "summary": buckets.get("summary", []),
             "has": buckets.get("has", []),
             "edge": buckets.get("edge", []),
+            "score": buckets.get("score", []),
+            "time": buckets.get("time", []),
         }.items()
     }
+
+
+def _comparison_token(raw_token: str) -> tuple[str, str] | None:
+    for prefix, name in (
+        ("score>=", "score"),
+        ("score<=", "score"),
+        ("score>", "score"),
+        ("score<", "score"),
+        ("time>=", "time"),
+        ("time<=", "time"),
+        ("time>", "time"),
+        ("time<", "time"),
+    ):
+        if raw_token.startswith(prefix) and raw_token[len(prefix) :]:
+            return name, raw_token.casefold()
+    return None
+
+
+def _node_matches_score_filters(
+    node: GraphFakosNode,
+    tokens: tuple[str, ...],
+) -> bool:
+    if not tokens:
+        return True
+    if node.score is None:
+        return False
+    return all(_match_numeric_token(node.score, token, "score") for token in tokens)
+
+
+def _node_matches_time_filters(
+    node: GraphFakosNode,
+    tokens: tuple[str, ...],
+) -> bool:
+    if not tokens:
+        return True
+    values = tuple(
+        value for value in node.timestamps.values() if isinstance(value, str) and value
+    )
+    if not values:
+        return False
+    return all(any(_match_string_token(value, token, "time") for value in values) for token in tokens)
+
+
+def _match_numeric_token(value: float, token: str, prefix: str) -> bool:
+    operator, expected = _split_comparison_token(token, prefix)
+    try:
+        numeric = float(expected)
+    except ValueError:
+        return False
+    if operator == ">=":
+        return value >= numeric
+    if operator == "<=":
+        return value <= numeric
+    if operator == ">":
+        return value > numeric
+    return value < numeric
+
+
+def _match_string_token(value: str, token: str, prefix: str) -> bool:
+    operator, expected = _split_comparison_token(token, prefix)
+    current = value.casefold()
+    if operator == ">=":
+        return current >= expected
+    if operator == "<=":
+        return current <= expected
+    if operator == ">":
+        return current > expected
+    return current < expected
+
+
+def _split_comparison_token(token: str, prefix: str) -> tuple[str, str]:
+    for operator in (">=", "<=", ">", "<"):
+        marker = f"{prefix}{operator}"
+        if token.startswith(marker):
+            return operator, token[len(marker) :]
+    raise ValueError(f"Unsupported comparison token: {token}")
 
 
 def _active_query_terms(request: GraphFakosRequest) -> tuple[str, ...]:
@@ -1505,14 +1611,41 @@ def _focus_positions(
     return positions
 
 
-def _graph_diff(
+def build_graph_diff(
     graph: GraphFakosGraph,
     comparison_graph: GraphFakosGraph,
 ) -> dict[str, object]:
+    current_node_map = graph.node_map()
+    comparison_node_map = comparison_graph.node_map()
+    current_edge_map = graph.edge_map()
+    comparison_edge_map = comparison_graph.edge_map()
+    current_node_payloads = {
+        node_id: node.to_dict() for node_id, node in current_node_map.items()
+    }
+    comparison_node_payloads = {
+        node_id: node.to_dict() for node_id, node in comparison_node_map.items()
+    }
+    current_edge_payloads = {
+        edge_id: edge.to_dict() for edge_id, edge in current_edge_map.items()
+    }
+    comparison_edge_payloads = {
+        edge_id: edge.to_dict() for edge_id, edge in comparison_edge_map.items()
+    }
     current_node_ids = {node.id for node in graph.nodes}
     comparison_node_ids = {node.id for node in comparison_graph.nodes}
     current_edge_ids = {edge.id for edge in graph.edges}
     comparison_edge_ids = {edge.id for edge in comparison_graph.edges}
+    changed_nodes = _changed_items(
+        current_node_ids & comparison_node_ids,
+        current_node_payloads,
+        comparison_node_payloads,
+    )
+    changed_edges = _changed_items(
+        current_edge_ids & comparison_edge_ids,
+        current_edge_payloads,
+        comparison_edge_payloads,
+    )
+    snapshot_changes = _snapshot_changes(graph, comparison_graph)
     return {
         "summary": {
             "current nodes": len(graph.nodes),
@@ -1523,12 +1656,66 @@ def _graph_diff(
             "removed node count": len(comparison_node_ids - current_node_ids),
             "added edge count": len(current_edge_ids - comparison_edge_ids),
             "removed edge count": len(comparison_edge_ids - current_edge_ids),
+            "changed node count": len(changed_nodes),
+            "changed edge count": len(changed_edges),
+            "snapshot change count": len(snapshot_changes),
         },
         "added_nodes": tuple(sorted(current_node_ids - comparison_node_ids)),
         "removed_nodes": tuple(sorted(comparison_node_ids - current_node_ids)),
+        "changed_nodes": changed_nodes,
         "added_edges": tuple(sorted(current_edge_ids - comparison_edge_ids)),
         "removed_edges": tuple(sorted(comparison_edge_ids - current_edge_ids)),
+        "changed_edges": changed_edges,
+        "snapshot_changes": snapshot_changes,
     }
+
+
+def _snapshot_changes(
+    graph: GraphFakosGraph,
+    comparison_graph: GraphFakosGraph,
+) -> tuple[str, ...]:
+    if graph.snapshot is None and comparison_graph.snapshot is None:
+        return ()
+    current = graph.snapshot.to_dict() if graph.snapshot is not None else {}
+    comparison = (
+        comparison_graph.snapshot.to_dict()
+        if comparison_graph.snapshot is not None
+        else {}
+    )
+    if current == comparison:
+        return ()
+    return (_changed_field_summary("snapshot", current, comparison),)
+
+
+def _changed_items(
+    item_ids: set[str],
+    current_payloads: dict[str, dict[str, object]],
+    comparison_payloads: dict[str, dict[str, object]],
+) -> tuple[str, ...]:
+    return tuple(
+        sorted(
+            _changed_field_summary(
+                item_id,
+                current_payloads[item_id],
+                comparison_payloads[item_id],
+            )
+            for item_id in item_ids
+            if current_payloads[item_id] != comparison_payloads[item_id]
+        )
+    )
+
+
+def _changed_field_summary(
+    item_id: str,
+    current: dict[str, object],
+    comparison: dict[str, object],
+) -> str:
+    changed_fields = sorted(
+        key
+        for key in set(current) | set(comparison)
+        if current.get(key) != comparison.get(key)
+    )
+    return f"{item_id}: {', '.join(changed_fields)}"
 
 
 def _diff_section(title: str, items: tuple[str, ...]) -> str:
@@ -1872,6 +2059,7 @@ a {
 
 
 __all__ = [
+    "build_graph_diff",
     "build_viewer_route",
     "parse_viewer_request",
     "query_syntax_reference",

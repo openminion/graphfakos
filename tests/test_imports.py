@@ -7,6 +7,7 @@ import tomllib
 
 def test_graphfakos_package_imports() -> None:
     import graphfakos
+    import graphfakos.artifacts
     import graphfakos.adapters
     import graphfakos.contracts
     import graphfakos.models
@@ -19,14 +20,18 @@ def test_graphfakos_package_imports() -> None:
 
     assert graphfakos.__version__ == "0.0.1"
     assert graphfakos.PACKAGE_STATUS == "semantic-alpha"
+    assert "graphfakos.artifacts" in graphfakos.STABLE_IMPORT_ROOTS
     assert "graphfakos.models" in graphfakos.STABLE_IMPORT_ROOTS
     assert "graphfakos.contracts" in graphfakos.STABLE_IMPORT_ROOTS
     assert "graphfakos.render" in graphfakos.STABLE_IMPORT_ROOTS
     assert "GraphFakosDiagnostics" in graphfakos.__all__
+    assert "FileGraphProvider" in graphfakos.__all__
     assert "GraphFakosGraph" in graphfakos.__all__
     assert "build_graph_report" in graphfakos.__all__
+    assert "graph_artifact_schema" in graphfakos.__all__
     assert "build_viewer_route" in graphfakos.__all__
     assert "diagnose_graph" in graphfakos.__all__
+    assert "FileGraphProvider" in graphfakos.adapters.__all__
     assert "FixtureGraphProvider" in graphfakos.adapters.__all__
     assert "query_syntax_reference" in graphfakos.ui.__all__
     assert "render_graph_fragment" in graphfakos.ui.__all__

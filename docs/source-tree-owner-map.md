@@ -43,6 +43,8 @@ and `graphfakos.ui`.
 ## Source
 
 - `src/graphfakos/models.py`: provider-neutral graph DTOs
+- `src/graphfakos/artifacts.py`: persisted graph artifact schema, load, and
+  write helpers
 - `src/graphfakos/provider.py`: provider protocol, validation helpers, and
   provider-neutral diagnostics
 - `src/graphfakos/contracts.py`: public adapter/DTO contract exports
@@ -54,6 +56,8 @@ and `graphfakos.ui`.
 - `src/graphfakos/ui/`: viewer rendering primitives, screen manifest,
   filter controls, graph canvas, node/edge inspectors, guidance panels, and
   screen layouts
+- `src/graphfakos/adapters/file.py`: file-backed provider for persisted graph
+  artifacts
 - `src/graphfakos/adapters/fixture.py`: fake third-party provider
 - `src/graphfakos/testing/assertions.py`: reusable viewer assertions
 
@@ -64,5 +68,6 @@ and `graphfakos.ui`.
 - `tests/test_render_static_html.py`: static viewer rendering
 - `tests/test_local_preview_server.py`: local server route smoke
 - `tests/test_cli.py`: CLI smoke and JSON output
+- `tests/test_artifacts.py`: artifact round-trip and file-backed provider proof
 - `tests/test_release_check.py`: release script shape
 - `tests/test_fixture_adapter.py`: fake third-party provider compatibility

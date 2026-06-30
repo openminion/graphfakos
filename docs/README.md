@@ -5,6 +5,7 @@ knowledge graphs.
 
 Start with:
 
+- [Artifact interchange](artifact-interchange.md)
 - [Source tree owner map](source-tree-owner-map.md)
 - [UI contracts](ui-contracts.md)
 - [Custom provider example](custom-provider-example.md)
@@ -106,8 +107,8 @@ PragmaGraph third-brain provider:
 cd ../pragmagraph
 PYTHONPATH=../graphfakos/src:src \
   .venv/bin/python3.11 -m pragmagraph ui-preview \
-  --screen diff \
-  --comparison structural_baseline \
+  --screen provider_status \
+  --artifact-out pragmagraph-graph.json \
   --report-out pragmagraph-graph-report.json \
   --embed-out pragmagraph-graph-embed.html \
   --html-out pragmagraph-graphfakos.html \
@@ -186,3 +187,6 @@ reloaded = load_graph_artifact("graphfakos-artifact.json")
 The public `graph_artifact_schema()` helper returns the package-owned JSON
 schema description for that artifact shape, and `FileGraphProvider` lets the
 standalone CLI reopen those artifacts without custom code.
+
+For end-to-end package handoff and replay examples, see
+[Artifact interchange](artifact-interchange.md).

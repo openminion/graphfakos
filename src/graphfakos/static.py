@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 import json
 from pathlib import Path
 import webbrowser
 
 from .artifacts import write_graph_artifact
-from .models import GraphFakosRequest
+from .models import GraphFakosGraph, GraphFakosRequest
 from .provider import (
     GraphFakosProvider,
     diagnose_graph,
@@ -16,6 +17,7 @@ from .provider import (
     load_provider_graph,
 )
 from .ui import (
+    build_viewer_route,
     build_graph_diff,
     render_graph_fragment,
     render_graph_viewer,
@@ -27,12 +29,12 @@ def render_static_html(
     provider: GraphFakosProvider,
     request: GraphFakosRequest,
 ) -> str:
-    graph = load_provider_graph(provider, request)
+    graph, comparison_graph, overlay_graphs = _loaded_graphs(provider, request)
     return render_graph_viewer(
         graph,
         request,
-        comparison_graph=load_comparison_graph(provider, request),
-        overlay_graphs=load_overlay_graphs(provider, request),
+        comparison_graph=comparison_graph,
+        overlay_graphs=overlay_graphs,
     )
 
 
@@ -40,12 +42,12 @@ def render_embeddable_html(
     provider: GraphFakosProvider,
     request: GraphFakosRequest,
 ) -> str:
-    graph = load_provider_graph(provider, request)
+    graph, comparison_graph, overlay_graphs = _loaded_graphs(provider, request)
     return render_graph_fragment(
         graph,
         request,
-        comparison_graph=load_comparison_graph(provider, request),
-        overlay_graphs=load_overlay_graphs(provider, request),
+        comparison_graph=comparison_graph,
+        overlay_graphs=overlay_graphs,
     )
 
 
@@ -53,9 +55,22 @@ def build_graph_report(
     provider: GraphFakosProvider,
     request: GraphFakosRequest,
 ) -> dict[str, object]:
-    graph = load_provider_graph(provider, request)
-    comparison_graph = load_comparison_graph(provider, request)
-    overlay_graphs = load_overlay_graphs(provider, request)
+    graph, comparison_graph, overlay_graphs = _loaded_graphs(provider, request)
+    return _graph_report_payload(
+        graph,
+        request,
+        comparison_graph=comparison_graph,
+        overlay_graphs=overlay_graphs,
+    )
+
+
+def _graph_report_payload(
+    graph: GraphFakosGraph,
+    request: GraphFakosRequest,
+    *,
+    comparison_graph: GraphFakosGraph | None,
+    overlay_graphs: tuple[GraphFakosGraph, ...],
+) -> dict[str, object]:
     report: dict[str, object] = {
         "request": request.to_dict(),
         "graph": graph.to_dict(),
@@ -67,6 +82,30 @@ def build_graph_report(
         report["comparison_graph"] = comparison_graph.to_dict()
         report["comparison_diff"] = build_graph_diff(graph, comparison_graph)
     return report
+
+
+def _loaded_graphs(
+    provider: GraphFakosProvider,
+    request: GraphFakosRequest,
+) -> tuple[
+    GraphFakosGraph,
+    GraphFakosGraph | None,
+    tuple[GraphFakosGraph, ...],
+]:
+    return (
+        load_provider_graph(provider, request),
+        load_comparison_graph(provider, request),
+        load_overlay_graphs(provider, request),
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class GraphPreviewOutputPaths:
+    html_path: str
+    artifact_path: str = ""
+    embed_path: str = ""
+    report_path: str = ""
+    markdown_report_path: str = ""
 
 
 def render_graph_markdown_report(
@@ -208,13 +247,149 @@ def write_provider_graph_artifact(
     return write_graph_artifact(graph, output_path)
 
 
+def write_provider_preview_outputs(
+    provider: GraphFakosProvider,
+    request: GraphFakosRequest,
+    output_paths: GraphPreviewOutputPaths,
+    *,
+    open_browser: bool = False,
+) -> dict[str, object]:
+    graph, comparison_graph, overlay_graphs = _loaded_graphs(provider, request)
+    html = render_graph_viewer(
+        graph,
+        request,
+        comparison_graph=comparison_graph,
+        overlay_graphs=overlay_graphs,
+    )
+    payload = _write_html_output(
+        html,
+        output_paths.html_path,
+        screen=request.screen,
+        open_browser=open_browser,
+    )
+    if output_paths.artifact_path:
+        payload["artifact"] = write_graph_artifact(graph, output_paths.artifact_path)
+    if output_paths.embed_path:
+        embed_html = render_graph_fragment(
+            graph,
+            request,
+            comparison_graph=comparison_graph,
+            overlay_graphs=overlay_graphs,
+        )
+        payload["embed"] = _write_embed_output(
+            embed_html,
+            output_paths.embed_path,
+            screen=request.screen,
+        )
+    report = _graph_report_payload(
+        graph,
+        request,
+        comparison_graph=comparison_graph,
+        overlay_graphs=overlay_graphs,
+    )
+    if output_paths.report_path:
+        payload["report"] = _write_json_output(
+            report,
+            output_paths.report_path,
+            screen=request.screen,
+            key="report",
+        )
+    if output_paths.markdown_report_path:
+        markdown = render_graph_markdown_report(provider, request)
+        payload["markdown_report"] = _write_markdown_output(
+            markdown,
+            output_paths.markdown_report_path,
+            screen=request.screen,
+        )
+    payload.update(
+        {
+            "provider_id": graph.provider_id,
+            "node_count": len(graph.nodes),
+            "edge_count": len(graph.edges),
+            "route": build_viewer_route(request),
+        }
+    )
+    return payload
+
+
+def _write_html_output(
+    html: str,
+    output_path: str,
+    *,
+    screen: str,
+    open_browser: bool,
+) -> dict[str, object]:
+    path = _resolved_output_path(output_path)
+    path.write_text(html, encoding="utf-8")
+    opened = webbrowser.open(path.as_uri()) if open_browser else False
+    return {
+        "output_path": str(path),
+        "screen": screen,
+        "opened": opened,
+    }
+
+
+def _write_embed_output(
+    html: str,
+    output_path: str,
+    *,
+    screen: str,
+) -> dict[str, object]:
+    path = _resolved_output_path(output_path)
+    path.write_text(html, encoding="utf-8")
+    return {
+        "output_path": str(path),
+        "screen": screen,
+        "embedded": True,
+    }
+
+
+def _write_json_output(
+    payload: dict[str, object],
+    output_path: str,
+    *,
+    screen: str,
+    key: str,
+) -> dict[str, object]:
+    path = _resolved_output_path(output_path)
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+    return {
+        "output_path": str(path),
+        "screen": screen,
+        key: True,
+    }
+
+
+def _write_markdown_output(
+    markdown: str,
+    output_path: str,
+    *,
+    screen: str,
+) -> dict[str, object]:
+    path = _resolved_output_path(output_path)
+    path.write_text(markdown, encoding="utf-8")
+    return {
+        "output_path": str(path),
+        "screen": screen,
+        "markdown_report": True,
+    }
+
+
+def _resolved_output_path(output_path: str) -> Path:
+    path = Path(output_path).expanduser().resolve(strict=False)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
+
+
 __all__ = [
+    "GraphPreviewOutputPaths",
     "build_graph_report",
     "render_embeddable_html",
     "render_graph_markdown_report",
     "render_static_html",
     "write_embeddable_html",
     "write_graph_markdown_report",
+    "write_provider_preview_outputs",
     "write_provider_graph_artifact",
     "write_graph_report",
     "write_static_html",

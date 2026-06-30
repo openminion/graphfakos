@@ -17,10 +17,13 @@ def test_release_check_script_covers_viewer_contract() -> None:
     assert "FileGraphProvider" in release_check
     assert "GraphFakosDiagnostics" in release_check
     assert "GraphFakosGraph" in release_check
+    assert "GraphPreviewOutputPaths" in release_check
     assert "build_graph_report" in release_check
     assert "custom-provider-example.md" in release_check
     assert "diagnose_graph" in release_check
+    assert "artifact-interchange.md" in release_check
     assert "py.typed" in release_check
     assert "render_graph_fragment" in release_check
+    assert "write_provider_preview_outputs" in release_check
     assert "_assert_project_metadata" in release_check
     assert "twine" in release_check

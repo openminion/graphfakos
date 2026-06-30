@@ -35,6 +35,7 @@ and `graphfakos.ui`.
 ## Docs
 
 - `docs/README.md`: package-local docs index and integration model
+- `docs/artifact-interchange.md`: portable artifact replay and review workflow
 - `docs/custom-provider-example.md`: package-neutral third-party provider example
 - `docs/ui-contracts.md`: shared viewer contract, wrapper responsibilities,
   and provider-adapter expectations

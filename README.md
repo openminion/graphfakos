@@ -257,11 +257,15 @@ write_graph_artifact(graph, "graphfakos-artifact.json")
 reloaded = load_graph_artifact("graphfakos-artifact.json")
 ```
 
+For package-to-package replay flows, CI attachments, and issue-review examples,
+see [Artifact interchange](docs/artifact-interchange.md).
+
 ## Docs and Release
 
 - [API compatibility](API_COMPATIBILITY.md)
 - [Release process](RELEASING.md)
 - [Package docs](docs/README.md)
+- [Artifact interchange](docs/artifact-interchange.md)
 - [Custom provider example](docs/custom-provider-example.md)
 - [UI contracts](docs/ui-contracts.md)
 - [Source tree owner map](docs/source-tree-owner-map.md)

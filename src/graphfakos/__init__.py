@@ -45,6 +45,7 @@ from .server import (
     serve_local_viewer,
 )
 from .static import (
+    GraphPreviewOutputPaths,
     build_graph_report,
     render_embeddable_html,
     render_graph_markdown_report,
@@ -52,6 +53,7 @@ from .static import (
     write_embeddable_html,
     write_graph_markdown_report,
     write_provider_graph_artifact,
+    write_provider_preview_outputs,
     write_graph_report,
     write_static_html,
 )
@@ -89,6 +91,7 @@ __all__ = [
     "FileGraphProvider",
     "FixtureGraphProvider",
     "GRAPHFAKOS_ARTIFACT_SCHEMA",
+    "GraphPreviewOutputPaths",
     "GraphFakosComparisonProvider",
     "GraphFakosCitation",
     "GraphFakosDiagnostics",
@@ -135,6 +138,7 @@ __all__ = [
     "write_embeddable_html",
     "write_graph_markdown_report",
     "write_provider_graph_artifact",
+    "write_provider_preview_outputs",
     "write_graph_report",
     "write_static_html",
 ]

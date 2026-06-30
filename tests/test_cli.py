@@ -177,3 +177,60 @@ def test_graphfakos_ui_preview_loads_provider_module_and_graph_artifact(tmp_path
     assert artifact_payload["provider_id"] == "fixture"
     assert artifact_payload["route"].startswith("/diff?")
     assert "Fixture Provider" in html
+
+
+def test_graphfakos_ui_preview_rejects_provider_config_without_module() -> None:
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "graphfakos",
+            "ui-preview",
+            "--provider-config-json",
+            '{"workspace": ".graph-workspace"}',
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "--provider-config-json requires --provider-module" in result.stderr
+
+
+def test_graphfakos_ui_preview_rejects_comparison_artifact_without_graph_json() -> None:
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "graphfakos",
+            "ui-preview",
+            "--comparison-graph-json",
+            "comparison.json",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "--comparison-graph-json requires --graph-json" in result.stderr
+
+
+def test_graphfakos_ui_preview_reports_provider_import_errors() -> None:
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "graphfakos",
+            "ui-preview",
+            "--provider-module",
+            "graphfakos.adapters.missing_provider",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "Unable to import provider module" in result.stderr

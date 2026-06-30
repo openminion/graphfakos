@@ -1,6 +1,7 @@
 """Public graph viewer rendering exports."""
 
 from .static import (
+    GraphPreviewOutputPaths,
     build_graph_report,
     render_embeddable_html,
     render_graph_markdown_report,
@@ -8,6 +9,7 @@ from .static import (
     write_embeddable_html,
     write_graph_markdown_report,
     write_provider_graph_artifact,
+    write_provider_preview_outputs,
     write_graph_report,
     write_static_html,
 )
@@ -23,6 +25,7 @@ from .ui import (
 )
 
 __all__ = [
+    "GraphPreviewOutputPaths",
     "build_graph_report",
     "build_graph_diff",
     "build_viewer_route",
@@ -38,6 +41,7 @@ __all__ = [
     "write_embeddable_html",
     "write_graph_markdown_report",
     "write_provider_graph_artifact",
+    "write_provider_preview_outputs",
     "write_graph_report",
     "write_static_html",
 ]

@@ -8,17 +8,14 @@ import json
 from typing import Any
 
 from .adapters import FileGraphProvider, FixtureGraphProvider
-from .artifacts import write_graph_artifact
 from .models import GraphFakosRequest, GraphFakosScreen
-from .provider import load_provider_graph
+from .provider import GraphFakosProvider
 from .server import serve_local_viewer
 from .static import (
-    write_embeddable_html,
-    write_graph_markdown_report,
-    write_graph_report,
-    write_static_html,
+    GraphPreviewOutputPaths,
+    write_provider_preview_outputs,
 )
-from .ui import build_viewer_route, render_provider_path
+from .ui import render_provider_path
 
 _SCREENS: tuple[GraphFakosScreen, ...] = (
     "explore",
@@ -90,28 +87,87 @@ def _print_payload(payload: object, *, as_json: bool) -> None:
     print(payload)
 
 
-def _provider_from_args(args: argparse.Namespace) -> object:
+def _provider_from_args(args: argparse.Namespace) -> GraphFakosProvider:
+    _validate_provider_args(args)
     if args.graph_json:
-        return FileGraphProvider(
-            args.graph_json,
-            comparison_graph_path=args.comparison_graph_json,
-            overlay_graph_paths=tuple(args.overlay_graph_json),
-        )
+        try:
+            provider = FileGraphProvider(
+                args.graph_json,
+                comparison_graph_path=args.comparison_graph_json,
+                overlay_graph_paths=tuple(args.overlay_graph_json),
+            )
+        except (OSError, TypeError, ValueError) as exc:
+            raise SystemExit(f"Unable to load graph artifact provider: {exc}") from exc
+        return provider
     if args.provider_module:
-        module = importlib.import_module(args.provider_module)
+        try:
+            module = importlib.import_module(args.provider_module)
+        except ModuleNotFoundError as exc:
+            raise SystemExit(
+                f"Unable to import provider module {args.provider_module!r}: {exc}"
+            ) from exc
+        except Exception as exc:
+            raise SystemExit(
+                f"Provider module {args.provider_module!r} failed to import: {exc}"
+            ) from exc
+        if not hasattr(module, args.provider_class):
+            raise SystemExit(
+                f"Provider class {args.provider_class!r} was not found in "
+                f"{args.provider_module!r}"
+            )
         provider_type = getattr(module, args.provider_class)
+        if not callable(provider_type):
+            raise SystemExit(
+                f"Provider class {args.provider_class!r} in "
+                f"{args.provider_module!r} is not callable"
+            )
         kwargs = _provider_config(args.provider_config_json)
-        return provider_type(**kwargs)
+        try:
+            provider = provider_type(**kwargs)
+        except TypeError as exc:
+            raise SystemExit(
+                f"Unable to construct provider {args.provider_class!r}: {exc}"
+            ) from exc
+        except Exception as exc:
+            raise SystemExit(
+                f"Provider {args.provider_class!r} raised during construction: {exc}"
+            ) from exc
+        if not isinstance(provider, GraphFakosProvider):
+            raise SystemExit(
+                f"Provider {args.provider_class!r} does not satisfy the "
+                "GraphFakosProvider contract"
+            )
+        return provider
     return FixtureGraphProvider()
 
 
 def _provider_config(raw_payload: str) -> dict[str, Any]:
     if not raw_payload:
         return {}
-    payload = json.loads(raw_payload)
+    try:
+        payload = json.loads(raw_payload)
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"--provider-config-json must be valid JSON: {exc}") from exc
     if not isinstance(payload, dict):
-        raise ValueError("--provider-config-json must decode to an object")
+        raise SystemExit("--provider-config-json must decode to an object")
     return payload
+
+
+def _validate_provider_args(args: argparse.Namespace) -> None:
+    if args.graph_json and args.provider_module:
+        raise SystemExit("--graph-json cannot be combined with --provider-module")
+    if args.comparison_graph_json and not args.graph_json:
+        raise SystemExit("--comparison-graph-json requires --graph-json")
+    if args.overlay_graph_json and not args.graph_json:
+        raise SystemExit("--overlay-graph-json requires --graph-json")
+    if args.provider_config_json and not args.provider_module:
+        raise SystemExit("--provider-config-json requires --provider-module")
+    if (
+        args.provider_class != "FixtureGraphProvider"
+        and not args.provider_module
+        and not args.graph_json
+    ):
+        raise SystemExit("--provider-class requires --provider-module")
 
 
 def ui_preview_main(argv: list[str] | None = None) -> int:
@@ -168,32 +224,17 @@ def ui_preview_main(argv: list[str] | None = None) -> int:
         _print_payload(result.to_dict(), as_json=args.json)
         return 0
 
-    payload = write_static_html(
+    payload = write_provider_preview_outputs(
         provider,
         request,
-        args.html_out,
+        GraphPreviewOutputPaths(
+            html_path=args.html_out,
+            artifact_path=args.artifact_out,
+            embed_path=args.embed_out,
+            report_path=args.report_out,
+            markdown_report_path=args.markdown_report_out,
+        ),
         open_browser=args.open,
-    )
-    graph = load_provider_graph(provider, request)
-    if args.artifact_out:
-        payload["artifact"] = write_graph_artifact(graph, args.artifact_out)
-    if args.embed_out:
-        payload["embed"] = write_embeddable_html(provider, request, args.embed_out)
-    if args.report_out:
-        payload["report"] = write_graph_report(provider, request, args.report_out)
-    if args.markdown_report_out:
-        payload["markdown_report"] = write_graph_markdown_report(
-            provider,
-            request,
-            args.markdown_report_out,
-        )
-    payload.update(
-        {
-            "provider_id": graph.provider_id,
-            "node_count": len(graph.nodes),
-            "edge_count": len(graph.edges),
-            "route": build_viewer_route(request),
-        }
     )
     _print_payload(payload, as_json=args.json)
     return 0

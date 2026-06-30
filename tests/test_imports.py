@@ -27,10 +27,12 @@ def test_graphfakos_package_imports() -> None:
     assert "GraphFakosDiagnostics" in graphfakos.__all__
     assert "FileGraphProvider" in graphfakos.__all__
     assert "GraphFakosGraph" in graphfakos.__all__
+    assert "GraphPreviewOutputPaths" in graphfakos.__all__
     assert "build_graph_report" in graphfakos.__all__
     assert "graph_artifact_schema" in graphfakos.__all__
     assert "build_viewer_route" in graphfakos.__all__
     assert "diagnose_graph" in graphfakos.__all__
+    assert "write_provider_preview_outputs" in graphfakos.__all__
     assert "FileGraphProvider" in graphfakos.adapters.__all__
     assert "FixtureGraphProvider" in graphfakos.adapters.__all__
     assert "query_syntax_reference" in graphfakos.ui.__all__
@@ -38,6 +40,8 @@ def test_graphfakos_package_imports() -> None:
     assert "render_graph_viewer" in graphfakos.ui.__all__
     assert "GraphFakosProvider" in graphfakos.contracts.__all__
     assert "screen_manifest" in graphfakos.render.__all__
+    assert "GraphPreviewOutputPaths" in graphfakos.render.__all__
+    assert "write_provider_preview_outputs" in graphfakos.render.__all__
 
 
 def test_graphfakos_screen_manifest_is_public() -> None:

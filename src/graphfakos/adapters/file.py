@@ -33,7 +33,9 @@ class FileGraphProvider:
     def load_graph(self, request: GraphFakosRequest) -> GraphFakosGraph:
         return self._graph
 
-    def load_comparison_graph(self, request: GraphFakosRequest) -> GraphFakosGraph | None:
+    def load_comparison_graph(
+        self, request: GraphFakosRequest
+    ) -> GraphFakosGraph | None:
         if self._comparison_graph is None:
             return None
         requested_id = request.comparison_graph_id or ""
@@ -43,7 +45,10 @@ class FileGraphProvider:
         if snapshot is not None and requested_id in snapshot.comparison_ids:
             return self._comparison_graph
         comparison_snapshot = self._comparison_graph.snapshot
-        if comparison_snapshot is not None and requested_id == comparison_snapshot.snapshot_id:
+        if (
+            comparison_snapshot is not None
+            and requested_id == comparison_snapshot.snapshot_id
+        ):
             return self._comparison_graph
         if requested_id == self._comparison_graph.graph_id:
             return self._comparison_graph

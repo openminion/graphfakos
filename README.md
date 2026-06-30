@@ -92,21 +92,26 @@ python3.11 -m pip install -e .
 - a local graph workbench with explore, neighborhood, path, provenance,
   timeline, diff, provider-status, and context-preview screens
 - a public screen manifest with provider-neutral routes, labels, and summaries
+- built-in review presets for overview, focus review, evidence, diff, graph
+  health, timeline, and context workflows
 - provider-neutral graph diagnostics for orphan nodes, duplicate edges,
   missing provenance/citation references, and provider warnings
 - dependency-free navigation for node selection, edge inspection, query
   search, common filters, and public deep-link route helpers
 - depth-aware neighborhood expansion and path source/target controls
+- hub-aware navigation panels that recommend focus routes for larger graphs
 - public query syntax guidance for graph filters such as `kind:`, `tag:`,
   `source:`, `edge:`, `id:`, `label:`, `summary:`, `has:`, quoted phrases,
   `score>=`, and `time>=`
 - snapshot metadata on graph envelopes plus provider-owned comparison and
   overlay workflows
+- richer diff and provenance review surfaces with change hotspots, evidence
+  coverage, and citation location summaries
 - persisted graph artifact helpers plus a file-backed provider adapter for
   standalone review flows
 - static HTML export for portable inspection
 - embeddable HTML fragments for host package shells
-- JSON and Markdown graph reports for CI proof, issue attachments, and
+- JSON, Markdown, and DOT graph exports for CI proof, issue attachments, and
   package-local review flows
 - a local HTTP preview server for interactive package development
 - a fake fixture provider for tests and third-party adapter examples
@@ -176,7 +181,14 @@ graphfakos-ui \
   --embed-out graphfakos-embed.html \
   --report-out graphfakos-report.json \
   --markdown-report-out graphfakos-report.md \
+  --dot-out graphfakos-report.dot \
   --json
+```
+
+Jump straight into a built-in review flow:
+
+```bash
+graphfakos-ui --preset focus --focus-node-id provider:third-party --html-out graphfakos-focus.html --json
 ```
 
 Serve the local viewer:

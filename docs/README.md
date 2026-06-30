@@ -35,16 +35,19 @@ It supports:
 - explore, neighborhood, path, provenance, timeline, diff, provider-status,
   and context-preview screens,
 - provider-neutral screen metadata for routes, labels, and summaries,
+- built-in review presets so hosts can deep-link into repeatable overview,
+  focus, evidence, diff, graph-health, timeline, and context flows,
 - search plus node-kind, edge-kind, tag, source, and score filters,
 - public deep-link helpers for building or parsing stable viewer routes,
 - public query syntax guidance for `kind:`, `tag:`, `source:`, `edge:`,
   `id:`, `label:`, `summary:`, `has:`, quoted phrases, `score>=`, and
   `time>=` tokens,
 - clickable nodes and edges with inspector details,
+- hub-aware navigator panels for larger graphs,
 - depth-aware neighborhoods,
 - path source/target controls,
 - snapshot metadata plus provider-owned comparison and overlay workflows,
-- provenance and citation panels, and
+- provenance and citation panels with evidence coverage summaries, and
 - provider capability/status summaries.
 
 GraphFakos also exposes:
@@ -52,7 +55,8 @@ GraphFakos also exposes:
 - persisted graph artifact helpers plus a file-backed provider adapter,
 - embeddable HTML fragments for package-local UI shells,
 - JSON graph reports, and
-- Markdown graph reports for issue attachments or review notes.
+- Markdown and DOT graph reports for issue attachments, review notes, and
+  external graph tooling.
 
 GraphFakos does not interpret provider-specific semantics. Adapters should put
 provider-only fields in `provider_payload` unless the field belongs in a stable
@@ -76,6 +80,7 @@ graphfakos-ui \
   --embed-out graphfakos-embed.html \
   --report-out graphfakos-report.json \
   --markdown-report-out graphfakos-report.md \
+  --dot-out graphfakos-report.dot \
   --json
 ```
 

@@ -134,15 +134,25 @@ class GraphFakosProvenance:
     def from_dict(cls, payload: Mapping[str, object]) -> GraphFakosProvenance:
         return cls(
             id=_required_string(payload, "id", "provenance.id"),
-            provider_id=_required_string(payload, "provider_id", "provenance.provider_id"),
-            source_type=_string(payload.get("source_type", ""), "provenance.source_type"),
-            source_label=_string(payload.get("source_label", ""), "provenance.source_label"),
+            provider_id=_required_string(
+                payload, "provider_id", "provenance.provider_id"
+            ),
+            source_type=_string(
+                payload.get("source_type", ""), "provenance.source_type"
+            ),
+            source_label=_string(
+                payload.get("source_label", ""), "provenance.source_label"
+            ),
             source_uri=_string(payload.get("source_uri", ""), "provenance.source_uri"),
             excerpt=_string(payload.get("excerpt", ""), "provenance.excerpt"),
-            observed_at=_string(payload.get("observed_at", ""), "provenance.observed_at"),
+            observed_at=_string(
+                payload.get("observed_at", ""), "provenance.observed_at"
+            ),
             created_at=_string(payload.get("created_at", ""), "provenance.created_at"),
             updated_at=_string(payload.get("updated_at", ""), "provenance.updated_at"),
-            confidence=_float_or_none(payload.get("confidence"), "provenance.confidence"),
+            confidence=_float_or_none(
+                payload.get("confidence"), "provenance.confidence"
+            ),
             provider_payload=_object_dict(
                 payload.get("provider_payload", {}),
                 "provenance.provider_payload",
@@ -174,10 +184,14 @@ class GraphFakosSnapshot:
     @classmethod
     def from_dict(cls, payload: Mapping[str, object]) -> GraphFakosSnapshot:
         return cls(
-            snapshot_id=_required_string(payload, "snapshot_id", "snapshot.snapshot_id"),
+            snapshot_id=_required_string(
+                payload, "snapshot_id", "snapshot.snapshot_id"
+            ),
             label=_string(payload.get("label", ""), "snapshot.label"),
             created_at=_string(payload.get("created_at", ""), "snapshot.created_at"),
-            source_label=_string(payload.get("source_label", ""), "snapshot.source_label"),
+            source_label=_string(
+                payload.get("source_label", ""), "snapshot.source_label"
+            ),
             source_uri=_string(payload.get("source_uri", ""), "snapshot.source_uri"),
             comparison_ids=_string_tuple(
                 payload.get("comparison_ids", ()),
@@ -377,7 +391,9 @@ class GraphFakosGraph:
                 "graph.provider_label",
             ),
             graph_role=_required_string(payload, "graph_role", "graph.graph_role"),
-            capabilities=_string_tuple(payload.get("capabilities", ()), "graph.capabilities"),
+            capabilities=_string_tuple(
+                payload.get("capabilities", ()), "graph.capabilities"
+            ),
             nodes=tuple(
                 GraphFakosNode.from_dict(item)
                 for item in _mapping_list(payload.get("nodes", []), "graph.nodes")
@@ -395,7 +411,9 @@ class GraphFakosGraph:
             ),
             citations=tuple(
                 GraphFakosCitation.from_dict(item)
-                for item in _mapping_list(payload.get("citations", []), "graph.citations")
+                for item in _mapping_list(
+                    payload.get("citations", []), "graph.citations"
+                )
             ),
             warnings=_string_tuple(payload.get("warnings", ()), "graph.warnings"),
             stats=_object_dict(payload.get("stats", {}), "graph.stats"),
@@ -471,6 +489,7 @@ class GraphFakosDiagnostics:
 @dataclass(frozen=True, slots=True)
 class GraphFakosRequest:
     screen: GraphFakosScreen = "explore"
+    preset_id: str = ""
     query: str = ""
     focus_node_id: str | None = None
     selected_edge_id: str | None = None
@@ -488,6 +507,7 @@ class GraphFakosRequest:
     def with_screen(self, screen: GraphFakosScreen) -> GraphFakosRequest:
         return GraphFakosRequest(
             screen=screen,
+            preset_id=self.preset_id,
             query=self.query,
             focus_node_id=self.focus_node_id,
             selected_edge_id=self.selected_edge_id,
@@ -506,6 +526,7 @@ class GraphFakosRequest:
     def to_dict(self) -> dict[str, object]:
         return {
             "screen": self.screen,
+            "preset_id": self.preset_id,
             "query": self.query,
             "focus_node_id": self.focus_node_id,
             "selected_edge_id": self.selected_edge_id,
@@ -528,8 +549,11 @@ class GraphFakosRequest:
                 GraphFakosScreen,
                 _string(payload.get("screen", "explore"), "request.screen"),
             ),
+            preset_id=_string(payload.get("preset_id", ""), "request.preset_id"),
             query=_string(payload.get("query", ""), "request.query"),
-            focus_node_id=_string_or_none(payload.get("focus_node_id"), "request.focus_node_id"),
+            focus_node_id=_string_or_none(
+                payload.get("focus_node_id"), "request.focus_node_id"
+            ),
             selected_edge_id=_string_or_none(
                 payload.get("selected_edge_id"),
                 "request.selected_edge_id",

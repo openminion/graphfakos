@@ -5,6 +5,7 @@ import pytest
 from graphfakos import (
     FixtureGraphProvider,
     build_graph_report,
+    build_fixture_graph,
     build_viewer_route,
     GraphFakosEdge,
     GraphFakosGraph,
@@ -16,9 +17,12 @@ from graphfakos import (
     load_provider_graph,
     parse_viewer_request,
     query_syntax_reference,
+    render_graph_dot,
     render_static_html,
+    review_preset_manifest,
     validate_graph,
 )
+from graphfakos.testing import assert_graph_dot_contract, assert_review_preset_contract
 
 
 def test_fixture_provider_satisfies_provider_contract() -> None:
@@ -166,7 +170,9 @@ def test_fixture_provider_exposes_comparison_and_overlay_graphs() -> None:
 
 
 def test_build_graph_report_includes_overlay_and_comparison() -> None:
-    report = build_graph_report(FixtureGraphProvider(), GraphFakosRequest(screen="diff"))
+    report = build_graph_report(
+        FixtureGraphProvider(), GraphFakosRequest(screen="diff")
+    )
 
     assert report["diagnostics"]["healthy"] is True
     assert report["comparison_graph"]["provider_label"] == "Fixture Baseline"
@@ -179,6 +185,7 @@ def test_build_graph_report_includes_overlay_and_comparison() -> None:
 def test_viewer_route_helpers_are_public_and_stable() -> None:
     request = GraphFakosRequest(
         screen="diff",
+        preset_id="diff",
         query="kind:file has:provenance",
         focus_node_id="node:one",
         comparison_graph_id="baseline",
@@ -189,6 +196,7 @@ def test_viewer_route_helpers_are_public_and_stable() -> None:
     parsed = parse_viewer_request(
         "/diff",
         {
+            "preset": ["diff"],
             "query": ["kind:file has:provenance"],
             "focus_node_id": ["node:one"],
             "comparison_graph_id": ["baseline"],
@@ -198,8 +206,39 @@ def test_viewer_route_helpers_are_public_and_stable() -> None:
 
     assert route.startswith("/diff?")
     assert parsed.screen == "diff"
+    assert parsed.preset_id == "diff"
     assert parsed.comparison_graph_id == "baseline"
     assert parsed.render_limit == 80
+
+
+def test_review_preset_manifest_exposes_shared_review_flows() -> None:
+    provider = FixtureGraphProvider()
+    request = GraphFakosRequest(screen="explore", focus_node_id="provider:third-party")
+    graph = load_provider_graph(provider, request)
+    comparison = load_comparison_graph(provider, GraphFakosRequest(screen="diff"))
+
+    presets = review_preset_manifest(
+        graph,
+        request,
+        comparison_graph=comparison,
+    )
+
+    assert_review_preset_contract(
+        presets,
+        required_ids=("overview", "focus", "evidence", "diff", "health", "context"),
+    )
+
+
+def test_render_graph_dot_exports_provider_neutral_edges() -> None:
+    graph = build_fixture_graph()
+
+    dot = render_graph_dot(graph)
+
+    assert_graph_dot_contract(
+        dot,
+        expected_node_ids=("provider:third-party", "artifact:static-export"),
+        expected_edge_ids=("serves", "supports"),
+    )
 
 
 def test_query_syntax_reference_documents_tokens() -> None:

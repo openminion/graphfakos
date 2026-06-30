@@ -170,7 +170,16 @@ def build_fixture_graph(request: GraphFakosRequest | None = None) -> GraphFakosG
         available_facets={
             "node_kind": ("artifact", "document", "memory", "provider"),
             "edge_kind": ("produces", "serves", "supports"),
-            "tag": ("artifact", "document", "html", "memory", "preference", "provider", "third_party", "viewer"),
+            "tag": (
+                "artifact",
+                "document",
+                "html",
+                "memory",
+                "preference",
+                "provider",
+                "third_party",
+                "viewer",
+            ),
             "source": ("fixture",),
         },
         provider_payload={
@@ -190,12 +199,12 @@ def build_fixture_graph(request: GraphFakosRequest | None = None) -> GraphFakosG
 def build_fixture_baseline_graph(
     request: GraphFakosRequest | None = None,
 ) -> GraphFakosGraph:
-    request = request or GraphFakosRequest(screen="diff", comparison_graph_id="baseline")
+    request = request or GraphFakosRequest(
+        screen="diff", comparison_graph_id="baseline"
+    )
     graph = build_fixture_graph(request)
     baseline_nodes = tuple(
-        node
-        for node in graph.nodes
-        if node.id != "artifact:static-export"
+        node for node in graph.nodes if node.id != "artifact:static-export"
     )
     baseline_edges = tuple(
         edge
@@ -235,14 +244,10 @@ def build_fixture_overlay_graphs(
     request = request or GraphFakosRequest(screen="provider_status")
     overlay = build_fixture_graph(request)
     companion_nodes = tuple(
-        node
-        for node in overlay.nodes
-        if node.id != "memory:operator-preference"
+        node for node in overlay.nodes if node.id != "memory:operator-preference"
     )
     companion_edges = tuple(
-        edge
-        for edge in overlay.edges
-        if edge.id != "edge:preference-supports-spec"
+        edge for edge in overlay.edges if edge.id != "edge:preference-supports-spec"
     )
     companion = GraphFakosGraph(
         graph_id="fixture-overlay",

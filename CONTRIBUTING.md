@@ -127,15 +127,15 @@ Actions on pull requests plus `dev`/`main` pushes.
 
 Preferred PR shape:
 
-1. `Title`
-   - short and literal, for example `Add path controls to graph viewer`
-2. `Description`
-   - `- add ...`
-   - `- align ...`
-   - `- polish ...`
-3. `Validation`
-   - `- <command>`
-   - `- <command>`
+`Add path controls to graph viewer`
+
+- add ...
+- align ...
+- polish ...
+
+Validation
+- `<command>`
+- `<command>`
 
 ## Submitting a Pull Request
 

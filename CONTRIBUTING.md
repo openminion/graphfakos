@@ -97,6 +97,10 @@ make format-check
 make fix
 ```
 
+If pre-commit, `make hooks-run`, or GitHub Actions reports formatter changes,
+run `make fix`, review the diff, rerun `make check`, and recommit before
+pushing again.
+
 ## Development Basics
 
 1. Follow the existing typed, deterministic package style.

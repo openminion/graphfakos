@@ -94,13 +94,12 @@ python3.11 -m pip install -e .
 - a public screen manifest with provider-neutral routes, labels, and summaries
 - provider-neutral graph diagnostics for orphan nodes, duplicate edges,
   missing provenance/citation references, and provider warnings
-- dependency-free navigation for node selection, edge inspection, query search,
-  node-kind, edge-kind, tag, source, and score filters plus public deep-link
-  route helpers
+- dependency-free navigation for node selection, edge inspection, query
+  search, common filters, and public deep-link route helpers
 - depth-aware neighborhood expansion and path source/target controls
-- public query syntax guidance for `kind:`, `tag:`, `source:`, `edge:`,
-  `id:`, `label:`, `summary:`, `has:`, quoted phrases, `score>=`, and `time>=`
-  tokens
+- public query syntax guidance for graph filters such as `kind:`, `tag:`,
+  `source:`, `edge:`, `id:`, `label:`, `summary:`, `has:`, quoted phrases,
+  `score>=`, and `time>=`
 - snapshot metadata on graph envelopes plus provider-owned comparison and
   overlay workflows
 - persisted graph artifact helpers plus a file-backed provider adapter for
@@ -235,11 +234,12 @@ graphfakos-ui \
   --json
 ```
 
-Sophiagraph should expose a second-brain adapter that maps durable memories,
-candidates, trust signals, structural links, and provenance into GraphFakos
-DTOs. PragmaGraph should expose a third-brain adapter that maps source files,
-documents, symbols, chunks, citations, freshness, and provider status into the
-same DTOs.
+Package adapters stay responsible for their own semantics:
+
+- Sophiagraph maps durable memories, candidates, trust signals, structural
+  links, and provenance into GraphFakos DTOs.
+- PragmaGraph maps source files, documents, symbols, chunks, citations,
+  freshness, and provider status into the same DTOs.
 
 Persist and reload one provider-neutral graph artifact from Python:
 

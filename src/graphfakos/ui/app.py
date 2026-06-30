@@ -1915,7 +1915,9 @@ def _evidence_summary(graph: GraphFakosGraph) -> str:
                 "node citations": f"{node_citations} / {len(graph.nodes)}",
                 "edge provenance": f"{edge_provenance} / {len(graph.edges)}",
                 "edge citations": f"{edge_citations} / {len(graph.edges)}",
-                "provenance providers": len({item.provider_id for item in graph.provenance}),
+                "provenance providers": len(
+                    {item.provider_id for item in graph.provenance}
+                ),
                 "source types": len(
                     {item.source_type for item in graph.provenance if item.source_type}
                 ),
@@ -2059,7 +2061,10 @@ def _force_positions(
 ) -> dict[str, tuple[float, float]]:
     if not graph.nodes:
         return {}
-    anchor = focus_node_id or (_preferred_focus_node(graph, GraphFakosRequest()) or graph.nodes[0]).id
+    anchor = (
+        focus_node_id
+        or (_preferred_focus_node(graph, GraphFakosRequest()) or graph.nodes[0]).id
+    )
     adjacency = _adjacency_map(graph)
     degree_map = _node_degree_map(graph)
     center = (width / 2, height / 2)
@@ -2072,7 +2077,9 @@ def _force_positions(
         },
         key=lambda node_id: (
             -degree_map.get(node_id, 0),
-            graph.node_map().get(node_id, GraphFakosNode(id=node_id, label=node_id, kind="node")).label.casefold(),
+            graph.node_map()
+            .get(node_id, GraphFakosNode(id=node_id, label=node_id, kind="node"))
+            .label.casefold(),
         ),
     )
     outer_nodes = [
@@ -2327,9 +2334,7 @@ def _changed_fields(
 def _changed_item_summaries(
     details: tuple[tuple[str, tuple[str, ...]], ...],
 ) -> tuple[str, ...]:
-    return tuple(
-        _changed_field_summary(item_id, fields) for item_id, fields in details
-    )
+    return tuple(_changed_field_summary(item_id, fields) for item_id, fields in details)
 
 
 def _change_hotspots(
@@ -2393,7 +2398,9 @@ def _list(items: list[str] | tuple[str, ...]) -> str:
 def _html_list(items: list[str] | tuple[str, ...]) -> str:
     if not items:
         return _empty("No items.")
-    return "<ul class='gf-list'>" + "".join(f"<li>{item}</li>" for item in items) + "</ul>"
+    return (
+        "<ul class='gf-list'>" + "".join(f"<li>{item}</li>" for item in items) + "</ul>"
+    )
 
 
 def _key_values(payload: dict[str, object]) -> str:

@@ -257,9 +257,7 @@ def render_graph_dot(graph: GraphFakosGraph) -> str:
     for node in graph.nodes:
         label = _dot_escape(node.label or node.id)
         kind = _dot_escape(node.kind)
-        lines.append(
-            f'  "{_dot_escape(node.id)}" [label="{label}\\n({kind})"];'
-        )
+        lines.append(f'  "{_dot_escape(node.id)}" [label="{label}\\n({kind})"];')
     for edge in graph.edges:
         label = _dot_escape(edge.label or edge.kind)
         lines.append(

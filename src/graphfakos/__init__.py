@@ -9,8 +9,13 @@ from .artifacts import (
     write_graph_artifact,
 )
 from .adapters import (
+    DEMO_SCENARIOS,
+    DemoGraphProvider,
     FileGraphProvider,
     FixtureGraphProvider,
+    build_demo_baseline_graph,
+    build_demo_graph,
+    build_demo_overlay_graphs,
     build_fixture_baseline_graph,
     build_fixture_graph,
     build_fixture_overlay_graphs,
@@ -19,16 +24,23 @@ from .models import (
     GraphFakosCitation,
     GraphFakosDiagnostics,
     GraphFakosEdge,
+    GraphFakosExpansionRequest,
     GraphFakosGraph,
+    GraphFakosKnowledgeCapture,
     GraphFakosNode,
     GraphFakosProvenance,
     GraphFakosRequest,
     GraphFakosScreen,
     GraphFakosSnapshot,
+    GraphFakosTheme,
+    GraphFakosViewerCommand,
+    GraphFakosViewerEvent,
+    GraphFakosViewerState,
     GraphFakosVisual,
 )
 from .provider import (
     GraphFakosComparisonProvider,
+    GraphFakosKnowledgeCaptureProvider,
     GraphFakosOverlayProvider,
     GraphFakosProvider,
     diagnose_graph,
@@ -37,7 +49,9 @@ from .provider import (
     load_provider_graph,
     validate_graph,
 )
+from .renderers import SUPPORTED_RENDER_ENGINES, validate_render_engine
 from .server import (
+    ActionHandler,
     LocalViewerHttpServer,
     LocalViewerServerResult,
     RenderPath,
@@ -70,6 +84,7 @@ from .ui import (
     review_preset_manifest,
     screen_manifest,
 )
+from .browser import viewer_runtime_script
 
 __version__ = "0.0.1"
 PACKAGE_STATUS = "semantic-alpha"
@@ -77,10 +92,12 @@ STABLE_IMPORT_ROOTS = (
     "graphfakos.artifacts",
     "graphfakos",
     "graphfakos.adapters",
+    "graphfakos.browser",
     "graphfakos.contracts",
     "graphfakos.models",
     "graphfakos.provider",
     "graphfakos.render",
+    "graphfakos.renderers",
     "graphfakos.server",
     "graphfakos.static",
     "graphfakos.testing",
@@ -88,9 +105,13 @@ STABLE_IMPORT_ROOTS = (
 )
 
 __all__ = [
+    "DEMO_SCENARIOS",
     "PACKAGE_STATUS",
     "STABLE_IMPORT_ROOTS",
+    "SUPPORTED_RENDER_ENGINES",
+    "ActionHandler",
     "__version__",
+    "DemoGraphProvider",
     "FileGraphProvider",
     "FixtureGraphProvider",
     "GRAPHFAKOS_ARTIFACT_SCHEMA",
@@ -99,7 +120,10 @@ __all__ = [
     "GraphFakosCitation",
     "GraphFakosDiagnostics",
     "GraphFakosEdge",
+    "GraphFakosExpansionRequest",
     "GraphFakosGraph",
+    "GraphFakosKnowledgeCapture",
+    "GraphFakosKnowledgeCaptureProvider",
     "GraphFakosNode",
     "GraphFakosOverlayProvider",
     "GraphFakosProvider",
@@ -107,10 +131,17 @@ __all__ = [
     "GraphFakosRequest",
     "GraphFakosScreen",
     "GraphFakosSnapshot",
+    "GraphFakosTheme",
+    "GraphFakosViewerCommand",
+    "GraphFakosViewerEvent",
+    "GraphFakosViewerState",
     "GraphFakosVisual",
     "LocalViewerHttpServer",
     "LocalViewerServerResult",
     "RenderPath",
+    "build_demo_baseline_graph",
+    "build_demo_graph",
+    "build_demo_overlay_graphs",
     "build_fixture_baseline_graph",
     "build_fixture_graph",
     "build_fixture_overlay_graphs",
@@ -139,6 +170,8 @@ __all__ = [
     "serve_local_viewer",
     "validate_graph_artifact_payload",
     "validate_graph",
+    "validate_render_engine",
+    "viewer_runtime_script",
     "write_graph_artifact",
     "write_graph_dot",
     "write_embeddable_html",

@@ -48,6 +48,30 @@ def test_python_m_graphfakos_ui_preview_writes_html(tmp_path) -> None:
     assert "Integration Commands" in html
 
 
+def test_python_m_graphfakos_ui_alias_writes_html(tmp_path) -> None:
+    output_path = tmp_path / "graphfakos-ui-alias.html"
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "graphfakos",
+            "ui",
+            "--screen",
+            "explore",
+            "--html-out",
+            str(output_path),
+            "--json",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+
+    assert payload["screen"] == "explore"
+    assert output_path.exists()
+
+
 def test_graphfakos_ui_preview_accepts_graph_filters(tmp_path) -> None:
     output_path = tmp_path / "graphfakos-filtered.html"
     result = subprocess.run(
@@ -64,6 +88,12 @@ def test_graphfakos_ui_preview_accepts_graph_filters(tmp_path) -> None:
             "serves",
             "--selected-edge-id",
             "edge:provider-serves-spec",
+            "--camera-x",
+            "8",
+            "--camera-y",
+            "-2",
+            "--camera-zoom",
+            "1.25",
             "--html-out",
             str(output_path),
             "--json",
@@ -78,6 +108,43 @@ def test_graphfakos_ui_preview_accepts_graph_filters(tmp_path) -> None:
     assert payload["screen"] == "explore"
     assert "Third-party Provider" in html
     assert "edge:provider-serves-spec" in html
+    assert "data-camera-x='8.00'" in html
+    assert "data-camera-y='-2.00'" in html
+    assert "data-camera-zoom='1.25'" in html
+
+
+def test_graphfakos_ui_preview_accepts_demo_scenario(tmp_path) -> None:
+    output_path = tmp_path / "graphfakos-demo-dense.html"
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "graphfakos",
+            "ui",
+            "--demo-scenario",
+            "dense",
+            "--screen",
+            "explore",
+            "--layout",
+            "grouped",
+            "--render-limit",
+            "240",
+            "--html-out",
+            str(output_path),
+            "--json",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+    html = output_path.read_text(encoding="utf-8")
+
+    assert payload["provider_id"] == "demo"
+    assert payload["node_count"] == 36
+    assert payload["edge_count"] == 60
+    assert "Provider Cluster 1" in html
+    assert "data-graph-json" in html
 
 
 def test_graphfakos_ui_preview_writes_embed_and_report_outputs(tmp_path) -> None:

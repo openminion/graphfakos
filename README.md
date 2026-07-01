@@ -98,8 +98,25 @@ python3.11 -m pip install -e .
   missing provenance/citation references, and provider warnings
 - dependency-free navigation for node selection, edge inspection, query
   search, common filters, and public deep-link route helpers
+- progressive SVG camera controls for pan, zoom, fit, reset, fullscreen, and
+  node dragging while keeping static HTML useful without JavaScript
+- a framework-neutral `<graphfakos-viewer>` custom element backed by packaged
+  browser runtime assets
+- camera-aware saved-view routes with `camera_x`, `camera_y`, and
+  `camera_zoom`
+- serializable viewer state plus provider-neutral command, event,
+  expansion-request, knowledge-capture, and theme DTOs for host integrations
+- an explicit SVG renderer contract with clear unsupported-engine failures for
+  future Canvas/WebGL seams
+- provider-neutral visual hierarchy with node shapes, edge arrows, selected
+  path emphasis, minimap orientation, group toggles, and side-panel
+  cross-highlighting
 - depth-aware neighborhood expansion and path source/target controls
-- hub-aware navigation panels that recommend focus routes for larger graphs
+- hub-aware navigation panels that recommend global, local-depth, evidence,
+  path, status, and context routes for larger graphs
+- preview-server knowledge capture forms so host providers or workers can
+  consume operator notes, code observations, questions, or memory hints and
+  rebuild the graph
 - public query syntax guidance for graph filters such as `kind:`, `tag:`,
   `source:`, `edge:`, `id:`, `label:`, `summary:`, `has:`, quoted phrases,
   `score>=`, and `time>=`
@@ -165,10 +182,78 @@ storage, trust, freshness, and lifecycle semantics.
 
 ## Examples
 
-Render the built-in third-party fixture:
+Launch the reusable dynamic viewer in a browser:
 
 ```bash
-graphfakos-ui --screen explore --html-out graphfakos-ui-preview.html --json
+make preview
+```
+
+`make preview` serves the viewer at a local HTTP URL and opens the browser. It
+does not require a generated HTML file. In server mode, GraphFakos serves a
+live workbench: internal links and filter forms update the viewer in place
+through server-rendered fragments. The side panel can also submit notes or
+observations to providers that support the workbench capture protocol. Stop the
+server with `Ctrl-C`.
+
+Write a portable static export under the gitignored repo-local preview folder:
+
+```bash
+make preview-html
+```
+
+The static export lands in `.graphfakos-preview/graphfakos-viewer.html` and is
+useful for sharing or no-JavaScript fallback checks. Treat it as an export, not
+the main dynamic viewer workflow. Static exports are view-only; run the preview
+server when you want note capture or provider-backed graph refreshes.
+
+Iterate the viewer against generated mock graphs:
+
+```bash
+make preview-demo
+make preview-dense
+make preview-timeline
+make preview-warnings
+make preview-path
+make preview-provenance
+make preview-budget
+make preview-islands
+```
+
+These commands use deterministic demo scenarios instead of real provider data,
+which makes UI work easier to repeat. The available scenarios are
+`agent-memory`, `source-code`, `dense`, `timeline`, `warnings`, `pathfinding`,
+`provenance`, `facets`, `budget`, and `islands`.
+
+Use the scenarios as a core-feature plus UI matrix:
+
+- `pathfinding`: path screen, source/target controls, shortest-path highlight.
+- `provenance`: provenance screen, citation cards, evidence coverage.
+- `facets`: filter controls across node kind, edge kind, tag, and source.
+- `budget`: render-limit behavior, summarized hidden nodes, show-more route.
+- `islands`: provider-status diagnostics for disconnected components.
+- `agent-memory`: knowledge capture workflow beside a focused agent/memory
+  graph.
+
+To test the capture loop, run `make preview-demo`, choose or keep a focused
+node, write a note in `Capture Knowledge`, and submit it. The demo provider
+stores captures in memory for that server session and renders them back as
+linked graph nodes. Real providers can implement the same action to persist the
+payload, enqueue a worker, rebuild a code/static graph, or maintain a durable
+knowledge graph outside GraphFakos.
+
+You can also choose a scenario manually:
+
+```bash
+graphfakos-ui --demo-scenario source-code --screen explore --serve --open
+graphfakos-ui --demo-scenario dense --screen explore --layout grouped --render-limit 240 --serve --open
+graphfakos-ui --demo-scenario timeline --screen timeline --layout timeline --serve --open
+graphfakos-ui --demo-scenario pathfinding --screen path --source-node-id provider:entry --target-node-id artifact:result --serve --open
+```
+
+Render the built-in third-party fixture manually:
+
+```bash
+graphfakos-ui --screen explore --html-out .graphfakos-preview/graphfakos-ui-preview.html --json
 ```
 
 Render a diff view plus export machine-readable and Markdown reports:

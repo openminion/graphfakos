@@ -5,7 +5,12 @@ from __future__ import annotations
 from collections import deque
 from typing import Protocol, runtime_checkable
 
-from .models import GraphFakosDiagnostics, GraphFakosGraph, GraphFakosRequest
+from .models import (
+    GraphFakosDiagnostics,
+    GraphFakosGraph,
+    GraphFakosKnowledgeCapture,
+    GraphFakosRequest,
+)
 
 
 @runtime_checkable
@@ -35,6 +40,15 @@ class GraphFakosOverlayProvider(Protocol):
         request: GraphFakosRequest,
     ) -> tuple[GraphFakosGraph, ...]:
         """Return provider graphs that should be compared or overlaid."""
+
+
+@runtime_checkable
+class GraphFakosKnowledgeCaptureProvider(Protocol):
+    def capture_knowledge(
+        self,
+        capture: GraphFakosKnowledgeCapture,
+    ) -> GraphFakosGraph | dict[str, object] | None:
+        """Accept a workbench note or observation and refresh provider graph state."""
 
 
 def validate_graph(graph: GraphFakosGraph) -> None:
@@ -172,6 +186,7 @@ def load_overlay_graphs(
 __all__ = [
     "diagnose_graph",
     "GraphFakosComparisonProvider",
+    "GraphFakosKnowledgeCaptureProvider",
     "GraphFakosOverlayProvider",
     "GraphFakosProvider",
     "load_comparison_graph",

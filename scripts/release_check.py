@@ -58,10 +58,13 @@ def _assert_package_docs_shape(root: Path) -> None:
         root / "docs" / "ui-contracts.md",
         root / "src" / "graphfakos" / "artifacts.py",
         root / "src" / "graphfakos" / "__init__.py",
+        root / "src" / "graphfakos" / "assets" / "viewer.js",
+        root / "src" / "graphfakos" / "browser.py",
         root / "src" / "graphfakos" / "contracts.py",
         root / "src" / "graphfakos" / "models.py",
         root / "src" / "graphfakos" / "provider.py",
         root / "src" / "graphfakos" / "render.py",
+        root / "src" / "graphfakos" / "renderers.py",
         root / "src" / "graphfakos" / "py.typed",
     ]
     missing = [
@@ -168,23 +171,43 @@ def main(argv: list[str] | None = None) -> int:
                         "from graphfakos import GraphFakosGraph, "
                         "GraphFakosDiagnostics, GraphFakosProvider, "
                         "GraphPreviewOutputPaths, "
-                        "FileGraphProvider, FixtureGraphProvider, "
+                        "DemoGraphProvider, FileGraphProvider, FixtureGraphProvider, "
                         "build_graph_report, build_graph_diff, "
                         "diagnose_graph, render_embeddable_html, "
                         "render_static_html, screen_manifest, "
+                        "SUPPORTED_RENDER_ENGINES, validate_render_engine, "
+                        "viewer_runtime_script, "
                         "write_provider_preview_outputs; "
                         "from graphfakos.artifacts import graph_artifact_schema, "
                         "write_graph_artifact; "
                         "from graphfakos.contracts import GraphFakosRequest; "
                         "from graphfakos.render import render_graph_fragment, "
                         "render_graph_viewer, write_provider_graph_artifact; "
-                        "assert files('graphfakos').joinpath('py.typed').is_file()"
+                        "assert files('graphfakos').joinpath('py.typed').is_file(); "
+                        "assert files('graphfakos').joinpath('assets', 'viewer.js').is_file(); "
+                        "assert len(DemoGraphProvider('dense').load_graph(GraphFakosRequest()).nodes) == 36; "
+                        "assert 'graphfakos-viewer' in viewer_runtime_script()"
                     ),
                 ],
                 cwd=root,
             )
             _assert_smoke_payload(_run_capture([str(smoke), "--json"], cwd=root))
             artifact_path = tmp / "graphfakos-artifact.json"
+            _run_capture(
+                [
+                    str(ui_preview),
+                    "--demo-scenario",
+                    "dense",
+                    "--screen",
+                    "explore",
+                    "--layout",
+                    "grouped",
+                    "--html-out",
+                    str(tmp / "graphfakos-demo-dense.html"),
+                    "--json",
+                ],
+                cwd=root,
+            )
             _run_capture(
                 [
                     str(ui_preview),

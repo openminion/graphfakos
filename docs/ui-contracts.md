@@ -20,7 +20,12 @@ GraphFakos owns the reusable viewer layer:
 8. search and filter controls,
 9. provenance and citation panels,
 10. provider-neutral graph diagnostics,
-11. reusable viewer test assertions.
+11. progressive camera/navigation enhancement over static SVG export,
+12. framework-neutral `<graphfakos-viewer>` mounting behavior,
+13. reusable viewer state, command, event, expansion, knowledge-capture, and
+    theme DTOs,
+14. packaged browser runtime assets,
+15. reusable viewer test assertions.
 
 Provider packages own their data semantics and adapter mapping. They should not
 fork GraphFakos viewer HTML, duplicate local-server behavior, or create a
@@ -47,7 +52,89 @@ GraphFakos-owned responsibilities:
 4. graph filtering, selection, and inspection controls,
 5. provider status and capability presentation,
 6. context-preview layout,
-7. common smoke assertions.
+7. camera route state, minimap orientation, group toggles, and saved-view links,
+8. dynamic viewer state/event/command payloads,
+9. local workbench action payload shape for provider-owned captures,
+10. common smoke assertions.
+
+## Progressive Enhancement Contract
+
+The shared viewer must keep the static HTML export useful without JavaScript.
+The baseline graph canvas is a provider-neutral SVG with route-backed node and
+edge links. Client-side behavior may add pan, zoom, fit, reset, fullscreen,
+drag, group toggle, minimap, keyboard, and cross-panel highlight behavior, but
+those enhancements must not replace the static route/export contract.
+
+Automated package tests should cover generated HTML, route state, camera
+parameters, controls, data attributes, and no-JavaScript SVG fallback. Pointer
+behavior can be proven by a future browser/DOM harness or by recorded manual
+preview evidence when a tracker explicitly allows that proof mode.
+
+## Dynamic Viewer Runtime Contract
+
+GraphFakos ships a package-owned browser runtime asset for the reusable
+`<graphfakos-viewer>` custom element. The element wraps the existing static
+viewer markup instead of replacing it, so exported HTML remains readable when
+JavaScript is unavailable.
+
+The dynamic runtime owns only structural viewer state:
+
+1. screen, layout, camera, selected node, selected edge, filters, groups, render
+   engine, theme, and saved-view metadata,
+2. provider-neutral viewer commands such as select, filter, camera, layout,
+   group-toggle, expand, and export-state,
+3. provider-neutral viewer events emitted as `graphfakos:<name>` custom events,
+4. local fallback DOM synchronization for the SVG canvas, minimap, group
+   toggles, inspector cards, and saved-view links.
+
+Provider or host packages still own remote data loading, authorization,
+mutation, persistence, semantic ranking, and product chrome. GraphFakos may
+emit an expansion request event, but it must not fetch or invent
+provider-specific neighbors unless a host/provider integration handles that
+event explicitly.
+
+Knowledge capture follows the same boundary. GraphFakos may render a
+`Capture Knowledge` form and submit a `GraphFakosKnowledgeCapture` payload from
+local preview mode, but the provider or host owns persistence, worker queues,
+fact extraction, memory promotion, source ingestion, and graph rebuild policy.
+
+The first renderer is `svg`. `canvas` and `webgl` are future
+renderer-interface targets only; unsupported render engines should fail clearly
+through the public renderer validation helper rather than silently changing DTO
+behavior.
+
+## Local Workbench Server Contract
+
+Interactive viewer development should use GraphFakos' local HTTP workbench
+server rather than opening generated HTML files directly. The server has two
+provider-neutral response modes:
+
+1. normal route requests return a complete HTML document for first load,
+2. requests with `X-GraphFakos-Fragment: 1` return a JSON envelope containing a
+   rendered `<graphfakos-viewer>` fragment for in-place client updates.
+
+The browser runtime may intercept same-origin HTTP links and GET forms inside
+`<graphfakos-viewer>` and replace the viewer from that fragment response. Static
+HTML export remains a portable artifact path and must not require the server or
+JavaScript to show a useful SVG baseline.
+
+The server may also accept provider-neutral JSON action requests when a preview
+host supplies an action handler:
+
+1. `POST /api/knowledge` accepts `GraphFakosKnowledgeCapture` fields such as
+   `text`, `kind`, `tags`, `source`, `link_node_id`, `link_edge_kind`, and
+   `provider_payload`.
+2. Providers that implement the optional capture protocol decide whether to
+   persist the note, enqueue a worker, rebuild a code/static graph, or attach a
+   temporary preview-only node.
+3. Providers that do not implement the protocol must fail clearly; GraphFakos
+   must not pretend the capture was stored.
+4. Static HTML exports must treat the capture form as read-only and direct
+   users back to the local preview server for mutations.
+
+Viewer iteration can use `DemoGraphProvider` and the `--demo-scenario` CLI
+switch to simulate representative graph shapes without real provider data. Demo
+scenarios must remain deterministic so UI regressions are repeatable.
 
 ## Provider Adapter Shape
 
@@ -84,6 +171,8 @@ their internal graph truth:
    provider-neutral result shape instead of importing package-specific viewer
    code.
 4. Third-party packages can implement the same provider protocol directly.
+5. Hosts that want graph-side note entry can implement the optional capture
+   protocol while keeping durable knowledge semantics outside GraphFakos.
 
 The shared viewer must not infer facts, promote memories, ingest source files,
 or decide durable memory policy. Those responsibilities stay with the provider
@@ -99,9 +188,15 @@ Within the `0.0.x` line, changes should preserve:
 4. console script names,
 5. provider-neutral `diagnose_graph()` output keys,
 6. supported screen names,
-7. local preview and static-export behavior,
+7. local preview and static-export behavior, including the no-JavaScript SVG
+   baseline,
 8. package adapter compatibility for Sophiagraph and PragmaGraph,
-9. typed package marker availability through `graphfakos/py.typed`.
+9. packaged `assets/viewer.js` availability in source, editable installs, and
+   wheels,
+10. same-origin local workbench fragment responses for in-place viewer
+    navigation,
+11. local preview JSON action behavior for `POST /api/knowledge`,
+12. typed package marker availability through `graphfakos/py.typed`.
 
 If a viewer contract change requires Sophiagraph or PragmaGraph updates, land
 adapter tests in those packages with the GraphFakos change.

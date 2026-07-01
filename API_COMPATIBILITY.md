@@ -7,10 +7,12 @@ small and centered on provider-neutral graph viewing.
 
 - `graphfakos`
 - `graphfakos.adapters`
+- `graphfakos.browser`
 - `graphfakos.contracts`
 - `graphfakos.models`
 - `graphfakos.provider`
 - `graphfakos.render`
+- `graphfakos.renderers`
 - `graphfakos.server`
 - `graphfakos.static`
 - `graphfakos.testing`
@@ -22,7 +24,16 @@ GraphFakos keeps the following surfaces stable within the `0.0.x` line unless a
 release note says otherwise:
 
 - DTO class names
+- dynamic viewer DTO names for state, command, event, expansion request, and
+  knowledge-capture/theme payloads
+- deterministic demo scenario names and `DemoGraphProvider` for viewer
+  iteration
+- `viewer_runtime_script()` helper name and packaged `assets/viewer.js`
+  availability
+- `SUPPORTED_RENDER_ENGINES` and `validate_render_engine()` helper names
 - provider protocol method names
+- optional knowledge-capture provider protocol and `GraphFakosKnowledgeCapture`
+  field names
 - optional `GraphFakosSnapshot` field names and top-level graph snapshot keys
 - persisted graph artifact field names and the `graphfakos.artifacts` helper
   names
@@ -32,7 +43,9 @@ release note says otherwise:
   `query_syntax_reference()` helper names
 - report helper names in `graphfakos.static` / `graphfakos.render`
 - console script names
-- local preview server helper names
+- local preview server helper names and same-origin fragment response behavior
+- local preview action handler helper shape and `POST /api/knowledge` JSON
+  behavior
 - screen manifest helper names
 - testing assertion helper names
 - PEP 561 type marker presence through `graphfakos/py.typed`

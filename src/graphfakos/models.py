@@ -19,6 +19,289 @@ GraphFakosScreen = Literal[
 
 
 @dataclass(frozen=True, slots=True)
+class GraphFakosViewerState:
+    screen: str = "explore"
+    layout: str = "force"
+    selected_node_id: str | None = None
+    selected_edge_id: str | None = None
+    camera_x: float = 0.0
+    camera_y: float = 0.0
+    camera_zoom: float = 1.0
+    render_engine: str = "svg"
+    theme: str = "default"
+    filters: dict[str, str] = field(default_factory=dict)
+    expanded_groups: tuple[str, ...] = ()
+    hidden_groups: tuple[str, ...] = ()
+    saved_view_id: str = ""
+
+    @classmethod
+    def from_request(cls, request: GraphFakosRequest) -> GraphFakosViewerState:
+        return cls(
+            screen=request.screen,
+            layout=request.layout,
+            selected_node_id=request.focus_node_id,
+            selected_edge_id=request.selected_edge_id,
+            camera_x=request.camera_x if request.camera_x is not None else 0.0,
+            camera_y=request.camera_y if request.camera_y is not None else 0.0,
+            camera_zoom=request.camera_zoom if request.camera_zoom is not None else 1.0,
+            filters=dict(request.filters),
+        )
+
+    def to_route_query(self) -> dict[str, object]:
+        payload: dict[str, object] = {
+            "screen": self.screen,
+            "layout": self.layout,
+            "camera_x": self.camera_x,
+            "camera_y": self.camera_y,
+            "camera_zoom": self.camera_zoom,
+            "render_engine": self.render_engine,
+            "theme": self.theme,
+        }
+        if self.selected_node_id:
+            payload["focus_node_id"] = self.selected_node_id
+        if self.selected_edge_id:
+            payload["selected_edge_id"] = self.selected_edge_id
+        if self.saved_view_id:
+            payload["saved_view_id"] = self.saved_view_id
+        payload.update(self.filters)
+        if self.expanded_groups:
+            payload["expanded_groups"] = ",".join(self.expanded_groups)
+        if self.hidden_groups:
+            payload["hidden_groups"] = ",".join(self.hidden_groups)
+        return payload
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "screen": self.screen,
+            "layout": self.layout,
+            "selected_node_id": self.selected_node_id,
+            "selected_edge_id": self.selected_edge_id,
+            "camera_x": self.camera_x,
+            "camera_y": self.camera_y,
+            "camera_zoom": self.camera_zoom,
+            "render_engine": self.render_engine,
+            "theme": self.theme,
+            "filters": dict(self.filters),
+            "expanded_groups": list(self.expanded_groups),
+            "hidden_groups": list(self.hidden_groups),
+            "saved_view_id": self.saved_view_id,
+        }
+
+    @classmethod
+    def from_dict(cls, payload: Mapping[str, object]) -> GraphFakosViewerState:
+        return cls(
+            screen=_string(payload.get("screen", "explore"), "viewer_state.screen"),
+            layout=_string(payload.get("layout", "force"), "viewer_state.layout"),
+            selected_node_id=_string_or_none(
+                payload.get("selected_node_id"), "viewer_state.selected_node_id"
+            ),
+            selected_edge_id=_string_or_none(
+                payload.get("selected_edge_id"), "viewer_state.selected_edge_id"
+            ),
+            camera_x=_float(payload.get("camera_x", 0.0), "viewer_state.camera_x"),
+            camera_y=_float(payload.get("camera_y", 0.0), "viewer_state.camera_y"),
+            camera_zoom=_float(
+                payload.get("camera_zoom", 1.0), "viewer_state.camera_zoom"
+            ),
+            render_engine=_string(
+                payload.get("render_engine", "svg"), "viewer_state.render_engine"
+            ),
+            theme=_string(payload.get("theme", "default"), "viewer_state.theme"),
+            filters=_string_dict(payload.get("filters", {}), "viewer_state.filters"),
+            expanded_groups=_string_tuple(
+                payload.get("expanded_groups", ()),
+                "viewer_state.expanded_groups",
+            ),
+            hidden_groups=_string_tuple(
+                payload.get("hidden_groups", ()),
+                "viewer_state.hidden_groups",
+            ),
+            saved_view_id=_string(
+                payload.get("saved_view_id", ""), "viewer_state.saved_view_id"
+            ),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class GraphFakosViewerCommand:
+    name: str
+    target_id: str = ""
+    value: str = ""
+    payload: dict[str, object] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "name": self.name,
+            "target_id": self.target_id,
+            "value": self.value,
+            "payload": _json_compatible_dict(self.payload),
+        }
+
+    @classmethod
+    def from_dict(cls, payload: Mapping[str, object]) -> GraphFakosViewerCommand:
+        return cls(
+            name=_required_string(payload, "name", "viewer_command.name"),
+            target_id=_string(payload.get("target_id", ""), "viewer_command.target_id"),
+            value=_string(payload.get("value", ""), "viewer_command.value"),
+            payload=_object_dict(payload.get("payload", {}), "viewer_command.payload"),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class GraphFakosViewerEvent:
+    name: str
+    state: GraphFakosViewerState
+    target_id: str = ""
+    payload: dict[str, object] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "name": self.name,
+            "target_id": self.target_id,
+            "state": self.state.to_dict(),
+            "payload": _json_compatible_dict(self.payload),
+        }
+
+    @classmethod
+    def from_dict(cls, payload: Mapping[str, object]) -> GraphFakosViewerEvent:
+        return cls(
+            name=_required_string(payload, "name", "viewer_event.name"),
+            target_id=_string(payload.get("target_id", ""), "viewer_event.target_id"),
+            state=GraphFakosViewerState.from_dict(
+                _mapping(payload.get("state", {}), "viewer_event.state")
+            ),
+            payload=_object_dict(payload.get("payload", {}), "viewer_event.payload"),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class GraphFakosExpansionRequest:
+    source_id: str
+    depth: int = 1
+    edge_kind: str = ""
+    node_kind: str = ""
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "source_id": self.source_id,
+            "depth": self.depth,
+            "edge_kind": self.edge_kind,
+            "node_kind": self.node_kind,
+        }
+
+    @classmethod
+    def from_dict(cls, payload: Mapping[str, object]) -> GraphFakosExpansionRequest:
+        return cls(
+            source_id=_required_string(
+                payload, "source_id", "expansion_request.source_id"
+            ),
+            depth=_int(payload.get("depth", 1), "expansion_request.depth"),
+            edge_kind=_string(
+                payload.get("edge_kind", ""), "expansion_request.edge_kind"
+            ),
+            node_kind=_string(
+                payload.get("node_kind", ""), "expansion_request.node_kind"
+            ),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class GraphFakosKnowledgeCapture:
+    text: str
+    kind: str = "note"
+    tags: tuple[str, ...] = ()
+    source: str = "workbench"
+    link_node_id: str = ""
+    link_edge_kind: str = "mentions"
+    created_at: str = ""
+    provider_payload: dict[str, object] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "text": self.text,
+            "kind": self.kind,
+            "tags": list(self.tags),
+            "source": self.source,
+            "link_node_id": self.link_node_id,
+            "link_edge_kind": self.link_edge_kind,
+            "created_at": self.created_at,
+            "provider_payload": _json_compatible_dict(self.provider_payload),
+        }
+
+    @classmethod
+    def from_dict(cls, payload: Mapping[str, object]) -> GraphFakosKnowledgeCapture:
+        return cls(
+            text=_required_string(payload, "text", "knowledge_capture.text"),
+            kind=_string(payload.get("kind", "note"), "knowledge_capture.kind"),
+            tags=_tag_tuple(payload.get("tags", ()), "knowledge_capture.tags"),
+            source=_string(
+                payload.get("source", "workbench"), "knowledge_capture.source"
+            ),
+            link_node_id=_string(
+                payload.get("link_node_id", ""),
+                "knowledge_capture.link_node_id",
+            ),
+            link_edge_kind=_string(
+                payload.get("link_edge_kind", "mentions"),
+                "knowledge_capture.link_edge_kind",
+            ),
+            created_at=_string(
+                payload.get("created_at", ""),
+                "knowledge_capture.created_at",
+            ),
+            provider_payload=_object_dict(
+                payload.get("provider_payload", {}),
+                "knowledge_capture.provider_payload",
+            ),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class GraphFakosTheme:
+    id: str = "default"
+    label: str = "Default"
+    node_colors: dict[str, str] = field(default_factory=dict)
+    edge_colors: dict[str, str] = field(default_factory=dict)
+    node_shapes: dict[str, str] = field(default_factory=dict)
+
+    def caption(self) -> tuple[str, ...]:
+        rows: list[str] = []
+        for kind, color in sorted(self.node_colors.items()):
+            rows.append(f"node color {kind}: {color}")
+        for kind, shape in sorted(self.node_shapes.items()):
+            rows.append(f"node shape {kind}: {shape}")
+        for kind, color in sorted(self.edge_colors.items()):
+            rows.append(f"edge color {kind}: {color}")
+        return tuple(rows)
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "id": self.id,
+            "label": self.label,
+            "node_colors": dict(self.node_colors),
+            "edge_colors": dict(self.edge_colors),
+            "node_shapes": dict(self.node_shapes),
+            "caption": list(self.caption()),
+        }
+
+    @classmethod
+    def from_dict(cls, payload: Mapping[str, object]) -> GraphFakosTheme:
+        return cls(
+            id=_required_string(payload, "id", "theme.id"),
+            label=_string(payload.get("label", ""), "theme.label"),
+            node_colors=_string_dict(
+                payload.get("node_colors", {}), "theme.node_colors"
+            ),
+            edge_colors=_string_dict(
+                payload.get("edge_colors", {}), "theme.edge_colors"
+            ),
+            node_shapes=_string_dict(
+                payload.get("node_shapes", {}), "theme.node_shapes"
+            ),
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class GraphFakosVisual:
     color: str = ""
     icon: str = ""
@@ -503,6 +786,9 @@ class GraphFakosRequest:
     include_provider_payload: bool = True
     limit: int = 25
     render_limit: int = 120
+    camera_x: float | None = None
+    camera_y: float | None = None
+    camera_zoom: float | None = None
 
     def with_screen(self, screen: GraphFakosScreen) -> GraphFakosRequest:
         return GraphFakosRequest(
@@ -521,6 +807,9 @@ class GraphFakosRequest:
             include_provider_payload=self.include_provider_payload,
             limit=self.limit,
             render_limit=self.render_limit,
+            camera_x=self.camera_x,
+            camera_y=self.camera_y,
+            camera_zoom=self.camera_zoom,
         )
 
     def to_dict(self) -> dict[str, object]:
@@ -540,6 +829,9 @@ class GraphFakosRequest:
             "include_provider_payload": self.include_provider_payload,
             "limit": self.limit,
             "render_limit": self.render_limit,
+            "camera_x": self.camera_x,
+            "camera_y": self.camera_y,
+            "camera_zoom": self.camera_zoom,
         }
 
     @classmethod
@@ -583,6 +875,11 @@ class GraphFakosRequest:
             ),
             limit=_int(payload.get("limit", 25), "request.limit"),
             render_limit=_int(payload.get("render_limit", 120), "request.render_limit"),
+            camera_x=_float_or_none(payload.get("camera_x"), "request.camera_x"),
+            camera_y=_float_or_none(payload.get("camera_y"), "request.camera_y"),
+            camera_zoom=_float_or_none(
+                payload.get("camera_zoom"), "request.camera_zoom"
+            ),
         )
 
 
@@ -641,12 +938,16 @@ def _int_or_none(value: object, field_name: str) -> int | None:
     return _int(value, field_name)
 
 
-def _float_or_none(value: object, field_name: str) -> float | None:
-    if value is None:
-        return None
+def _float(value: object, field_name: str) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise TypeError(f"{field_name} must be numeric")
     return float(value)
+
+
+def _float_or_none(value: object, field_name: str) -> float | None:
+    if value is None:
+        return None
+    return _float(value, field_name)
 
 
 def _string_tuple(value: object, field_name: str) -> tuple[str, ...]:
@@ -658,6 +959,12 @@ def _string_tuple(value: object, field_name: str) -> tuple[str, ...]:
             items.append(item)
         return tuple(items)
     raise TypeError(f"{field_name} must be a list of strings")
+
+
+def _tag_tuple(value: object, field_name: str) -> tuple[str, ...]:
+    if isinstance(value, str):
+        return tuple(item.strip() for item in value.split(",") if item.strip())
+    return _string_tuple(value, field_name)
 
 
 def _string_dict(value: object, field_name: str) -> dict[str, str]:
@@ -711,11 +1018,17 @@ __all__ = [
     "GraphFakosCitation",
     "GraphFakosDiagnostics",
     "GraphFakosEdge",
+    "GraphFakosExpansionRequest",
     "GraphFakosGraph",
+    "GraphFakosKnowledgeCapture",
     "GraphFakosNode",
     "GraphFakosProvenance",
     "GraphFakosRequest",
     "GraphFakosScreen",
     "GraphFakosSnapshot",
+    "GraphFakosTheme",
+    "GraphFakosViewerCommand",
+    "GraphFakosViewerEvent",
+    "GraphFakosViewerState",
     "GraphFakosVisual",
 ]

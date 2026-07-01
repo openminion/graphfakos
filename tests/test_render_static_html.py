@@ -3,11 +3,12 @@ from __future__ import annotations
 from graphfakos import (
     FixtureGraphProvider,
     GraphFakosRequest,
+    render_graph_dot,
     render_embeddable_html,
     render_graph_markdown_report,
     render_static_html,
 )
-from graphfakos.testing import assert_graph_viewer_contract
+from graphfakos.testing import assert_graph_dot_contract, assert_graph_viewer_contract
 
 
 def test_static_viewer_renders_graph_canvas_and_inspector() -> None:
@@ -58,6 +59,8 @@ def test_explore_screen_renders_filter_controls_and_edge_inspector() -> None:
     assert "Selected Edge" in html
     assert "edge:provider-serves-spec" in html
     assert "Third-party Provider" in html
+    assert "Workflow" in html
+    assert "Navigator" in html
 
 
 def test_explore_screen_supports_quoted_score_and_time_queries() -> None:
@@ -125,6 +128,7 @@ def test_diff_screen_renders_snapshot_comparison() -> None:
     assert "Fixture Baseline" in html
     assert "Added nodes" in html
     assert "Changed nodes" in html
+    assert "Change Hotspots" in html
     assert "Snapshot changes" in html
     assert "Overlay Providers" in html
 
@@ -136,6 +140,7 @@ def test_embeddable_html_renders_fragment_only() -> None:
     )
 
     assert "data-graphfakos-embed='true'" in html
+    assert "data-graphfakos-screen='explore'" in html
     assert "<main class='gf-content gf-embed-root'" in html
     assert "<!doctype html>" not in html
     assert "Deep link:" in html
@@ -152,3 +157,25 @@ def test_markdown_report_renders_snapshot_and_comparison() -> None:
     assert "- Snapshot: `fixture-current`" in markdown
     assert "- Comparison: `Fixture Baseline`" in markdown
     assert "## Diff Summary" in markdown
+    assert "### Change Hotspots" in markdown
+
+
+def test_provenance_screen_renders_evidence_coverage() -> None:
+    html = render_static_html(
+        FixtureGraphProvider(),
+        GraphFakosRequest(screen="provenance"),
+    )
+
+    assert "Evidence Coverage" in html
+    assert "Provider Coverage" in html
+    assert "Citation Locations" in html
+
+
+def test_graph_dot_render_is_public_for_static_exports() -> None:
+    dot = render_graph_dot(FixtureGraphProvider().load_graph(GraphFakosRequest()))
+
+    assert_graph_dot_contract(
+        dot,
+        expected_node_ids=("provider:third-party", "memory:operator-preference"),
+        expected_edge_ids=("supports",),
+    )

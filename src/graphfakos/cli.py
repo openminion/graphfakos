@@ -66,6 +66,7 @@ def _request_from_args(args: argparse.Namespace) -> GraphFakosRequest:
     }
     return GraphFakosRequest(
         screen=args.screen,
+        preset_id=args.preset,
         query=args.query,
         focus_node_id=args.focus_node_id,
         selected_edge_id=args.selected_edge_id,
@@ -173,6 +174,7 @@ def _validate_provider_args(args: argparse.Namespace) -> None:
 def ui_preview_main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="GraphFakos local graph viewer")
     parser.add_argument("--screen", choices=_SCREENS, default="explore")
+    parser.add_argument("--preset", default="")
     parser.add_argument("--query", default="")
     parser.add_argument("--focus-node-id")
     parser.add_argument("--selected-edge-id")
@@ -193,6 +195,7 @@ def ui_preview_main(argv: list[str] | None = None) -> int:
     parser.add_argument("--embed-out", default="")
     parser.add_argument("--report-out", default="")
     parser.add_argument("--markdown-report-out", default="")
+    parser.add_argument("--dot-out", default="")
     parser.add_argument("--graph-json", default="")
     parser.add_argument("--comparison-graph-json", default="")
     parser.add_argument("--overlay-graph-json", action="append", default=[])
@@ -233,6 +236,7 @@ def ui_preview_main(argv: list[str] | None = None) -> int:
             embed_path=args.embed_out,
             report_path=args.report_out,
             markdown_report_path=args.markdown_report_out,
+            dot_path=args.dot_out,
         ),
         open_browser=args.open,
     )

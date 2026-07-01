@@ -36,12 +36,15 @@ def test_graphfakos_package_imports() -> None:
     assert "FileGraphProvider" in graphfakos.adapters.__all__
     assert "FixtureGraphProvider" in graphfakos.adapters.__all__
     assert "query_syntax_reference" in graphfakos.ui.__all__
+    assert "review_preset_manifest" in graphfakos.ui.__all__
     assert "render_graph_fragment" in graphfakos.ui.__all__
     assert "render_graph_viewer" in graphfakos.ui.__all__
     assert "GraphFakosProvider" in graphfakos.contracts.__all__
     assert "screen_manifest" in graphfakos.render.__all__
+    assert "render_graph_dot" in graphfakos.render.__all__
     assert "GraphPreviewOutputPaths" in graphfakos.render.__all__
     assert "write_provider_preview_outputs" in graphfakos.render.__all__
+    assert "write_graph_dot" in graphfakos.__all__
 
 
 def test_graphfakos_screen_manifest_is_public() -> None:

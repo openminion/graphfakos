@@ -21,6 +21,7 @@ from .ui import (
     build_graph_diff,
     render_graph_fragment,
     render_graph_viewer,
+    review_preset_manifest,
     screen_manifest,
 )
 
@@ -77,6 +78,13 @@ def _graph_report_payload(
         "diagnostics": diagnose_graph(graph).to_dict(),
         "screen_manifest": list(screen_manifest()),
         "overlay_graphs": [item.to_dict() for item in overlay_graphs],
+        "review_presets": list(
+            review_preset_manifest(
+                graph,
+                request,
+                comparison_graph=comparison_graph,
+            )
+        ),
     }
     if comparison_graph is not None:
         report["comparison_graph"] = comparison_graph.to_dict()
@@ -106,6 +114,7 @@ class GraphPreviewOutputPaths:
     embed_path: str = ""
     report_path: str = ""
     markdown_report_path: str = ""
+    dot_path: str = ""
 
 
 def render_graph_markdown_report(
@@ -158,6 +167,10 @@ def render_graph_markdown_report(
                 f"- Snapshot changes: `{summary.get('snapshot change count', 0)}`",
             ]
         )
+        hotspots = comparison_diff.get("change_hotspots", [])
+        if hotspots:
+            lines.extend(["", "### Change Hotspots", ""])
+            lines.extend(f"- {item}" for item in hotspots)
         for title, key in (
             ("Changed nodes", "changed_nodes"),
             ("Changed edges", "changed_edges"),
@@ -238,6 +251,39 @@ def write_graph_markdown_report(
     }
 
 
+def render_graph_dot(graph: GraphFakosGraph) -> str:
+    lines = [f'digraph "{graph.graph_id}" {{']
+    lines.append('  graph [label="GraphFakos export", labelloc=t];')
+    for node in graph.nodes:
+        label = _dot_escape(node.label or node.id)
+        kind = _dot_escape(node.kind)
+        lines.append(f'  "{_dot_escape(node.id)}" [label="{label}\\n({kind})"];')
+    for edge in graph.edges:
+        label = _dot_escape(edge.label or edge.kind)
+        lines.append(
+            f'  "{_dot_escape(edge.source_id)}" -> "{_dot_escape(edge.target_id)}" '
+            f'[label="{label}"];'
+        )
+    lines.append("}")
+    return "\n".join(lines) + "\n"
+
+
+def write_graph_dot(
+    provider: GraphFakosProvider,
+    request: GraphFakosRequest,
+    output_path: str,
+) -> dict[str, object]:
+    graph = load_provider_graph(provider, request)
+    dot = render_graph_dot(graph)
+    path = _resolved_output_path(output_path)
+    path.write_text(dot, encoding="utf-8")
+    return {
+        "output_path": str(path),
+        "screen": request.screen,
+        "dot": True,
+    }
+
+
 def write_provider_graph_artifact(
     provider: GraphFakosProvider,
     request: GraphFakosRequest,
@@ -299,6 +345,12 @@ def write_provider_preview_outputs(
         payload["markdown_report"] = _write_markdown_output(
             markdown,
             output_paths.markdown_report_path,
+            screen=request.screen,
+        )
+    if output_paths.dot_path:
+        payload["dot"] = _write_dot_output(
+            render_graph_dot(graph),
+            output_paths.dot_path,
             screen=request.screen,
         )
     payload.update(
@@ -375,6 +427,25 @@ def _write_markdown_output(
     }
 
 
+def _write_dot_output(
+    dot: str,
+    output_path: str,
+    *,
+    screen: str,
+) -> dict[str, object]:
+    path = _resolved_output_path(output_path)
+    path.write_text(dot, encoding="utf-8")
+    return {
+        "output_path": str(path),
+        "screen": screen,
+        "dot": True,
+    }
+
+
+def _dot_escape(value: str) -> str:
+    return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
 def _resolved_output_path(output_path: str) -> Path:
     path = Path(output_path).expanduser().resolve(strict=False)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -384,9 +455,11 @@ def _resolved_output_path(output_path: str) -> Path:
 __all__ = [
     "GraphPreviewOutputPaths",
     "build_graph_report",
+    "render_graph_dot",
     "render_embeddable_html",
     "render_graph_markdown_report",
     "render_static_html",
+    "write_graph_dot",
     "write_embeddable_html",
     "write_graph_markdown_report",
     "write_provider_preview_outputs",

@@ -54,9 +54,7 @@ def validate_graph_artifact_payload(payload: object) -> Mapping[str, object]:
     if not isinstance(payload, dict):
         raise TypeError("GraphFakos artifact payload must be an object")
     missing = [
-        key
-        for key in GRAPHFAKOS_ARTIFACT_SCHEMA["required"]
-        if key not in payload
+        key for key in GRAPHFAKOS_ARTIFACT_SCHEMA["required"] if key not in payload
     ]
     if missing:
         raise ValueError(f"GraphFakos artifact is missing required fields: {missing!r}")

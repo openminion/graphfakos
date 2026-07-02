@@ -105,18 +105,27 @@ python3.11 -m pip install -e .
 - camera-aware saved-view routes with `camera_x`, `camera_y`, and
   `camera_zoom`
 - serializable viewer state plus provider-neutral command, event,
-  expansion-request, knowledge-capture, and theme DTOs for host integrations
+  expansion-request, knowledge-capture, saved-view, saved-query, graph-action,
+  action-status, graph-analytics, replay-bundle, and theme DTOs for host
+  integrations
 - an explicit SVG renderer contract with clear unsupported-engine failures for
   future Canvas/WebGL seams
+- route-preserved renderer/theme state so host workbenches can experiment with
+  Canvas/WebGL while static exports honestly fall back to SVG
 - provider-neutral visual hierarchy with node shapes, edge arrows, selected
   path emphasis, minimap orientation, group toggles, and side-panel
   cross-highlighting
-- depth-aware neighborhood expansion and path source/target controls
+- depth-aware neighborhood expansion, orphan visibility, neighbor-link
+  visibility, edge-clutter controls, analytics overlays, and path source/target
+  controls
+- command-palette and saved-query panels for faster graph navigation
 - hub-aware navigation panels that recommend global, local-depth, evidence,
   path, status, and context routes for larger graphs
 - preview-server knowledge capture forms so host providers or workers can
   consume operator notes, code observations, questions, or memory hints and
   rebuild the graph
+- preview-server graph action forms so providers can accept draft nodes, links,
+  merge/alias requests, or return clear unsupported-action statuses
 - public query syntax guidance for graph filters such as `kind:`, `tag:`,
   `source:`, `edge:`, `id:`, `label:`, `summary:`, `has:`, quoted phrases,
   `score>=`, and `time>=`
@@ -128,8 +137,8 @@ python3.11 -m pip install -e .
   standalone review flows
 - static HTML export for portable inspection
 - embeddable HTML fragments for host package shells
-- JSON, Markdown, and DOT graph exports for CI proof, issue attachments, and
-  package-local review flows
+- JSON, Markdown, DOT, and replay-bundle exports for CI proof, issue
+  attachments, exact-state replay, and package-local review flows
 - a local HTTP preview server for interactive package development
 - a fake fixture provider for tests and third-party adapter examples
 - shared test assertions for graph viewer contracts
@@ -267,6 +276,7 @@ graphfakos-ui \
   --report-out graphfakos-report.json \
   --markdown-report-out graphfakos-report.md \
   --dot-out graphfakos-report.dot \
+  --bundle-out graphfakos-replay.json \
   --json
 ```
 

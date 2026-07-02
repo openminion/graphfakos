@@ -19,6 +19,10 @@
     expanded_groups: [],
     hidden_groups: [],
     saved_view_id: "",
+    show_orphans: true,
+    show_neighbor_links: true,
+    edge_clutter: "normal",
+    analytics_overlay: "degree",
   };
 
   const normalizeState = (state) => {
@@ -29,6 +33,8 @@
     next.filters = clone(next.filters);
     next.expanded_groups = Array.isArray(next.expanded_groups) ? next.expanded_groups : [];
     next.hidden_groups = Array.isArray(next.hidden_groups) ? next.hidden_groups : [];
+    next.show_orphans = next.show_orphans !== false && next.show_orphans !== "false";
+    next.show_neighbor_links = next.show_neighbor_links !== false && next.show_neighbor_links !== "false";
     return next;
   };
 
@@ -249,6 +255,55 @@
       }
     }
 
+    async submitAction(form) {
+      const status = form.querySelector("[data-gf-action-status-text]");
+      const setStatus = (message, state = "") => {
+        if (!status) return;
+        status.textContent = message;
+        status.dataset.state = state;
+      };
+      if (!["http:", "https:"].includes(window.location.protocol)) {
+        setStatus("Run the local preview server to queue graph actions; static exports are read-only.", "error");
+        return false;
+      }
+      const data = new FormData(form);
+      const payload = {
+        action_id: `draft:${Date.now()}`,
+        action_type: String(data.get("action_type") || "draft_node"),
+        target_id: String(data.get("target_id") || ""),
+        label: String(data.get("label") || ""),
+        body: String(data.get("body") || ""),
+        provider_payload: {
+          screen: this.state.screen || "explore",
+          saved_view_id: this.state.saved_view_id || "",
+        },
+      };
+      emit(this, "action-submit", { payload, state: this.getState() });
+      setStatus("Queueing action...", "");
+      try {
+        const response = await fetch(form.getAttribute("action") || "/api/action", {
+          method: "POST",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
+        });
+        const result = await response.json();
+        if (!response.ok || result.ok === false) {
+          throw new Error(result.error || result.status?.message || `action failed: ${response.status}`);
+        }
+        form.reset();
+        setStatus(result.status?.message || "Action queued for provider review.", "saved");
+        emit(this, "action-saved", { payload, result, state: this.getState() });
+        return true;
+      } catch (error) {
+        setStatus(error?.message || String(error), "error");
+        emit(this, "error", { message: error?.message || String(error), action: "graph-action" });
+        return false;
+      }
+    }
+
     destroy() {
       this.replaceWith(...this.childNodes);
     }
@@ -287,6 +342,11 @@
         if (form.matches("[data-gf-knowledge-form]")) {
           event.preventDefault();
           this.submitKnowledge(form);
+          return;
+        }
+        if (form.matches("[data-gf-action-form]")) {
+          event.preventDefault();
+          this.submitAction(form);
           return;
         }
         if ((form.getAttribute("method") || "get").toLowerCase() !== "get") return;

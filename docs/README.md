@@ -8,6 +8,8 @@ Start with:
 - [Artifact interchange](artifact-interchange.md)
 - [Source tree owner map](source-tree-owner-map.md)
 - [UI contracts](ui-contracts.md)
+- [Competitive viewer roadmap spec](specs/competitive-viewer-roadmap-2026-07-01-spec.md)
+- [Competitive viewer roadmap tracker](trackers/competitive-viewer-roadmap-2026-07-01-tracker.md)
 - [Custom provider example](custom-provider-example.md)
 - [API compatibility](../API_COMPATIBILITY.md)
 - [Release process](../RELEASING.md)
@@ -49,9 +51,11 @@ It supports:
 - public deep-link helpers for building or parsing stable viewer routes,
 - camera-aware deep links through `camera_x`, `camera_y`, and `camera_zoom`,
 - serializable viewer state plus provider-neutral viewer command, event,
-  expansion-request, knowledge-capture, and theme DTOs,
+  expansion-request, knowledge-capture, saved-view, saved-query, graph-action,
+  action-status, graph-analytics, replay-bundle, and theme DTOs,
 - package-owned browser runtime helpers through `viewer_runtime_script()`,
 - an SVG renderer contract with clear rejection for unsupported future engines,
+  plus route-preserved renderer/theme state for host workbenches,
 - public query syntax guidance for `kind:`, `tag:`, `source:`, `edge:`,
   `id:`, `label:`, `summary:`, `has:`, quoted phrases, `score>=`, and
   `time>=` tokens,
@@ -61,12 +65,15 @@ It supports:
   SVG canvas,
 - minimap orientation, group toggles, and render-budget fallback links for
   larger visible graphs,
+- saved workspace, local graph control, command palette, analytics overlay,
+  replay/export, and graph-authoring panels,
 - hub-aware navigator panels for global, local-depth, evidence, path, status,
   and context graph lenses,
 - depth-aware neighborhoods,
 - path source/target controls,
-- preview-server knowledge capture forms for provider-owned notes, code
-  observations, questions, or memory hints,
+- preview-server knowledge capture and graph-action forms for provider-owned
+  notes, code observations, questions, memory hints, draft nodes, links, and
+  merge/alias requests,
 - snapshot metadata plus provider-owned comparison and overlay workflows,
 - provenance and citation panels with evidence coverage summaries, and
 - provider capability/status summaries.
@@ -76,8 +83,8 @@ GraphFakos also exposes:
 - persisted graph artifact helpers plus a file-backed provider adapter,
 - embeddable HTML fragments for package-local UI shells,
 - JSON graph reports, and
-- Markdown and DOT graph reports for issue attachments, review notes, and
-  external graph tooling.
+- Markdown, DOT, and replay-bundle graph reports for issue attachments, review
+  notes, exact-state replay, and external graph tooling.
 
 GraphFakos does not interpret provider-specific semantics. Adapters should put
 provider-only fields in `provider_payload` unless the field belongs in a stable
@@ -181,6 +188,7 @@ graphfakos-ui \
   --report-out graphfakos-report.json \
   --markdown-report-out graphfakos-report.md \
   --dot-out graphfakos-report.dot \
+  --bundle-out graphfakos-replay.json \
   --json
 ```
 

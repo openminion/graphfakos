@@ -5,18 +5,26 @@ import pytest
 from graphfakos import (
     FixtureGraphProvider,
     build_graph_report,
+    build_graph_replay_bundle,
     build_fixture_graph,
     build_viewer_route,
+    GraphFakosActionStatus,
     GraphFakosEdge,
     GraphFakosExpansionRequest,
     GraphFakosGraph,
+    GraphFakosGraphAction,
+    GraphFakosGraphAnalytics,
     GraphFakosKnowledgeCapture,
     GraphFakosNode,
+    GraphFakosReplayBundle,
     GraphFakosRequest,
+    GraphFakosSavedQuery,
+    GraphFakosSavedView,
     GraphFakosTheme,
     GraphFakosViewerCommand,
     GraphFakosViewerEvent,
     GraphFakosViewerState,
+    analyze_graph,
     diagnose_graph,
     load_comparison_graph,
     load_overlay_graphs,
@@ -296,6 +304,81 @@ def test_knowledge_capture_contract_round_trips_provider_payload() -> None:
     assert rebuilt.tags == ("ui", "graph")
     assert rebuilt.provider_payload["screen"] == "explore"
     assert parsed_tags.tags == ("one", "two")
+
+
+def test_saved_view_action_analytics_and_replay_contracts_round_trip() -> None:
+    graph = load_provider_graph(FixtureGraphProvider(), GraphFakosRequest())
+    request = GraphFakosRequest(
+        screen="neighborhood",
+        focus_node_id="provider:third-party",
+        saved_view_id="ops-review",
+        render_engine="canvas",
+        theme="ink",
+        show_orphans=False,
+        show_neighbor_links=False,
+        edge_clutter="reduced",
+        analytics_overlay="degree",
+    )
+    saved_query = GraphFakosSavedQuery(
+        query_id="hubs",
+        label="Find hubs",
+        query="degree>=3",
+    )
+    saved_view = GraphFakosSavedView.from_request(
+        request,
+        view_id="ops-review",
+        label="Operator review",
+        saved_queries=(saved_query,),
+    )
+    action = GraphFakosGraphAction(
+        action_id="draft:one",
+        action_type="merge_alias",
+        target_id="provider:third-party",
+        label="Merge provider aliases",
+    )
+    status = GraphFakosActionStatus(
+        action_id=action.action_id,
+        status="queued",
+        message="Queued for provider review.",
+    )
+    analytics = analyze_graph(graph)
+    bundle = GraphFakosReplayBundle(
+        bundle_id="fixture:ops-review",
+        graph=graph,
+        viewer_state=GraphFakosViewerState.from_request(request),
+        saved_views=(saved_view,),
+        analytics=analytics,
+    )
+
+    rebuilt_view = GraphFakosSavedView.from_dict(saved_view.to_dict())
+    assert rebuilt_view.state.theme == "ink"
+    assert rebuilt_view.state.show_orphans is False
+    assert (
+        GraphFakosGraphAction.from_dict(action.to_dict()).action_type == "merge_alias"
+    )
+    assert GraphFakosActionStatus.from_dict(status.to_dict()).status == "queued"
+    assert GraphFakosGraphAnalytics.from_dict(analytics.to_dict()).node_count == 4
+    rebuilt_bundle = GraphFakosReplayBundle.from_dict(bundle.to_dict())
+    assert rebuilt_bundle.viewer_state.render_engine == "canvas"
+    assert rebuilt_bundle.saved_views[0].saved_queries[0].query == "degree>=3"
+
+
+def test_build_graph_replay_bundle_uses_provider_neutral_state() -> None:
+    bundle = build_graph_replay_bundle(
+        FixtureGraphProvider(),
+        GraphFakosRequest(
+            screen="explore",
+            focus_node_id="provider:third-party",
+            saved_view_id="route-share",
+            theme="paper",
+            analytics_overlay="warnings",
+        ),
+    )
+
+    assert bundle.bundle_id == "fixture:explore"
+    assert bundle.viewer_state.theme == "paper"
+    assert bundle.saved_views[0].view_id == "route-share"
+    assert bundle.analytics.hub_node_ids
 
 
 def test_renderer_selection_contract_rejects_unsupported_engines() -> None:

@@ -33,6 +33,10 @@ class GraphFakosViewerState:
     expanded_groups: tuple[str, ...] = ()
     hidden_groups: tuple[str, ...] = ()
     saved_view_id: str = ""
+    show_orphans: bool = True
+    show_neighbor_links: bool = True
+    edge_clutter: str = "normal"
+    analytics_overlay: str = "degree"
 
     @classmethod
     def from_request(cls, request: GraphFakosRequest) -> GraphFakosViewerState:
@@ -44,7 +48,14 @@ class GraphFakosViewerState:
             camera_x=request.camera_x if request.camera_x is not None else 0.0,
             camera_y=request.camera_y if request.camera_y is not None else 0.0,
             camera_zoom=request.camera_zoom if request.camera_zoom is not None else 1.0,
+            render_engine=request.render_engine,
+            theme=request.theme,
             filters=dict(request.filters),
+            saved_view_id=request.saved_view_id,
+            show_orphans=request.show_orphans,
+            show_neighbor_links=request.show_neighbor_links,
+            edge_clutter=request.edge_clutter,
+            analytics_overlay=request.analytics_overlay,
         )
 
     def to_route_query(self) -> dict[str, object]:
@@ -56,6 +67,10 @@ class GraphFakosViewerState:
             "camera_zoom": self.camera_zoom,
             "render_engine": self.render_engine,
             "theme": self.theme,
+            "show_orphans": self.show_orphans,
+            "show_neighbor_links": self.show_neighbor_links,
+            "edge_clutter": self.edge_clutter,
+            "analytics_overlay": self.analytics_overlay,
         }
         if self.selected_node_id:
             payload["focus_node_id"] = self.selected_node_id
@@ -85,6 +100,10 @@ class GraphFakosViewerState:
             "expanded_groups": list(self.expanded_groups),
             "hidden_groups": list(self.hidden_groups),
             "saved_view_id": self.saved_view_id,
+            "show_orphans": self.show_orphans,
+            "show_neighbor_links": self.show_neighbor_links,
+            "edge_clutter": self.edge_clutter,
+            "analytics_overlay": self.analytics_overlay,
         }
 
     @classmethod
@@ -118,6 +137,20 @@ class GraphFakosViewerState:
             ),
             saved_view_id=_string(
                 payload.get("saved_view_id", ""), "viewer_state.saved_view_id"
+            ),
+            show_orphans=_bool(
+                payload.get("show_orphans", True), "viewer_state.show_orphans"
+            ),
+            show_neighbor_links=_bool(
+                payload.get("show_neighbor_links", True),
+                "viewer_state.show_neighbor_links",
+            ),
+            edge_clutter=_string(
+                payload.get("edge_clutter", "normal"), "viewer_state.edge_clutter"
+            ),
+            analytics_overlay=_string(
+                payload.get("analytics_overlay", "degree"),
+                "viewer_state.analytics_overlay",
             ),
         )
 
@@ -252,6 +285,289 @@ class GraphFakosKnowledgeCapture:
             provider_payload=_object_dict(
                 payload.get("provider_payload", {}),
                 "knowledge_capture.provider_payload",
+            ),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class GraphFakosSavedQuery:
+    query_id: str
+    label: str
+    query: str = ""
+    filters: dict[str, str] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "query_id": self.query_id,
+            "label": self.label,
+            "query": self.query,
+            "filters": dict(self.filters),
+        }
+
+    @classmethod
+    def from_dict(cls, payload: Mapping[str, object]) -> GraphFakosSavedQuery:
+        return cls(
+            query_id=_required_string(payload, "query_id", "saved_query.query_id"),
+            label=_required_string(payload, "label", "saved_query.label"),
+            query=_string(payload.get("query", ""), "saved_query.query"),
+            filters=_string_dict(payload.get("filters", {}), "saved_query.filters"),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class GraphFakosSavedView:
+    view_id: str
+    label: str
+    state: GraphFakosViewerState
+    pinned_positions: dict[str, tuple[float, float]] = field(default_factory=dict)
+    saved_queries: tuple[GraphFakosSavedQuery, ...] = ()
+    provider_payload: dict[str, object] = field(default_factory=dict)
+
+    @classmethod
+    def from_request(
+        cls,
+        request: GraphFakosRequest,
+        *,
+        view_id: str = "route",
+        label: str = "Route View",
+        pinned_positions: dict[str, tuple[float, float]] | None = None,
+        saved_queries: tuple[GraphFakosSavedQuery, ...] = (),
+        provider_payload: dict[str, object] | None = None,
+    ) -> GraphFakosSavedView:
+        return cls(
+            view_id=view_id,
+            label=label,
+            state=GraphFakosViewerState.from_request(request),
+            pinned_positions=pinned_positions or {},
+            saved_queries=saved_queries,
+            provider_payload=provider_payload or {},
+        )
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "view_id": self.view_id,
+            "label": self.label,
+            "state": self.state.to_dict(),
+            "pinned_positions": {
+                node_id: [x, y]
+                for node_id, (x, y) in sorted(self.pinned_positions.items())
+            },
+            "saved_queries": [query.to_dict() for query in self.saved_queries],
+            "provider_payload": _json_compatible_dict(self.provider_payload),
+        }
+
+    @classmethod
+    def from_dict(cls, payload: Mapping[str, object]) -> GraphFakosSavedView:
+        return cls(
+            view_id=_required_string(payload, "view_id", "saved_view.view_id"),
+            label=_required_string(payload, "label", "saved_view.label"),
+            state=GraphFakosViewerState.from_dict(
+                _mapping(payload.get("state", {}), "saved_view.state")
+            ),
+            pinned_positions=_position_dict(
+                payload.get("pinned_positions", {}),
+                "saved_view.pinned_positions",
+            ),
+            saved_queries=tuple(
+                GraphFakosSavedQuery.from_dict(item)
+                for item in _mapping_list(
+                    payload.get("saved_queries", []),
+                    "saved_view.saved_queries",
+                )
+            ),
+            provider_payload=_object_dict(
+                payload.get("provider_payload", {}),
+                "saved_view.provider_payload",
+            ),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class GraphFakosGraphAction:
+    action_id: str
+    action_type: str
+    label: str = ""
+    target_id: str = ""
+    body: str = ""
+    tags: tuple[str, ...] = ()
+    source_id: str = ""
+    target_node_id: str = ""
+    provider_payload: dict[str, object] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "action_id": self.action_id,
+            "action_type": self.action_type,
+            "label": self.label,
+            "target_id": self.target_id,
+            "body": self.body,
+            "tags": list(self.tags),
+            "source_id": self.source_id,
+            "target_node_id": self.target_node_id,
+            "provider_payload": _json_compatible_dict(self.provider_payload),
+        }
+
+    @classmethod
+    def from_dict(cls, payload: Mapping[str, object]) -> GraphFakosGraphAction:
+        return cls(
+            action_id=_required_string(payload, "action_id", "graph_action.action_id"),
+            action_type=_required_string(
+                payload,
+                "action_type",
+                "graph_action.action_type",
+            ),
+            label=_string(payload.get("label", ""), "graph_action.label"),
+            target_id=_string(payload.get("target_id", ""), "graph_action.target_id"),
+            body=_string(payload.get("body", ""), "graph_action.body"),
+            tags=_tag_tuple(payload.get("tags", ()), "graph_action.tags"),
+            source_id=_string(payload.get("source_id", ""), "graph_action.source_id"),
+            target_node_id=_string(
+                payload.get("target_node_id", ""),
+                "graph_action.target_node_id",
+            ),
+            provider_payload=_object_dict(
+                payload.get("provider_payload", {}),
+                "graph_action.provider_payload",
+            ),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class GraphFakosActionStatus:
+    action_id: str
+    status: str
+    message: str = ""
+    graph_id: str = ""
+    provider_payload: dict[str, object] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "action_id": self.action_id,
+            "status": self.status,
+            "message": self.message,
+            "graph_id": self.graph_id,
+            "provider_payload": _json_compatible_dict(self.provider_payload),
+        }
+
+    @classmethod
+    def from_dict(cls, payload: Mapping[str, object]) -> GraphFakosActionStatus:
+        return cls(
+            action_id=_required_string(
+                payload,
+                "action_id",
+                "action_status.action_id",
+            ),
+            status=_required_string(payload, "status", "action_status.status"),
+            message=_string(payload.get("message", ""), "action_status.message"),
+            graph_id=_string(payload.get("graph_id", ""), "action_status.graph_id"),
+            provider_payload=_object_dict(
+                payload.get("provider_payload", {}),
+                "action_status.provider_payload",
+            ),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class GraphFakosGraphAnalytics:
+    component_count: int
+    node_count: int = 0
+    edge_count: int = 0
+    hub_node_ids: tuple[str, ...] = ()
+    orphan_node_ids: tuple[str, ...] = ()
+    max_degree: int = 0
+    average_degree: float = 0.0
+    density: float = 0.0
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "component_count": self.component_count,
+            "node_count": self.node_count,
+            "edge_count": self.edge_count,
+            "hub_node_ids": list(self.hub_node_ids),
+            "orphan_node_ids": list(self.orphan_node_ids),
+            "max_degree": self.max_degree,
+            "average_degree": self.average_degree,
+            "density": self.density,
+        }
+
+    @classmethod
+    def from_dict(cls, payload: Mapping[str, object]) -> GraphFakosGraphAnalytics:
+        return cls(
+            component_count=_int(
+                payload.get("component_count", 0),
+                "graph_analytics.component_count",
+            ),
+            node_count=_int(payload.get("node_count", 0), "graph_analytics.node_count"),
+            edge_count=_int(payload.get("edge_count", 0), "graph_analytics.edge_count"),
+            hub_node_ids=_string_tuple(
+                payload.get("hub_node_ids", ()),
+                "graph_analytics.hub_node_ids",
+            ),
+            orphan_node_ids=_string_tuple(
+                payload.get("orphan_node_ids", ()),
+                "graph_analytics.orphan_node_ids",
+            ),
+            max_degree=_int(payload.get("max_degree", 0), "graph_analytics.max_degree"),
+            average_degree=_float(
+                payload.get("average_degree", 0.0),
+                "graph_analytics.average_degree",
+            ),
+            density=_float(payload.get("density", 0.0), "graph_analytics.density"),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class GraphFakosReplayBundle:
+    bundle_id: str
+    graph: GraphFakosGraph
+    viewer_state: GraphFakosViewerState
+    schema_version: str = "graphfakos.replay.v1"
+    created_at: str = ""
+    saved_views: tuple[GraphFakosSavedView, ...] = ()
+    analytics: GraphFakosGraphAnalytics | None = None
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "schema_version": self.schema_version,
+            "bundle_id": self.bundle_id,
+            "created_at": self.created_at,
+            "graph": self.graph.to_dict(),
+            "viewer_state": self.viewer_state.to_dict(),
+            "saved_views": [view.to_dict() for view in self.saved_views],
+            "analytics": self.analytics.to_dict()
+            if self.analytics is not None
+            else None,
+        }
+
+    @classmethod
+    def from_dict(cls, payload: Mapping[str, object]) -> GraphFakosReplayBundle:
+        analytics_payload = payload.get("analytics")
+        return cls(
+            bundle_id=_required_string(payload, "bundle_id", "replay_bundle.bundle_id"),
+            schema_version=_string(
+                payload.get("schema_version", "graphfakos.replay.v1"),
+                "replay_bundle.schema_version",
+            ),
+            created_at=_string(
+                payload.get("created_at", ""), "replay_bundle.created_at"
+            ),
+            graph=GraphFakosGraph.from_dict(
+                _mapping(payload.get("graph", {}), "replay_bundle.graph")
+            ),
+            viewer_state=GraphFakosViewerState.from_dict(
+                _mapping(payload.get("viewer_state", {}), "replay_bundle.viewer_state")
+            ),
+            saved_views=tuple(
+                GraphFakosSavedView.from_dict(item)
+                for item in _mapping_list(
+                    payload.get("saved_views", []),
+                    "replay_bundle.saved_views",
+                )
+            ),
+            analytics=None
+            if analytics_payload in (None, "")
+            else GraphFakosGraphAnalytics.from_dict(
+                _mapping(analytics_payload, "replay_bundle.analytics")
             ),
         )
 
@@ -789,6 +1105,13 @@ class GraphFakosRequest:
     camera_x: float | None = None
     camera_y: float | None = None
     camera_zoom: float | None = None
+    render_engine: str = "svg"
+    theme: str = "default"
+    saved_view_id: str = ""
+    show_orphans: bool = True
+    show_neighbor_links: bool = True
+    edge_clutter: str = "normal"
+    analytics_overlay: str = "degree"
 
     def with_screen(self, screen: GraphFakosScreen) -> GraphFakosRequest:
         return GraphFakosRequest(
@@ -810,6 +1133,13 @@ class GraphFakosRequest:
             camera_x=self.camera_x,
             camera_y=self.camera_y,
             camera_zoom=self.camera_zoom,
+            render_engine=self.render_engine,
+            theme=self.theme,
+            saved_view_id=self.saved_view_id,
+            show_orphans=self.show_orphans,
+            show_neighbor_links=self.show_neighbor_links,
+            edge_clutter=self.edge_clutter,
+            analytics_overlay=self.analytics_overlay,
         )
 
     def to_dict(self) -> dict[str, object]:
@@ -832,6 +1162,13 @@ class GraphFakosRequest:
             "camera_x": self.camera_x,
             "camera_y": self.camera_y,
             "camera_zoom": self.camera_zoom,
+            "render_engine": self.render_engine,
+            "theme": self.theme,
+            "saved_view_id": self.saved_view_id,
+            "show_orphans": self.show_orphans,
+            "show_neighbor_links": self.show_neighbor_links,
+            "edge_clutter": self.edge_clutter,
+            "analytics_overlay": self.analytics_overlay,
         }
 
     @classmethod
@@ -879,6 +1216,30 @@ class GraphFakosRequest:
             camera_y=_float_or_none(payload.get("camera_y"), "request.camera_y"),
             camera_zoom=_float_or_none(
                 payload.get("camera_zoom"), "request.camera_zoom"
+            ),
+            render_engine=_string(
+                payload.get("render_engine", "svg"), "request.render_engine"
+            ),
+            theme=_string(payload.get("theme", "default"), "request.theme"),
+            saved_view_id=_string(
+                payload.get("saved_view_id", ""),
+                "request.saved_view_id",
+            ),
+            show_orphans=_bool(
+                payload.get("show_orphans", True),
+                "request.show_orphans",
+            ),
+            show_neighbor_links=_bool(
+                payload.get("show_neighbor_links", True),
+                "request.show_neighbor_links",
+            ),
+            edge_clutter=_string(
+                payload.get("edge_clutter", "normal"),
+                "request.edge_clutter",
+            ),
+            analytics_overlay=_string(
+                payload.get("analytics_overlay", "degree"),
+                "request.analytics_overlay",
             ),
         )
 
@@ -987,6 +1348,21 @@ def _string_tuple_dict(value: object, field_name: str) -> dict[str, tuple[str, .
     return parsed
 
 
+def _position_dict(value: object, field_name: str) -> dict[str, tuple[float, float]]:
+    mapping = _mapping(value, field_name)
+    parsed: dict[str, tuple[float, float]] = {}
+    for key, item in mapping.items():
+        if not isinstance(key, str):
+            raise TypeError(f"{field_name} must use string keys")
+        if not isinstance(item, (list, tuple)) or len(item) != 2:
+            raise TypeError(f"{field_name}.{key} must be a two-item coordinate")
+        parsed[key] = (
+            _float(item[0], f"{field_name}.{key}.x"),
+            _float(item[1], f"{field_name}.{key}.y"),
+        )
+    return parsed
+
+
 def _object_dict(value: object, field_name: str) -> dict[str, object]:
     mapping = _mapping(value, field_name)
     parsed: dict[str, object] = {}
@@ -1016,14 +1392,20 @@ def _json_compatible(value: object) -> object:
 
 __all__ = [
     "GraphFakosCitation",
+    "GraphFakosActionStatus",
     "GraphFakosDiagnostics",
     "GraphFakosEdge",
     "GraphFakosExpansionRequest",
     "GraphFakosGraph",
+    "GraphFakosGraphAction",
+    "GraphFakosGraphAnalytics",
     "GraphFakosKnowledgeCapture",
     "GraphFakosNode",
     "GraphFakosProvenance",
     "GraphFakosRequest",
+    "GraphFakosReplayBundle",
+    "GraphFakosSavedQuery",
+    "GraphFakosSavedView",
     "GraphFakosScreen",
     "GraphFakosSnapshot",
     "GraphFakosTheme",

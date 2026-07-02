@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+import re
+
 from graphfakos import (
     FixtureGraphProvider,
     GraphFakosRequest,
@@ -9,6 +12,16 @@ from graphfakos import (
     render_static_html,
 )
 from graphfakos.testing import assert_graph_dot_contract, assert_graph_viewer_contract
+
+
+def _json_script_payload(html: str, data_attribute: str) -> object:
+    pattern = (
+        rf"<script type='application/json' {re.escape(data_attribute)}='true'>"
+        r"(.*?)</script>"
+    )
+    match = re.search(pattern, html)
+    assert match is not None
+    return json.loads(match.group(1))
 
 
 def test_static_viewer_renders_graph_canvas_and_inspector() -> None:
@@ -35,6 +48,61 @@ def test_static_viewer_renders_graph_canvas_and_inspector() -> None:
     assert "data-state-json=" in html
     assert 'customElements.define("graphfakos-viewer"' in html
     assert "<script>" in html
+
+
+def test_static_viewer_renders_competitive_workbench_controls() -> None:
+    html = render_static_html(
+        FixtureGraphProvider(),
+        GraphFakosRequest(
+            screen="explore",
+            render_engine="canvas",
+            theme="ink",
+            saved_view_id="ops-review",
+            show_orphans=False,
+            show_neighbor_links=False,
+            edge_clutter="reduced",
+            analytics_overlay="degree",
+        ),
+    )
+
+    assert "data-theme='ink'" in html
+    assert "render-engine='canvas'" in html
+    assert "Requested renderer canvas" in html
+    assert "aria-label='Saved workspace controls'" in html
+    assert "aria-label='Local graph controls'" in html
+    assert "Command Palette" in html
+    assert "Analytics Overlay" in html
+    assert "Export and Replay" in html
+    assert "Graph Authoring" in html
+    assert "data-gf-saved-view='true'" in html
+    assert "data-gf-saved-queries='true'" in html
+    assert "data-gf-replay-bundle-preview='true'" in html
+    assert "data-gf-action-template='true'" in html
+    assert "data-gf-action-status-text='true'" in html
+    assert "data-clutter='reduced'" in html
+    assert _json_script_payload(html, "data-gf-saved-view")["view_id"] == "ops-review"
+    assert (
+        _json_script_payload(html, "data-gf-action-template")["action_type"]
+        == "draft_node"
+    )
+    assert _json_script_payload(html, "data-gf-action-status")["status"] == "draft"
+    assert (
+        _json_script_payload(html, "data-gf-replay-bundle-preview")["schema_version"]
+        == "graphfakos.replay.v1"
+    )
+
+
+def test_static_viewer_minimap_marks_nodes_for_navigation() -> None:
+    html = render_static_html(
+        FixtureGraphProvider(),
+        GraphFakosRequest(focus_node_id="provider:third-party"),
+    )
+
+    assert "aria-label='Graph minimap'" in html
+    assert "data-minimap-node-id='provider:third-party'" in html
+    assert "data-node-ref='provider:third-party'" in html
+    assert "<title>Third-party Provider</title>" in html
+    assert "data-selected='true'" in html
 
 
 def test_static_viewer_keeps_no_javascript_svg_fallback() -> None:

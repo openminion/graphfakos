@@ -5,15 +5,19 @@ from __future__ import annotations
 from collections import defaultdict, deque
 from html import escape
 import json
-from math import cos, pi, sin
+from math import cos, pi, sin, sqrt
 import shlex
 from urllib.parse import urlencode
 
 from graphfakos.browser import viewer_runtime_script
 from graphfakos.models import (
+    GraphFakosActionStatus,
     GraphFakosCitation,
     GraphFakosDiagnostics,
     GraphFakosEdge,
+    GraphFakosGraphAction,
+    GraphFakosSavedQuery,
+    GraphFakosSavedView,
     GraphFakosGraph,
     GraphFakosNode,
     GraphFakosProvenance,
@@ -23,6 +27,7 @@ from graphfakos.models import (
 )
 from graphfakos.provider import (
     GraphFakosProvider,
+    analyze_graph,
     diagnose_graph,
     load_comparison_graph,
     load_overlay_graphs,
@@ -39,6 +44,15 @@ _SCREEN_NAV: tuple[tuple[GraphFakosScreen, str], ...] = (
     ("provider_status", "Provider Status"),
     ("context_preview", "Context"),
 )
+
+_GRAPH_ACTION_TYPES: tuple[tuple[str, str], ...] = (
+    ("draft_node", "Draft node"),
+    ("draft_edge", "Draft edge"),
+    ("merge_alias", "Merge alias"),
+)
+_MINIMAP_WIDTH = 180
+_MINIMAP_HEIGHT = 90
+_MINIMAP_NODE_RADIUS = 4
 
 
 def screen_manifest() -> tuple[dict[str, str], ...]:
@@ -139,7 +153,8 @@ def render_graph_viewer(
         "<!doctype html><html><head><meta charset='utf-8'>"
         "<meta name='viewport' content='width=device-width, initial-scale=1'>"
         f"<title>{escape(graph.label)} - GraphFakos</title>"
-        f"{_STYLE}</head><body class='gf-page'><div class='gf-shell'>"
+        f"{_STYLE}</head><body class='gf-page' data-theme='{escape(request.theme)}'>"
+        "<div class='gf-shell'>"
         f"{_nav(request)}"
         f"{body}</div>{_viewer_script_tag()}</body></html>"
     )
@@ -205,6 +220,20 @@ def _request_from_query(
         camera_x=_float_query_value(query, "camera_x", request.camera_x),
         camera_y=_float_query_value(query, "camera_y", request.camera_y),
         camera_zoom=_float_query_value(query, "camera_zoom", request.camera_zoom),
+        render_engine=_first_query_value(query, "render_engine")
+        or request.render_engine,
+        theme=_first_query_value(query, "theme") or request.theme,
+        saved_view_id=_first_query_value(query, "saved_view_id")
+        or request.saved_view_id,
+        show_orphans=_bool_query_value(query, "show_orphans", request.show_orphans),
+        show_neighbor_links=_bool_query_value(
+            query,
+            "show_neighbor_links",
+            request.show_neighbor_links,
+        ),
+        edge_clutter=_first_query_value(query, "edge_clutter") or request.edge_clutter,
+        analytics_overlay=_first_query_value(query, "analytics_overlay")
+        or request.analytics_overlay,
     )
 
 
@@ -225,6 +254,17 @@ def _float_query_value(
         return float(value)
     except ValueError:
         return fallback
+
+
+def _bool_query_value(
+    query: dict[str, list[str]],
+    key: str,
+    fallback: bool,
+) -> bool:
+    value = _first_query_value(query, key)
+    if value is None:
+        return fallback
+    return value.casefold() not in {"0", "false", "no", "off"}
 
 
 def build_viewer_route(
@@ -402,7 +442,7 @@ def render_graph_fragment(
     return (
         "<graphfakos-viewer data-graphfakos-component='viewer' "
         f"data-state-json='{state_json}' data-graph-json='{graph_json}' "
-        "render-engine='svg' theme='default'>"
+        f"render-engine='{escape(request.render_engine)}' theme='{escape(request.theme)}'>"
         "<main class='gf-content gf-embed-root' data-graphfakos-embed='true' "
         f"data-graphfakos-screen='{escape(request.screen)}' "
         f"data-graphfakos-route='{escape(route)}' "
@@ -420,6 +460,16 @@ def _json_attribute(payload: object) -> str:
     )
 
 
+def _json_script(data_attribute: str, payload: object) -> str:
+    content = (
+        json.dumps(payload, sort_keys=True, separators=(",", ":"))
+        .replace("&", "\\u0026")
+        .replace("<", "\\u003c")
+        .replace(">", "\\u003e")
+    )
+    return f"<script type='application/json' {data_attribute}='true'>{content}</script>"
+
+
 def _viewer_script_tag() -> str:
     return f"<script>\n{viewer_runtime_script()}\n</script>"
 
@@ -428,10 +478,10 @@ def _route_href(
     request: GraphFakosRequest,
     *,
     screen: GraphFakosScreen | None = None,
-    overrides: dict[str, str | int | None] | None = None,
+    overrides: dict[str, object] | None = None,
 ) -> str:
     route = f"/{screen or request.screen}"
-    payload: dict[str, str | int] = {}
+    payload: dict[str, object] = {}
     for key, value in request.to_dict().items():
         if key == "screen":
             continue
@@ -440,6 +490,9 @@ def _route_href(
             for filter_key, filter_value in value.items():
                 if filter_value not in ("", None):
                     payload[filter_key] = filter_value
+            continue
+        if isinstance(value, bool):
+            payload[route_key] = "true" if value else "false"
             continue
         if value not in ("", None, False):
             payload[route_key] = value
@@ -494,6 +547,8 @@ def _header(
         f"{_badge(f'{len(graph.nodes)} nodes', 'blue')}"
         f"{_badge(f'{len(graph.edges)} edges', 'neutral')}"
         f"{_badge(graph.provider_label, 'neutral')}"
+        f"{_badge(f'render:{request.render_engine}', 'neutral')}"
+        f"{_badge(f'theme:{request.theme}', 'blue')}"
         f"{diff_summary}{overlay_summary}"
         "</div></header>"
     )
@@ -630,6 +685,8 @@ def _render_explore(graph: GraphFakosGraph, request: GraphFakosRequest) -> str:
     active_query = _active_query_terms(request)
     primary = (
         f"{_filter_toolbar(graph, request, '/explore')}"
+        f"{_workspace_controls(graph, request)}"
+        f"{_local_graph_controls(graph, request, focus)}"
         f"{_graph_canvas(filtered_graph, request, focus.id if focus else None, selected_edge.id if selected_edge else None)}"
         f"{_selection_summary(filtered_graph, focus, selected_edge)}"
         f"{_query_summary(active_query)}"
@@ -638,8 +695,12 @@ def _render_explore(graph: GraphFakosGraph, request: GraphFakosRequest) -> str:
     )
     secondary = (
         _graph_navigator(graph, filtered_graph, request, focus)
+        + _command_palette(graph, request)
+        + _analytics_panel(graph, request)
+        + _export_replay_panel(graph, request)
         + _focus_workflow(graph, request, focus)
         + _knowledge_capture_panel(request, focus)
+        + _graph_action_panel(focus)
         + _inspector(graph, focus, selected_edge)
     )
     return _split(primary, secondary)
@@ -666,6 +727,7 @@ def _render_neighborhood(graph: GraphFakosGraph, request: GraphFakosRequest) -> 
     neighborhood_graph = _graph_with_items(graph, (focus, *neighbors), edges)
     primary = (
         f"{_neighborhood_toolbar(graph, request, focus.id)}"
+        f"{_local_graph_controls(graph, request, focus)}"
         f"{_graph_canvas(neighborhood_graph, request, focus.id, request.selected_edge_id)}"
     )
     primary += _panel(
@@ -675,8 +737,10 @@ def _render_neighborhood(graph: GraphFakosGraph, request: GraphFakosRequest) -> 
     )
     secondary = (
         _graph_navigator(graph, neighborhood_graph, request, focus)
+        + _analytics_panel(graph, request)
         + _focus_workflow(graph, request, focus)
         + _knowledge_capture_panel(request, focus)
+        + _graph_action_panel(focus)
         + _inspector(graph, focus, _selected_edge(graph, request))
     )
     return _split(primary, secondary)
@@ -729,8 +793,10 @@ def _render_path(graph: GraphFakosGraph, request: GraphFakosRequest) -> str:
     )
     secondary = (
         _graph_navigator(graph, path_graph, request, source)
+        + _analytics_panel(graph, request)
         + _focus_workflow(graph, request, source)
         + _knowledge_capture_panel(request, source)
+        + _graph_action_panel(source)
         + _inspector(graph, source, _selected_edge(graph, request))
     )
     return _split(primary, secondary)
@@ -872,6 +938,7 @@ def _render_provider_status(
             + _facet_details(graph),
         ),
         _panel("Graph Health", _graph_health(diagnostics))
+        + _analytics_panel(graph, GraphFakosRequest(screen="provider_status"))
         + _panel(
             "Sample Nodes",
             _node_cards(graph.nodes[:5], GraphFakosRequest(screen="provider_status")),
@@ -1005,14 +1072,175 @@ def _filter_toolbar(
         f"<input name='min_score' value='{escape(filters.get('min_score', ''))}' "
         "placeholder='Min score'>"
         f"{_select('layout', 'Layout', layout_options, request.layout)}"
+        f"{_select('render_engine', 'Renderer', ('svg', 'canvas', 'webgl'), request.render_engine)}"
+        f"{_select('theme', 'Theme', ('default', 'ink', 'paper'), request.theme)}"
         f"<input name='limit' value='{request.limit}' placeholder='Cards'>"
         f"<input name='render_limit' value='{request.render_limit}' placeholder='Canvas'>"
+        f"<input type='hidden' name='saved_view_id' value='{escape(request.saved_view_id)}'>"
+        f"<input type='hidden' name='show_orphans' value='{str(request.show_orphans).lower()}'>"
+        f"<input type='hidden' name='show_neighbor_links' value='{str(request.show_neighbor_links).lower()}'>"
+        f"<input type='hidden' name='edge_clutter' value='{escape(request.edge_clutter)}'>"
+        f"<input type='hidden' name='analytics_overlay' value='{escape(request.analytics_overlay)}'>"
         f"<input type='hidden' name='preset' value='{escape(request.preset_id)}'>"
         f"<input type='hidden' name='focus_node_id' value='{escape(request.focus_node_id or '')}'>"
         f"<input type='hidden' name='selected_edge_id' value='{escape(request.selected_edge_id or '')}'>"
         f"<input type='hidden' name='comparison_graph_id' value='{escape(request.comparison_graph_id or '')}'>"
         "<button type='submit'>Filter</button>"
         "</form></section>"
+    )
+
+
+def _workspace_controls(graph: GraphFakosGraph, request: GraphFakosRequest) -> str:
+    saved_view = GraphFakosSavedView.from_request(
+        request,
+        view_id=request.saved_view_id or "route",
+        label="Current route view",
+    )
+    replay_route = _route_href(
+        request,
+        overrides={"saved_view_id": saved_view.view_id, "render_engine": "svg"},
+    )
+    return (
+        "<section class='gf-toolbar gf-workspace-controls' aria-label='Saved workspace controls'>"
+        "<form method='get' action='/explore'>"
+        f"<input name='saved_view_id' value='{escape(saved_view.view_id)}' placeholder='Saved view id'>"
+        f"{_select('theme', 'Theme', ('default', 'ink', 'paper'), request.theme)}"
+        f"<input type='hidden' name='query' value='{escape(request.query)}'>"
+        f"<input type='hidden' name='layout' value='{escape(request.layout)}'>"
+        f"<input type='hidden' name='focus_node_id' value='{escape(request.focus_node_id or '')}'>"
+        f"<input type='hidden' name='camera_x' value='{request.camera_x if request.camera_x is not None else 0}'>"
+        f"<input type='hidden' name='camera_y' value='{request.camera_y if request.camera_y is not None else 0}'>"
+        f"<input type='hidden' name='camera_zoom' value='{request.camera_zoom if request.camera_zoom is not None else 1}'>"
+        "<button type='submit'>Replay View</button>"
+        f"<a class='gf-inline-link' href='{escape(replay_route)}'>Share route</a>"
+        "</form>"
+        f"{_json_script('data-gf-saved-view', saved_view.to_dict())}"
+        f"<p class='gf-note'>Saved view JSON captures camera, filters, selected lens, renderer, theme, and layout for {escape(graph.provider_label)}.</p>"
+        "</section>"
+    )
+
+
+def _local_graph_controls(
+    graph: GraphFakosGraph,
+    request: GraphFakosRequest,
+    focus: GraphFakosNode | None,
+) -> str:
+    focus_id = focus.id if focus is not None else request.focus_node_id or ""
+    analytics = analyze_graph(graph)
+    return (
+        "<section class='gf-toolbar gf-local-controls' aria-label='Local graph controls'>"
+        "<form method='get' action='/neighborhood'>"
+        f"<input type='hidden' name='focus_node_id' value='{escape(focus_id)}'>"
+        f"<input type='hidden' name='layout' value='{escape(request.layout)}'>"
+        f"<input type='hidden' name='query' value='{escape(request.query)}'>"
+        f"{_select('max_depth', 'Depth', ('1', '2', '3'), str(max(request.max_depth, 1)))}"
+        f"{_select('show_neighbor_links', 'Neighbor links', ('true', 'false'), str(request.show_neighbor_links).lower())}"
+        f"{_select('show_orphans', 'Orphans', ('true', 'false'), str(request.show_orphans).lower())}"
+        f"{_select('edge_clutter', 'Edge clutter', ('normal', 'reduced'), request.edge_clutter)}"
+        f"{_select('analytics_overlay', 'Overlay', ('degree', 'components', 'provenance'), request.analytics_overlay)}"
+        "<button type='submit'>Apply Local Lens</button>"
+        "</form>"
+        f"<p class='gf-note'>Local controls: {analytics.component_count} component(s), "
+        f"{len(analytics.orphan_node_ids)} orphan node(s), max degree {analytics.max_degree}.</p>"
+        "</section>"
+    )
+
+
+def _command_palette(graph: GraphFakosGraph, request: GraphFakosRequest) -> str:
+    saved_queries = (
+        GraphFakosSavedQuery("hubs", "Hubs", "has:score", {"min_score": "0.8"}),
+        GraphFakosSavedQuery("evidence", "Evidence", "has:provenance"),
+        GraphFakosSavedQuery("warnings", "Warnings", "kind:warning"),
+    )
+    query_errors = _query_errors(request.query)
+    rows = []
+    for saved_query in saved_queries:
+        route = _route_href(
+            request.with_screen("explore"),
+            overrides={"query": saved_query.query, **saved_query.filters},
+        )
+        rows.append(
+            f"<div class='gf-route-row'><div>{escape(saved_query.label)}"
+            f"<span class='gf-inline-note'>{escape(saved_query.query)}</span></div>"
+            f"<a class='gf-inline-link' href='{escape(route)}'>Run</a></div>"
+        )
+    error_html = (
+        _panel_body("Query Validation", _list(query_errors))
+        if query_errors
+        else _summary_note("Query validation passed; current graph state is preserved.")
+    )
+    return _panel(
+        "Command Palette",
+        _summary_note(
+            "Run saved queries, jump by route, or use keyboard focus on the search field."
+        )
+        + _html_list(rows)
+        + error_html
+        + _json_script(
+            "data-gf-saved-queries",
+            [item.to_dict() for item in saved_queries],
+        ),
+    )
+
+
+def _query_errors(query: str) -> tuple[str, ...]:
+    try:
+        shlex.split(query)
+    except ValueError as exc:
+        return (f"query parse warning: {exc}",)
+    return ()
+
+
+def _analytics_panel(graph: GraphFakosGraph, request: GraphFakosRequest) -> str:
+    analytics = analyze_graph(graph)
+    body = _badges(
+        (
+            (f"overlay:{request.analytics_overlay}", "blue"),
+            (f"{analytics.component_count} component(s)", "neutral"),
+            (f"max degree {analytics.max_degree}", "accent"),
+        )
+    ) + _key_values(
+        {
+            "average degree": round(analytics.average_degree, 2),
+            "density": round(analytics.density, 4),
+            "hub nodes": len(analytics.hub_node_ids),
+            "orphan nodes": len(analytics.orphan_node_ids),
+        }
+    )
+    if analytics.hub_node_ids:
+        body += _panel_body("Hub Nodes", _list(list(analytics.hub_node_ids[:8])))
+    if analytics.orphan_node_ids:
+        body += _panel_body("Orphans", _list(list(analytics.orphan_node_ids[:8])))
+    return _panel("Analytics Overlay", body)
+
+
+def _export_replay_panel(graph: GraphFakosGraph, request: GraphFakosRequest) -> str:
+    state = GraphFakosSavedView.from_request(
+        request,
+        view_id=request.saved_view_id or "route",
+        label="Current route view",
+    )
+    bundle_preview = {
+        "schema_version": "graphfakos.replay.v1",
+        "bundle_id": f"{graph.graph_id}:{request.screen}",
+        "viewer_state": state.state.to_dict(),
+        "graph_id": graph.graph_id,
+    }
+    return _panel(
+        "Export and Replay",
+        _summary_note(
+            "Static exports stay view-only; replay bundles carry exact graph state for review."
+        )
+        + _key_values(
+            {
+                "share route": _route_href(request),
+                "bundle schema": bundle_preview["schema_version"],
+                "saved view": state.view_id,
+                "nodes": len(graph.nodes),
+                "edges": len(graph.edges),
+            }
+        )
+        + _json_script("data-gf-replay-bundle-preview", bundle_preview),
     )
 
 
@@ -1031,6 +1259,7 @@ def _neighborhood_toolbar(
         "placeholder='Depth'>"
         f"{_select('edge_kind', 'Edge kind', _facet_values(graph, 'edge_kind'), request.filters.get('edge_kind', ''))}"
         f"{_select('layout', 'Layout', ('force', 'circle', 'grouped', 'focus', 'radial', 'hierarchical'), request.layout)}"
+        f"{_select('show_neighbor_links', 'Neighbor links', ('true', 'false'), str(request.show_neighbor_links).lower())}"
         "<button type='submit'>Expand</button>"
         "</form></section>"
     )
@@ -1051,6 +1280,7 @@ def _path_toolbar(
         f"{_select_pairs('target_node_id', 'Target node', node_options, target_id)}"
         f"{_select('edge_kind', 'Edge kind', _facet_values(graph, 'edge_kind'), request.filters.get('edge_kind', ''))}"
         f"{_select('layout', 'Layout', ('force', 'circle', 'grouped', 'focus', 'radial', 'hierarchical'), request.layout)}"
+        f"{_select('edge_clutter', 'Edge clutter', ('normal', 'reduced'), request.edge_clutter)}"
         "<button type='submit'>Find Path</button>"
         "</form></section>"
     )
@@ -1132,11 +1362,13 @@ def _filtered_nodes(
     parsed_query = _parse_query(request.query)
     filters = request.filters
     min_score = _min_score(filters.get("min_score", ""))
+    orphan_node_ids = set(diagnose_graph(graph).orphan_node_ids)
     return tuple(
         node
         for node in graph.nodes
         if _node_matches_query(node, parsed_query)
         and _node_matches_filters(node, filters, min_score)
+        and (request.show_orphans or node.id not in orphan_node_ids)
     )
 
 
@@ -1221,6 +1453,12 @@ def _filter_edges_by_request(
     query_edge_kinds = parsed_query["edge"]
     if query_edge_kinds:
         filtered = tuple(edge for edge in filtered if edge.kind in query_edge_kinds)
+    if not request.show_neighbor_links and request.focus_node_id:
+        filtered = tuple(
+            edge
+            for edge in filtered
+            if request.focus_node_id in {edge.source_id, edge.target_id}
+        )
     return filtered
 
 
@@ -1712,6 +1950,55 @@ def _knowledge_capture_panel(
     )
 
 
+def _graph_action_panel(focus: GraphFakosNode | None) -> str:
+    target_id = focus.id if focus is not None else ""
+    action = _draft_graph_action(target_id)
+    status = _draft_action_status(action)
+    return (
+        "<section class='gf-panel gf-action-panel'>"
+        "<div class='gf-panel-heading'><h3>Graph Authoring</h3>"
+        "<span class='gf-mini-label'>Provider action</span></div>"
+        + _summary_note(
+            "Draft node, edge, merge, and alias requests are provider-neutral; the host owns persistence."
+        )
+        + "<form class='gf-capture-form' method='post' action='/api/action' data-gf-action-form='true'>"
+        f"<label>Action<select name='action_type'>{_graph_action_options()}</select></label>"
+        f"<label>Target<input name='target_id' value='{escape(target_id)}'></label>"
+        "<label>Label<input name='label' placeholder='New node or edge label'></label>"
+        "<label>Body<textarea name='body' rows='3' placeholder='Why should the provider apply this?'></textarea></label>"
+        "<button type='submit'>Queue action</button>"
+        "<p class='gf-capture-status' data-gf-action-status-text='true'></p>"
+        "</form>"
+        f"{_json_script('data-gf-action-template', action.to_dict())}"
+        f"{_json_script('data-gf-action-status', status.to_dict())}"
+        "</section>"
+    )
+
+
+def _draft_graph_action(target_id: str) -> GraphFakosGraphAction:
+    return GraphFakosGraphAction(
+        action_id="draft:route",
+        action_type="draft_node",
+        label="Draft graph note",
+        target_id=target_id,
+    )
+
+
+def _draft_action_status(action: GraphFakosGraphAction) -> GraphFakosActionStatus:
+    return GraphFakosActionStatus(
+        action_id=action.action_id,
+        status="draft",
+        message="GraphFakos can submit this provider-neutral action to a host provider.",
+    )
+
+
+def _graph_action_options() -> str:
+    return "".join(
+        f"<option value='{escape(value)}'>{escape(label)}</option>"
+        for value, label in _GRAPH_ACTION_TYPES
+    )
+
+
 def _focus_workflow(
     graph: GraphFakosGraph,
     request: GraphFakosRequest,
@@ -1824,7 +2111,8 @@ def _graph_canvas(
             f"<line class='gf-edge' data-edge-id='{escape(edge.id)}' "
             f"data-source-id='{escape(edge.source_id)}' data-target-id='{escape(edge.target_id)}' "
             f"data-kind='{escape(edge.kind)}' data-selected='{selected}' "
-            f"data-path='{path_edge}' x1='{x1:.1f}' y1='{y1:.1f}' "
+            f"data-path='{path_edge}' data-clutter='{escape(request.edge_clutter)}' "
+            f"x1='{x1:.1f}' y1='{y1:.1f}' "
             f"x2='{x2:.1f}' y2='{y2:.1f}' marker-end='url(#gf-arrow)'>"
             f"<title>{escape(edge.label or edge.kind)}</title></line>"
             "</a>"
@@ -1857,6 +2145,7 @@ def _graph_canvas(
         f"{_graph_search_panel(graph, request)}"
         f"<p class='gf-note'>Layout {escape(request.layout)}. Rendering {len(graph.nodes)} node(s) "
         f"and {len(graph.edges)} edge(s).</p>"
+        f"{_renderer_notice(request)}"
         f"{_render_budget_panel(request, hidden_nodes, hidden_edges)}"
         f"<div class='gf-canvas-grid'><div class='gf-canvas-shell' tabindex='0' "
         f"data-camera-x='{camera_x:.2f}' data-camera-y='{camera_y:.2f}' "
@@ -1912,6 +2201,17 @@ def _graph_search_panel(graph: GraphFakosGraph, request: GraphFakosRequest) -> s
     )
 
 
+def _renderer_notice(request: GraphFakosRequest) -> str:
+    if request.render_engine == "svg":
+        return ""
+    return (
+        "<p class='gf-note gf-renderer-notice'>"
+        f"Requested renderer {escape(request.render_engine)} is recorded for host workbenches; "
+        "this portable export degrades to the static SVG renderer."
+        "</p>"
+    )
+
+
 def _render_budget_panel(
     request: GraphFakosRequest,
     hidden_nodes: int,
@@ -1959,21 +2259,36 @@ def _graph_minimap(
     height: int,
     selected_id: str | None,
 ) -> str:
-    nodes = ""
-    for node in graph.nodes:
-        if node.id not in positions:
-            continue
-        x, y = positions[node.id]
-        selected = "true" if node.id == selected_id else "false"
-        nodes += (
-            f"<circle cx='{x / width * 180:.1f}' cy='{y / height * 90:.1f}' "
-            f"r='4' data-selected='{selected}'></circle>"
-        )
+    nodes = "".join(
+        _minimap_node(node, positions[node.id], width, height, selected_id)
+        for node in graph.nodes
+        if node.id in positions
+    )
     return (
         "<aside class='gf-minimap' aria-label='Graph minimap'>"
         "<div class='gf-minimap-heading'>Minimap</div>"
-        "<svg viewBox='0 0 180 90' role='img' aria-label='Visible graph minimap'>"
+        f"<svg viewBox='0 0 {_MINIMAP_WIDTH} {_MINIMAP_HEIGHT}' role='img' "
+        "aria-label='Visible graph minimap'>"
         f"{nodes}</svg></aside>"
+    )
+
+
+def _minimap_node(
+    node: GraphFakosNode,
+    position: tuple[float, float],
+    width: int,
+    height: int,
+    selected_id: str | None,
+) -> str:
+    x, y = position
+    selected = "true" if node.id == selected_id else "false"
+    scaled_x = x / width * _MINIMAP_WIDTH
+    scaled_y = y / height * _MINIMAP_HEIGHT
+    return (
+        f"<circle cx='{scaled_x:.1f}' cy='{scaled_y:.1f}' "
+        f"r='{_MINIMAP_NODE_RADIUS}' data-selected='{selected}' "
+        f"data-node-ref='{escape(node.id)}' data-minimap-node-id='{escape(node.id)}'>"
+        f"<title>{escape(node.label)}</title></circle>"
     )
 
 
@@ -2432,10 +2747,7 @@ def _force_positions(
 ) -> dict[str, tuple[float, float]]:
     if not graph.nodes:
         return {}
-    anchor = (
-        focus_node_id
-        or (_preferred_focus_node(graph, GraphFakosRequest()) or graph.nodes[0]).id
-    )
+    anchor = _force_anchor_id(graph, focus_node_id)
     adjacency = _adjacency_map(graph)
     degree_map = _node_degree_map(graph)
     center = (width / 2, height / 2)
@@ -2474,7 +2786,131 @@ def _force_positions(
         )
     for node in graph.nodes:
         positions.setdefault(node.id, center)
-    return positions
+    return _relax_force_positions(graph, positions, anchor, width, height)
+
+
+def _force_anchor_id(graph: GraphFakosGraph, focus_node_id: str | None) -> str:
+    node_ids = {node.id for node in graph.nodes}
+    if focus_node_id and focus_node_id in node_ids:
+        return focus_node_id
+    focus = _preferred_focus_node(graph, GraphFakosRequest())
+    return (focus or graph.nodes[0]).id
+
+
+def _relax_force_positions(
+    graph: GraphFakosGraph,
+    positions: dict[str, tuple[float, float]],
+    anchor: str,
+    width: int,
+    height: int,
+) -> dict[str, tuple[float, float]]:
+    node_ids = [node.id for node in _ranked_nodes(graph, set())]
+    if len(node_ids) <= 2:
+        return _bounded_positions(graph, positions, anchor, width, height)
+    margin = 46.0
+    area = max((width - margin * 2) * (height - margin * 2), 1.0)
+    ideal_distance = sqrt(area / len(node_ids)) * 0.82
+    fixed_ids = {
+        node.id
+        for node in graph.nodes
+        if node.id == anchor
+        or (
+            node.visual.pinned
+            and node.visual.x is not None
+            and node.visual.y is not None
+        )
+    }
+    positions = _bounded_positions(graph, positions, anchor, width, height)
+    for step in range(72):
+        temperature = max(2.5, ideal_distance * (1 - step / 72) * 0.34)
+        shifts = {node_id: [0.0, 0.0] for node_id in node_ids}
+        for left_index, left_id in enumerate(node_ids):
+            left_x, left_y = positions[left_id]
+            for right_id in node_ids[left_index + 1 :]:
+                right_x, right_y = positions[right_id]
+                dx = left_x - right_x
+                dy = left_y - right_y
+                distance = sqrt(dx * dx + dy * dy) or 0.01
+                force = (ideal_distance * ideal_distance) / distance
+                offset_x = dx / distance * force
+                offset_y = dy / distance * force
+                shifts[left_id][0] += offset_x
+                shifts[left_id][1] += offset_y
+                shifts[right_id][0] -= offset_x
+                shifts[right_id][1] -= offset_y
+        for edge in graph.edges:
+            if edge.source_id not in positions or edge.target_id not in positions:
+                continue
+            source_x, source_y = positions[edge.source_id]
+            target_x, target_y = positions[edge.target_id]
+            dx = source_x - target_x
+            dy = source_y - target_y
+            distance = sqrt(dx * dx + dy * dy) or 0.01
+            force = (distance * distance) / max(ideal_distance, 1.0)
+            offset_x = dx / distance * force * 0.62
+            offset_y = dy / distance * force * 0.62
+            shifts[edge.source_id][0] -= offset_x
+            shifts[edge.source_id][1] -= offset_y
+            shifts[edge.target_id][0] += offset_x
+            shifts[edge.target_id][1] += offset_y
+        for node_id in node_ids:
+            if node_id in fixed_ids:
+                continue
+            x, y = positions[node_id]
+            shift_x, shift_y = shifts[node_id]
+            length = sqrt(shift_x * shift_x + shift_y * shift_y) or 1.0
+            move = min(length, temperature)
+            next_x = x + shift_x / length * move
+            next_y = y + shift_y / length * move
+            center_pull = 0.012 if step > 36 else 0.006
+            next_x += (width / 2 - next_x) * center_pull
+            next_y += (height / 2 - next_y) * center_pull
+            positions[node_id] = _bounded_point(next_x, next_y, width, height, margin)
+    return _bounded_positions(graph, positions, anchor, width, height)
+
+
+def _bounded_positions(
+    graph: GraphFakosGraph,
+    positions: dict[str, tuple[float, float]],
+    anchor: str,
+    width: int,
+    height: int,
+) -> dict[str, tuple[float, float]]:
+    bounded: dict[str, tuple[float, float]] = {}
+    margin = 46.0
+    for node in graph.nodes:
+        if node.id == anchor:
+            bounded[node.id] = (width / 2, height / 2)
+            continue
+        if (
+            node.visual.pinned
+            and node.visual.x is not None
+            and node.visual.y is not None
+        ):
+            bounded[node.id] = _bounded_point(
+                node.visual.x,
+                node.visual.y,
+                width,
+                height,
+                margin,
+            )
+            continue
+        x, y = positions.get(node.id, (width / 2, height / 2))
+        bounded[node.id] = _bounded_point(x, y, width, height, margin)
+    return bounded
+
+
+def _bounded_point(
+    x: float,
+    y: float,
+    width: int,
+    height: int,
+    margin: float,
+) -> tuple[float, float]:
+    return (
+        min(max(x, margin), width - margin),
+        min(max(y, margin), height - margin),
+    )
 
 
 def _ring_positions(
@@ -2901,6 +3337,31 @@ body.gf-page {
     "Segoe UI", sans-serif;
   line-height: 1.45;
 }
+body.gf-page[data-theme="ink"] {
+  --gf-bg: #111612;
+  --gf-ink: #eef4ec;
+  --gf-muted: #b5c1b7;
+  --gf-line: #334039;
+  --gf-panel: #171f1a;
+  --gf-soft: #202a24;
+  --gf-accent: #7ad4ba;
+  --gf-accent-soft: #17382f;
+  --gf-blue: #9ec4ff;
+  --gf-blue-soft: #172b46;
+  color-scheme: dark;
+}
+body.gf-page[data-theme="paper"] {
+  --gf-bg: #fbf3df;
+  --gf-ink: #30251b;
+  --gf-muted: #7d6d5e;
+  --gf-line: #eadbc1;
+  --gf-panel: #fffaf0;
+  --gf-soft: #f5ead3;
+  --gf-accent: #9a5f2c;
+  --gf-accent-soft: #f1ddbf;
+  --gf-blue: #596f95;
+  --gf-blue-soft: #dee5f1;
+}
 .gf-shell {
   min-height: 100vh;
   display: grid;
@@ -2908,7 +3369,7 @@ body.gf-page {
 }
 .gf-nav {
   border-right: 1px solid var(--gf-line);
-  background: #fbfcfa;
+  background: var(--gf-panel);
   padding: 20px 14px;
 }
 .gf-nav h1 {
@@ -2999,7 +3460,7 @@ body.gf-page {
   border: 1px solid var(--gf-line);
   border-radius: 8px;
   padding: 10px;
-  background: #fff;
+  background: var(--gf-panel);
   color: var(--gf-ink);
 }
 .gf-preset-card span {
@@ -3078,7 +3539,7 @@ body.gf-page {
 .gf-canvas-tools button {
   border: 1px solid var(--gf-line);
   border-radius: 8px;
-  background: #fff;
+  background: var(--gf-panel);
   color: var(--gf-ink);
   font: inherit;
   font-weight: 700;
@@ -3104,7 +3565,7 @@ body.gf-page {
   border: 1px solid var(--gf-line);
   border-radius: 8px;
   padding: 5px 9px;
-  background: #fff;
+  background: var(--gf-panel);
   font-size: 13px;
   font-weight: 700;
 }
@@ -3131,6 +3592,11 @@ body.gf-page {
 }
 .gf-capture-panel {
   border-color: #c8d8d0;
+}
+.gf-action-panel,
+.gf-workspace-controls,
+.gf-local-controls {
+  border-color: color-mix(in srgb, var(--gf-accent) 24%, var(--gf-line));
 }
 .gf-capture-form {
   display: grid;
@@ -3196,7 +3662,10 @@ body.gf-page {
   min-height: 360px;
   border: 1px solid var(--gf-line);
   border-radius: 8px;
-  background: #fbfcfa;
+  background:
+    radial-gradient(circle at 20px 20px, color-mix(in srgb, var(--gf-line) 34%, transparent) 1px, transparent 1px),
+    var(--gf-panel);
+  background-size: 28px 28px;
   cursor: grab;
   touch-action: none;
 }
@@ -3217,6 +3686,13 @@ body.gf-page {
 .gf-edge[data-path="true"] {
   stroke: var(--gf-accent);
   stroke-width: 3;
+}
+.gf-edge[data-clutter="reduced"] {
+  opacity: .42;
+  stroke-width: 1;
+}
+.gf-edge[data-clutter="hidden"] {
+  opacity: .08;
 }
 .gf-edge:hover {
   stroke: var(--gf-accent);
@@ -3251,12 +3727,16 @@ body.gf-page {
 .gf-node[data-selected="true"] circle,
 .gf-node[data-selected="true"] rect,
 .gf-node[data-selected="true"] polygon,
+.gf-node:hover circle,
+.gf-node:hover rect,
+.gf-node:hover polygon,
 .gf-node[data-highlight="true"] circle,
 .gf-node[data-highlight="true"] rect,
 .gf-node[data-highlight="true"] polygon {
   fill: var(--gf-blue-soft);
   stroke: var(--gf-blue);
   stroke-width: 3;
+  filter: drop-shadow(0 4px 8px rgb(0 0 0 / 18%));
 }
 .gf-node[data-hidden="true"],
 .gf-edge[data-hidden="true"] {
@@ -3275,7 +3755,7 @@ body.gf-page {
 .gf-minimap {
   border: 1px solid var(--gf-line);
   border-radius: 8px;
-  background: #fbfcfa;
+  background: var(--gf-panel);
   padding: 10px;
 }
 .gf-minimap-heading {
@@ -3290,7 +3770,7 @@ body.gf-page {
   width: 100%;
   border: 1px solid var(--gf-line);
   border-radius: 6px;
-  background: #fff;
+  background: var(--gf-panel);
 }
 .gf-minimap circle {
   fill: var(--gf-accent-soft);
@@ -3312,7 +3792,7 @@ body.gf-page {
 .gf-group-fallback a {
   border: 1px solid var(--gf-line);
   border-radius: 999px;
-  background: #fff;
+  background: var(--gf-panel);
   color: var(--gf-muted);
   font: inherit;
   font-size: 12px;
@@ -3334,7 +3814,7 @@ body.gf-page {
   border: 1px solid var(--gf-line);
   border-radius: 8px;
   padding: 12px;
-  background: #fff;
+  background: var(--gf-panel);
   margin-bottom: 10px;
   overflow-wrap: anywhere;
 }
@@ -3373,7 +3853,7 @@ body.gf-page {
   border: 1px solid var(--gf-line);
   border-radius: 8px;
   padding: 9px 10px;
-  background: #fff;
+  background: var(--gf-panel);
   overflow-wrap: anywhere;
 }
 .gf-kv {
@@ -3403,7 +3883,7 @@ body.gf-page {
   display: block;
   border: 1px solid var(--gf-line);
   border-radius: 8px;
-  background: #fbfcfa;
+  background: var(--gf-soft);
   padding: 9px 10px;
   color: var(--gf-ink);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -3424,6 +3904,14 @@ a {
   .gf-command-bar,
   .gf-toolbar form { grid-template-columns: 1fr; }
   .gf-summary { justify-content: flex-start; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gf-edge,
+  .gf-node circle,
+  .gf-node rect,
+  .gf-node polygon {
+    transition: none;
+  }
 }
 </style>
 """

@@ -1,11 +1,19 @@
 from __future__ import annotations
 
+from math import hypot
+import re
+
 import pytest
 
 from graphfakos.adapters import DEMO_SCENARIOS, DemoGraphProvider, build_demo_graph
 from graphfakos.models import GraphFakosKnowledgeCapture, GraphFakosRequest
 from graphfakos.provider import diagnose_graph
 from graphfakos.ui import render_graph_viewer
+
+
+_NODE_POSITION_PATTERN = re.compile(
+    r"data-node-id='([^']+)'.*?data-x='([-0-9.]+)' data-y='([-0-9.]+)'"
+)
 
 
 def test_demo_provider_exposes_visual_iteration_scenarios() -> None:
@@ -96,6 +104,58 @@ def test_demo_core_feature_scenarios_render_matching_ui_screens() -> None:
     assert "Show more" in budget_html
 
 
+def test_dense_demo_force_layout_is_deterministic_bounded_and_spread() -> None:
+    graph = build_demo_graph("dense")
+    request = GraphFakosRequest(screen="explore", layout="force")
+
+    first_positions = _node_positions(render_graph_viewer(graph, request))
+    second_positions = _node_positions(render_graph_viewer(graph, request))
+
+    assert first_positions == second_positions
+    assert set(first_positions) == {node.id for node in graph.nodes}
+    _assert_positions_in_canvas(first_positions)
+    assert _position_spread(first_positions) >= (700.0, 340.0)
+    assert _closest_node_distance(first_positions) >= 18.0
+
+
+def test_core_demo_force_layouts_keep_path_and_islands_readable() -> None:
+    path_positions = _node_positions(
+        render_graph_viewer(
+            build_demo_graph("pathfinding"),
+            GraphFakosRequest(
+                screen="path",
+                layout="force",
+                source_node_id="provider:entry",
+                target_node_id="artifact:result",
+            ),
+        )
+    )
+    islands_positions = _node_positions(
+        render_graph_viewer(
+            build_demo_graph("islands"),
+            GraphFakosRequest(screen="explore", layout="force"),
+        )
+    )
+    memory_positions = _node_positions(
+        render_graph_viewer(
+            build_demo_graph("agent-memory"),
+            GraphFakosRequest(
+                screen="explore",
+                layout="force",
+                focus_node_id="agent:codex",
+            ),
+        )
+    )
+
+    _assert_positions_in_canvas(path_positions)
+    _assert_positions_in_canvas(islands_positions)
+    _assert_positions_in_canvas(memory_positions)
+    assert _distance(path_positions["provider:entry"], (460.0, 230.0)) <= 0.1
+    assert _closest_node_distance(path_positions) >= 100.0
+    assert _closest_node_distance(islands_positions) >= 90.0
+    assert _distance(memory_positions["agent:codex"], (460.0, 230.0)) <= 0.1
+
+
 def test_demo_facets_and_islands_exercise_provider_status() -> None:
     facets = build_demo_graph("facets")
     islands = build_demo_graph("islands")
@@ -114,3 +174,40 @@ def test_demo_facets_and_islands_exercise_provider_status() -> None:
 def test_demo_provider_rejects_unknown_scenarios() -> None:
     with pytest.raises(ValueError, match="Unknown demo scenario"):
         DemoGraphProvider("real-production-data")
+
+
+def _node_positions(html: str) -> dict[str, tuple[float, float]]:
+    return {
+        match.group(1): (float(match.group(2)), float(match.group(3)))
+        for match in _NODE_POSITION_PATTERN.finditer(html)
+    }
+
+
+def _assert_positions_in_canvas(positions: dict[str, tuple[float, float]]) -> None:
+    assert positions
+    assert all(46.0 <= x <= 874.0 for x, _y in positions.values())
+    assert all(46.0 <= y <= 414.0 for _x, y in positions.values())
+
+
+def _position_spread(
+    positions: dict[str, tuple[float, float]],
+) -> tuple[float, float]:
+    xs = [x for x, _y in positions.values()]
+    ys = [y for _x, y in positions.values()]
+    return max(xs) - min(xs), max(ys) - min(ys)
+
+
+def _closest_node_distance(positions: dict[str, tuple[float, float]]) -> float:
+    node_ids = list(positions)
+    return min(
+        _distance(positions[left_id], positions[right_id])
+        for index, left_id in enumerate(node_ids)
+        for right_id in node_ids[index + 1 :]
+    )
+
+
+def _distance(
+    left: tuple[float, float],
+    right: tuple[float, float],
+) -> float:
+    return hypot(left[0] - right[0], left[1] - right[1])

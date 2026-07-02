@@ -14,12 +14,18 @@ from .adapters import (
     FixtureGraphProvider,
 )
 from .models import (
+    GraphFakosActionStatus,
+    GraphFakosGraphAction,
     GraphFakosGraph,
     GraphFakosKnowledgeCapture,
     GraphFakosRequest,
     GraphFakosScreen,
 )
-from .provider import GraphFakosKnowledgeCaptureProvider, GraphFakosProvider
+from .provider import (
+    GraphFakosGraphActionProvider,
+    GraphFakosKnowledgeCaptureProvider,
+    GraphFakosProvider,
+)
 from .server import serve_local_viewer
 from .static import (
     GraphPreviewOutputPaths,
@@ -93,6 +99,13 @@ def _request_from_args(args: argparse.Namespace) -> GraphFakosRequest:
         camera_x=args.camera_x,
         camera_y=args.camera_y,
         camera_zoom=args.camera_zoom,
+        render_engine=args.render_engine,
+        theme=args.theme,
+        saved_view_id=args.saved_view_id,
+        show_orphans=not args.hide_orphans,
+        show_neighbor_links=not args.hide_neighbor_links,
+        edge_clutter=args.edge_clutter,
+        analytics_overlay=args.analytics_overlay,
     )
 
 
@@ -200,6 +213,26 @@ def _handle_provider_action(
     path: str,
     payload: dict[str, object],
 ) -> dict[str, object]:
+    if path == "/api/action":
+        action = GraphFakosGraphAction.from_dict(payload)
+        if not isinstance(provider, GraphFakosGraphActionProvider):
+            status = GraphFakosActionStatus(
+                action_id=action.action_id,
+                status="unsupported",
+                message="provider does not support graph edit actions",
+            )
+            return {"ok": False, "status": status.to_dict(), "action": action.to_dict()}
+        result = provider.submit_graph_action(action)
+        if isinstance(result, GraphFakosActionStatus):
+            return {"ok": True, "status": result.to_dict(), "action": action.to_dict()}
+        if isinstance(result, dict):
+            return {"ok": True, "result": result, "action": action.to_dict()}
+        status = GraphFakosActionStatus(
+            action_id=action.action_id,
+            status="queued",
+            message="provider accepted the graph action",
+        )
+        return {"ok": True, "status": status.to_dict(), "action": action.to_dict()}
     if path != "/api/knowledge":
         return {"ok": False, "error": f"unsupported GraphFakos action path: {path}"}
     capture = GraphFakosKnowledgeCapture.from_dict(payload)
@@ -213,6 +246,12 @@ def _handle_provider_action(
     response: dict[str, object] = {"ok": True, "capture": capture.to_dict()}
     if isinstance(result, GraphFakosGraph):
         response["graph"] = result.to_dict()
+        response["status"] = GraphFakosActionStatus(
+            action_id=f"capture:{capture.link_node_id or 'graph'}",
+            status="done",
+            message="knowledge capture was applied by the provider",
+            graph_id=result.graph_id,
+        ).to_dict()
     elif isinstance(result, dict):
         response["result"] = result
     elif result is not None:
@@ -242,12 +281,20 @@ def ui_preview_main(argv: list[str] | None = None) -> int:
     parser.add_argument("--camera-x", type=float)
     parser.add_argument("--camera-y", type=float)
     parser.add_argument("--camera-zoom", type=float)
+    parser.add_argument("--render-engine", default="svg")
+    parser.add_argument("--theme", default="default")
+    parser.add_argument("--saved-view-id", default="")
+    parser.add_argument("--hide-orphans", action="store_true")
+    parser.add_argument("--hide-neighbor-links", action="store_true")
+    parser.add_argument("--edge-clutter", default="normal")
+    parser.add_argument("--analytics-overlay", default="degree")
     parser.add_argument("--html-out", default="graphfakos-ui-preview.html")
     parser.add_argument("--artifact-out", default="")
     parser.add_argument("--embed-out", default="")
     parser.add_argument("--report-out", default="")
     parser.add_argument("--markdown-report-out", default="")
     parser.add_argument("--dot-out", default="")
+    parser.add_argument("--bundle-out", default="")
     parser.add_argument("--demo-scenario", choices=DEMO_SCENARIOS, default="")
     parser.add_argument("--graph-json", default="")
     parser.add_argument("--comparison-graph-json", default="")
@@ -301,6 +348,7 @@ def ui_preview_main(argv: list[str] | None = None) -> int:
             report_path=args.report_out,
             markdown_report_path=args.markdown_report_out,
             dot_path=args.dot_out,
+            bundle_path=args.bundle_out,
         ),
         open_browser=args.open,
     )

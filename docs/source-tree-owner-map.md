@@ -59,6 +59,8 @@ and `graphfakos.ui`.
   screen layouts
 - `src/graphfakos/adapters/file.py`: file-backed provider for persisted graph
   artifacts
+- `src/graphfakos/adapters/demo.py`: deterministic generated demo graphs for
+  viewer iteration
 - `src/graphfakos/adapters/fixture.py`: fake third-party provider
 - `src/graphfakos/testing/assertions.py`: reusable viewer assertions
 
@@ -72,3 +74,4 @@ and `graphfakos.ui`.
 - `tests/test_artifacts.py`: artifact round-trip and file-backed provider proof
 - `tests/test_release_check.py`: release script shape
 - `tests/test_fixture_adapter.py`: fake third-party provider compatibility
+- `tests/test_demo_adapter.py`: generated demo provider scenarios

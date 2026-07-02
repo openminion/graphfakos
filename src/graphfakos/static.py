@@ -8,7 +8,7 @@ from pathlib import Path
 import webbrowser
 
 from .artifacts import write_graph_artifact
-from .models import GraphFakosGraph, GraphFakosRequest
+from .models import GraphFakosGraph, GraphFakosRequest, GraphFakosViewerState
 from .provider import (
     GraphFakosProvider,
     diagnose_graph,
@@ -74,6 +74,7 @@ def _graph_report_payload(
 ) -> dict[str, object]:
     report: dict[str, object] = {
         "request": request.to_dict(),
+        "viewer_state": GraphFakosViewerState.from_request(request).to_dict(),
         "graph": graph.to_dict(),
         "diagnostics": diagnose_graph(graph).to_dict(),
         "screen_manifest": list(screen_manifest()),

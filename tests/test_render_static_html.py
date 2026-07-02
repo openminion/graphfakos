@@ -24,6 +24,31 @@ def test_static_viewer_renders_graph_canvas_and_inspector() -> None:
     assert "Neighborhood" in html
     assert "Provider Status" in html
     assert "Visible Graph" in html
+    assert "data-gf-camera='zoom-in'" in html
+    assert "aria-label='Graph search palette'" in html
+    assert "aria-label='Graph minimap'" in html
+    assert "aria-label='Graph view lenses'" in html
+    assert "Capture Knowledge" in html
+    assert "data-gf-knowledge-form='true'" in html
+    assert "gf-viewport" in html
+    assert "<graphfakos-viewer" in html
+    assert "data-state-json=" in html
+    assert 'customElements.define("graphfakos-viewer"' in html
+    assert "<script>" in html
+
+
+def test_static_viewer_keeps_no_javascript_svg_fallback() -> None:
+    html = render_static_html(
+        FixtureGraphProvider(),
+        GraphFakosRequest(camera_x=12.5, camera_y=-4.0, camera_zoom=1.4),
+    )
+
+    assert "data-camera-x='12.50'" in html
+    assert "data-camera-y='-4.00'" in html
+    assert "data-camera-zoom='1.40'" in html
+    assert "transform='translate(12.50 -4.00) scale(1.40)'" in html
+    assert "Saved view" in html
+    assert "camera_zoom=1.4" in html
 
 
 def test_provider_status_screen_renders_capabilities() -> None:
@@ -105,6 +130,20 @@ def test_path_screen_renders_source_target_controls() -> None:
     assert "Target node" in html
     assert "edge hop(s) connect" in html
     assert "Route starts at provider:third-party" in html
+    assert "data-path='true'" in html
+    assert "Capture Knowledge" in html
+
+
+def test_explore_screen_renders_new_layout_and_group_controls() -> None:
+    html = render_static_html(
+        FixtureGraphProvider(),
+        GraphFakosRequest(screen="explore", layout="radial"),
+    )
+
+    assert "Radial layout" in html
+    assert "data-gf-group='artifact'" in html
+    assert "data-kind='document'" in html
+    assert "marker-end='url(#gf-arrow)'" in html
 
 
 def test_context_preview_screen_renders_ranked_context_cards() -> None:
@@ -142,6 +181,7 @@ def test_embeddable_html_renders_fragment_only() -> None:
     assert "data-graphfakos-embed='true'" in html
     assert "data-graphfakos-screen='explore'" in html
     assert "<main class='gf-content gf-embed-root'" in html
+    assert "<graphfakos-viewer" in html
     assert "<!doctype html>" not in html
     assert "Deep link:" in html
 

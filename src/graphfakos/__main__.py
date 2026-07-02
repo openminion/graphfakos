@@ -8,7 +8,7 @@ from .cli import main, ui_preview_main
 
 
 def _dispatch(argv: list[str]) -> int:
-    if argv and argv[0] == "ui-preview":
+    if argv and argv[0] in {"ui", "ui-preview"}:
         return ui_preview_main(argv[1:])
     return main(argv)
 

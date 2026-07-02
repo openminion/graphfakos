@@ -21,6 +21,10 @@ jobs:
         with:
           python-version: "3.11"
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
       - name: Install dev environment
         run: make dev-install
 
@@ -91,6 +95,9 @@ jobs:
 
       - name: Run package check
         run: make check
+
+      - name: Run browser runtime harness
+        run: make browser-test
 
       - name: Run release smoke
         run: make release-check

@@ -29,7 +29,15 @@ viewer contract tests belong here.
 
 ## Viewer Surface
 
-The initial workbench is dependency-free static HTML with local-server routing.
+The workbench is dependency-free static HTML with local-server routing and
+progressive client-side enhancement. Without JavaScript, exported files still
+render the static SVG graph, route links, filters, inspectors, and reports.
+When JavaScript is available, the same SVG gains camera controls, dragging,
+group toggles, keyboard shortcuts, minimap orientation, and saved-view links.
+The browser behavior is packaged as a reusable `assets/viewer.js` runtime and
+mounted through a framework-neutral `<graphfakos-viewer>` custom element, so
+host packages can embed the viewer without copying GraphFakos HTML.
+
 It supports:
 
 - explore, neighborhood, path, provenance, timeline, diff, provider-status,
@@ -39,13 +47,26 @@ It supports:
   focus, evidence, diff, graph-health, timeline, and context flows,
 - search plus node-kind, edge-kind, tag, source, and score filters,
 - public deep-link helpers for building or parsing stable viewer routes,
+- camera-aware deep links through `camera_x`, `camera_y`, and `camera_zoom`,
+- serializable viewer state plus provider-neutral viewer command, event,
+  expansion-request, knowledge-capture, and theme DTOs,
+- package-owned browser runtime helpers through `viewer_runtime_script()`,
+- an SVG renderer contract with clear rejection for unsupported future engines,
 - public query syntax guidance for `kind:`, `tag:`, `source:`, `edge:`,
   `id:`, `label:`, `summary:`, `has:`, quoted phrases, `score>=`, and
   `time>=` tokens,
-- clickable nodes and edges with inspector details,
-- hub-aware navigator panels for larger graphs,
+- clickable nodes and edges with inspector details, selected-path emphasis,
+  provider-neutral shapes, edge arrows, and side-panel cross-highlighting,
+- pan, zoom, fit, reset, fullscreen, and drag controls layered over the static
+  SVG canvas,
+- minimap orientation, group toggles, and render-budget fallback links for
+  larger visible graphs,
+- hub-aware navigator panels for global, local-depth, evidence, path, status,
+  and context graph lenses,
 - depth-aware neighborhoods,
 - path source/target controls,
+- preview-server knowledge capture forms for provider-owned notes, code
+  observations, questions, or memory hints,
 - snapshot metadata plus provider-owned comparison and overlay workflows,
 - provenance and citation panels with evidence coverage summaries, and
 - provider capability/status summaries.
@@ -64,10 +85,89 @@ common DTO.
 
 ## Provider Examples
 
-Fake third-party provider:
+Launch the dynamic viewer locally:
 
 ```bash
-graphfakos-ui --screen explore --html-out graphfakos-ui-preview.html --json
+make preview
+```
+
+This serves the viewer through GraphFakos' local HTTP preview server and opens a
+browser. Server mode is the interactive workbench path: internal navigation and
+GET forms request GraphFakos fragments and update the viewer in place. Providers
+that implement the optional capture protocol can also accept notes from the
+`Capture Knowledge` panel and refresh the graph. Use `Ctrl-C` to stop it.
+
+Write a repo-local portable static export:
+
+```bash
+make preview-html
+```
+
+The generated files live under `.graphfakos-preview/`, which is intentionally
+gitignored. Use this path when you need a shareable HTML export or static
+fallback artifact. Static exports are view-only; run the local preview server
+for note capture or provider-backed graph refreshes.
+
+Iterate UI behavior with generated mock data:
+
+```bash
+make preview-demo
+make preview-dense
+make preview-timeline
+make preview-warnings
+make preview-path
+make preview-provenance
+make preview-budget
+make preview-islands
+```
+
+The demo provider is deterministic and package-local. It can simulate
+agent-memory, source-code, dense-cluster, timeline, provider-warning,
+pathfinding, evidence-heavy, facet-rich, render-budget, and disconnected-island
+graph shapes without Sophiagraph, PragmaGraph, OpenMinion, or external data.
+
+Core-feature scenario map:
+
+- `pathfinding`: path screen, source/target controls, shortest-path highlight.
+- `provenance`: provenance screen, citation cards, evidence coverage.
+- `facets`: filter controls across node kind, edge kind, tag, and source.
+- `budget`: render-limit behavior, summarized hidden nodes, show-more route.
+- `islands`: provider-status diagnostics for disconnected components.
+- `agent-memory`: graph-side knowledge capture beside an agent/memory graph.
+
+To test the capture loop, run `make preview-demo`, enter a note in
+`Capture Knowledge`, and submit it. `DemoGraphProvider` stores captures in
+memory for that server session and renders them back as linked graph nodes. A
+real provider can persist the same `GraphFakosKnowledgeCapture` payload, enqueue
+a worker, rebuild a source/code graph, or maintain a durable knowledge graph
+outside GraphFakos.
+
+Manual scenario selection:
+
+```bash
+graphfakos-ui --demo-scenario source-code --screen explore --serve --open
+graphfakos-ui --demo-scenario dense --screen explore --layout grouped --render-limit 240 --serve --open
+graphfakos-ui --demo-scenario timeline --screen timeline --layout timeline --serve --open
+graphfakos-ui --demo-scenario pathfinding --screen path --source-node-id provider:entry --target-node-id artifact:result --serve --open
+```
+
+Fake third-party provider static export:
+
+```bash
+graphfakos-ui --screen explore --html-out .graphfakos-preview/graphfakos-ui-preview.html --json
+```
+
+Camera-aware saved view:
+
+```bash
+graphfakos-ui \
+  --screen explore \
+  --layout radial \
+  --camera-x 20 \
+  --camera-y -10 \
+  --camera-zoom 1.25 \
+  --html-out .graphfakos-preview/graphfakos-saved-view.html \
+  --json
 ```
 
 Diff plus embed/report example:

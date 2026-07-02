@@ -9,10 +9,12 @@ def test_graphfakos_package_imports() -> None:
     import graphfakos
     import graphfakos.artifacts
     import graphfakos.adapters
+    import graphfakos.browser
     import graphfakos.contracts
     import graphfakos.models
     import graphfakos.provider
     import graphfakos.render
+    import graphfakos.renderers
     import graphfakos.server
     import graphfakos.static
     import graphfakos.testing
@@ -21,10 +23,17 @@ def test_graphfakos_package_imports() -> None:
     assert graphfakos.__version__ == "0.0.1"
     assert graphfakos.PACKAGE_STATUS == "semantic-alpha"
     assert "graphfakos.artifacts" in graphfakos.STABLE_IMPORT_ROOTS
+    assert "graphfakos.browser" in graphfakos.STABLE_IMPORT_ROOTS
     assert "graphfakos.models" in graphfakos.STABLE_IMPORT_ROOTS
     assert "graphfakos.contracts" in graphfakos.STABLE_IMPORT_ROOTS
     assert "graphfakos.render" in graphfakos.STABLE_IMPORT_ROOTS
+    assert "graphfakos.renderers" in graphfakos.STABLE_IMPORT_ROOTS
     assert "GraphFakosDiagnostics" in graphfakos.__all__
+    assert "DemoGraphProvider" in graphfakos.__all__
+    assert "DEMO_SCENARIOS" in graphfakos.__all__
+    assert "GraphFakosViewerState" in graphfakos.__all__
+    assert "GraphFakosKnowledgeCapture" in graphfakos.__all__
+    assert "GraphFakosKnowledgeCaptureProvider" in graphfakos.__all__
     assert "FileGraphProvider" in graphfakos.__all__
     assert "GraphFakosGraph" in graphfakos.__all__
     assert "GraphPreviewOutputPaths" in graphfakos.__all__
@@ -35,16 +44,20 @@ def test_graphfakos_package_imports() -> None:
     assert "write_provider_preview_outputs" in graphfakos.__all__
     assert "FileGraphProvider" in graphfakos.adapters.__all__
     assert "FixtureGraphProvider" in graphfakos.adapters.__all__
+    assert "DemoGraphProvider" in graphfakos.adapters.__all__
     assert "query_syntax_reference" in graphfakos.ui.__all__
     assert "review_preset_manifest" in graphfakos.ui.__all__
     assert "render_graph_fragment" in graphfakos.ui.__all__
     assert "render_graph_viewer" in graphfakos.ui.__all__
     assert "GraphFakosProvider" in graphfakos.contracts.__all__
+    assert "GraphFakosKnowledgeCapture" in graphfakos.contracts.__all__
     assert "screen_manifest" in graphfakos.render.__all__
     assert "render_graph_dot" in graphfakos.render.__all__
     assert "GraphPreviewOutputPaths" in graphfakos.render.__all__
     assert "write_provider_preview_outputs" in graphfakos.render.__all__
     assert "write_graph_dot" in graphfakos.__all__
+    assert "viewer_runtime_script" in graphfakos.browser.__all__
+    assert "validate_render_engine" in graphfakos.renderers.__all__
 
 
 def test_graphfakos_screen_manifest_is_public() -> None:

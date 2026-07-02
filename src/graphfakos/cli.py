@@ -7,15 +7,25 @@ import importlib
 import json
 from typing import Any
 
-from .adapters import FileGraphProvider, FixtureGraphProvider
-from .models import GraphFakosRequest, GraphFakosScreen
-from .provider import GraphFakosProvider
+from .adapters import (
+    DEMO_SCENARIOS,
+    DemoGraphProvider,
+    FileGraphProvider,
+    FixtureGraphProvider,
+)
+from .models import (
+    GraphFakosGraph,
+    GraphFakosKnowledgeCapture,
+    GraphFakosRequest,
+    GraphFakosScreen,
+)
+from .provider import GraphFakosKnowledgeCaptureProvider, GraphFakosProvider
 from .server import serve_local_viewer
 from .static import (
     GraphPreviewOutputPaths,
     write_provider_preview_outputs,
 )
-from .ui import render_provider_path
+from .ui import render_provider_path, render_provider_path_fragment
 
 _SCREENS: tuple[GraphFakosScreen, ...] = (
     "explore",
@@ -40,10 +50,12 @@ def smoke_payload() -> dict[str, object]:
             "graphfakos",
             "graphfakos.artifacts",
             "graphfakos.adapters",
+            "graphfakos.browser",
             "graphfakos.contracts",
             "graphfakos.models",
             "graphfakos.provider",
             "graphfakos.render",
+            "graphfakos.renderers",
             "graphfakos.server",
             "graphfakos.static",
             "graphfakos.testing",
@@ -78,6 +90,9 @@ def _request_from_args(args: argparse.Namespace) -> GraphFakosRequest:
         layout=args.layout,
         limit=args.limit,
         render_limit=args.render_limit,
+        camera_x=args.camera_x,
+        camera_y=args.camera_y,
+        camera_zoom=args.camera_zoom,
     )
 
 
@@ -90,6 +105,11 @@ def _print_payload(payload: object, *, as_json: bool) -> None:
 
 def _provider_from_args(args: argparse.Namespace) -> GraphFakosProvider:
     _validate_provider_args(args)
+    if args.demo_scenario:
+        try:
+            return DemoGraphProvider(args.demo_scenario)
+        except ValueError as exc:
+            raise SystemExit(str(exc)) from exc
     if args.graph_json:
         try:
             provider = FileGraphProvider(
@@ -155,6 +175,10 @@ def _provider_config(raw_payload: str) -> dict[str, Any]:
 
 
 def _validate_provider_args(args: argparse.Namespace) -> None:
+    if args.demo_scenario and (args.graph_json or args.provider_module):
+        raise SystemExit(
+            "--demo-scenario cannot be combined with --graph-json or --provider-module"
+        )
     if args.graph_json and args.provider_module:
         raise SystemExit("--graph-json cannot be combined with --provider-module")
     if args.comparison_graph_json and not args.graph_json:
@@ -169,6 +193,31 @@ def _validate_provider_args(args: argparse.Namespace) -> None:
         and not args.graph_json
     ):
         raise SystemExit("--provider-class requires --provider-module")
+
+
+def _handle_provider_action(
+    provider: GraphFakosProvider,
+    path: str,
+    payload: dict[str, object],
+) -> dict[str, object]:
+    if path != "/api/knowledge":
+        return {"ok": False, "error": f"unsupported GraphFakos action path: {path}"}
+    capture = GraphFakosKnowledgeCapture.from_dict(payload)
+    if not isinstance(provider, GraphFakosKnowledgeCaptureProvider):
+        return {
+            "ok": False,
+            "error": "provider does not support workbench knowledge capture",
+            "capture": capture.to_dict(),
+        }
+    result = provider.capture_knowledge(capture)
+    response: dict[str, object] = {"ok": True, "capture": capture.to_dict()}
+    if isinstance(result, GraphFakosGraph):
+        response["graph"] = result.to_dict()
+    elif isinstance(result, dict):
+        response["result"] = result
+    elif result is not None:
+        response["result"] = {"value": str(result)}
+    return response
 
 
 def ui_preview_main(argv: list[str] | None = None) -> int:
@@ -190,12 +239,16 @@ def ui_preview_main(argv: list[str] | None = None) -> int:
     parser.add_argument("--layout", default="force")
     parser.add_argument("--limit", type=int, default=25)
     parser.add_argument("--render-limit", type=int, default=120)
+    parser.add_argument("--camera-x", type=float)
+    parser.add_argument("--camera-y", type=float)
+    parser.add_argument("--camera-zoom", type=float)
     parser.add_argument("--html-out", default="graphfakos-ui-preview.html")
     parser.add_argument("--artifact-out", default="")
     parser.add_argument("--embed-out", default="")
     parser.add_argument("--report-out", default="")
     parser.add_argument("--markdown-report-out", default="")
     parser.add_argument("--dot-out", default="")
+    parser.add_argument("--demo-scenario", choices=DEMO_SCENARIOS, default="")
     parser.add_argument("--graph-json", default="")
     parser.add_argument("--comparison-graph-json", default="")
     parser.add_argument("--overlay-graph-json", action="append", default=[])
@@ -218,6 +271,17 @@ def ui_preview_main(argv: list[str] | None = None) -> int:
                 request,
                 path,
                 query,
+            ),
+            render_fragment_path=lambda path, query: render_provider_path_fragment(
+                provider,
+                request,
+                path,
+                query,
+            ),
+            handle_action=lambda path, payload: _handle_provider_action(
+                provider,
+                path,
+                payload,
             ),
             default_path=f"/{request.screen}",
             host=args.host,

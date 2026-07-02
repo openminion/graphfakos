@@ -23,6 +23,7 @@ from .ui import (
     render_graph_fragment,
     render_graph_viewer,
     render_provider_path,
+    render_provider_path_fragment,
     review_preset_manifest,
     screen_manifest,
 )
@@ -40,6 +41,7 @@ __all__ = [
     "render_graph_fragment",
     "render_graph_viewer",
     "render_provider_path",
+    "render_provider_path_fragment",
     "render_static_html",
     "review_preset_manifest",
     "screen_manifest",

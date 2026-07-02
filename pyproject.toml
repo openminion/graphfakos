@@ -60,7 +60,7 @@ package-dir = { "" = "src" }
 where = ["src"]
 
 [tool.setuptools.package-data]
-graphfakos = ["py.typed"]
+graphfakos = ["py.typed", "assets/*.js"]
 
 [tool.pytest.ini_options]
 addopts = "--import-mode=importlib"

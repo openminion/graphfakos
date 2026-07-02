@@ -8,9 +8,15 @@ from graphfakos import (
     build_fixture_graph,
     build_viewer_route,
     GraphFakosEdge,
+    GraphFakosExpansionRequest,
     GraphFakosGraph,
+    GraphFakosKnowledgeCapture,
     GraphFakosNode,
     GraphFakosRequest,
+    GraphFakosTheme,
+    GraphFakosViewerCommand,
+    GraphFakosViewerEvent,
+    GraphFakosViewerState,
     diagnose_graph,
     load_comparison_graph,
     load_overlay_graphs,
@@ -20,7 +26,9 @@ from graphfakos import (
     render_graph_dot,
     render_static_html,
     review_preset_manifest,
+    SUPPORTED_RENDER_ENGINES,
     validate_graph,
+    validate_render_engine,
 )
 from graphfakos.testing import assert_graph_dot_contract, assert_review_preset_contract
 
@@ -179,6 +187,7 @@ def test_build_graph_report_includes_overlay_and_comparison() -> None:
     assert report["comparison_diff"]["summary"]["changed node count"] == 0
     assert report["overlay_graphs"][0]["provider_label"] == "Overlay Provider"
     assert report["request"]["screen"] == "diff"
+    assert report["viewer_state"]["screen"] == "diff"
     assert report["graph"]["snapshot"]["snapshot_id"] == "fixture-current"
 
 
@@ -190,6 +199,9 @@ def test_viewer_route_helpers_are_public_and_stable() -> None:
         focus_node_id="node:one",
         comparison_graph_id="baseline",
         render_limit=80,
+        camera_x=11.25,
+        camera_y=-3.5,
+        camera_zoom=1.3,
     )
 
     route = build_viewer_route(request)
@@ -201,6 +213,9 @@ def test_viewer_route_helpers_are_public_and_stable() -> None:
             "focus_node_id": ["node:one"],
             "comparison_graph_id": ["baseline"],
             "render_limit": ["80"],
+            "camera_x": ["11.25"],
+            "camera_y": ["-3.5"],
+            "camera_zoom": ["1.3"],
         },
     )
 
@@ -209,6 +224,86 @@ def test_viewer_route_helpers_are_public_and_stable() -> None:
     assert parsed.preset_id == "diff"
     assert parsed.comparison_graph_id == "baseline"
     assert parsed.render_limit == 80
+    assert parsed.camera_x == 11.25
+    assert parsed.camera_y == -3.5
+    assert parsed.camera_zoom == 1.3
+
+
+def test_dynamic_viewer_contracts_round_trip() -> None:
+    request = GraphFakosRequest(
+        screen="explore",
+        focus_node_id="provider:third-party",
+        selected_edge_id="edge:provider-serves-spec",
+        layout="radial",
+        filters={"node_kind": "provider"},
+        camera_x=4.5,
+        camera_y=-2.0,
+        camera_zoom=1.4,
+    )
+
+    state = GraphFakosViewerState.from_request(request)
+    rebuilt_state = GraphFakosViewerState.from_dict(state.to_dict())
+    command = GraphFakosViewerCommand(
+        name="filter",
+        target_id="node_kind",
+        payload={"value": "provider"},
+    )
+    event = GraphFakosViewerEvent(
+        name="graphfakos:filter",
+        state=rebuilt_state,
+        target_id="node_kind",
+        payload={"value": "provider"},
+    )
+    expansion = GraphFakosExpansionRequest(source_id="provider:third-party", depth=2)
+    theme = GraphFakosTheme(
+        id="review",
+        label="Review",
+        node_colors={"provider": "#0f766e"},
+        edge_colors={"serves": "#64748b"},
+        node_shapes={"provider": "square"},
+    )
+
+    assert rebuilt_state.selected_node_id == "provider:third-party"
+    assert rebuilt_state.to_route_query()["node_kind"] == "provider"
+    assert GraphFakosViewerCommand.from_dict(command.to_dict()).payload == {
+        "value": "provider"
+    }
+    assert GraphFakosViewerEvent.from_dict(event.to_dict()).state.camera_zoom == 1.4
+    assert GraphFakosExpansionRequest.from_dict(expansion.to_dict()).depth == 2
+    assert "node color provider: #0f766e" in theme.caption()
+
+
+def test_knowledge_capture_contract_round_trips_provider_payload() -> None:
+    capture = GraphFakosKnowledgeCapture(
+        text="Remember that graph navigation needs local depth controls.",
+        kind="note",
+        tags=("ui", "graph"),
+        source="workbench",
+        link_node_id="provider:third-party",
+        link_edge_kind="mentions",
+        provider_payload={"screen": "explore"},
+    )
+
+    rebuilt = GraphFakosKnowledgeCapture.from_dict(capture.to_dict())
+    parsed_tags = GraphFakosKnowledgeCapture.from_dict(
+        {
+            "text": "Comma tags are accepted from lightweight clients.",
+            "tags": "one, two",
+        }
+    )
+
+    assert rebuilt.text.startswith("Remember")
+    assert rebuilt.tags == ("ui", "graph")
+    assert rebuilt.provider_payload["screen"] == "explore"
+    assert parsed_tags.tags == ("one", "two")
+
+
+def test_renderer_selection_contract_rejects_unsupported_engines() -> None:
+    assert SUPPORTED_RENDER_ENGINES == ("svg",)
+    assert validate_render_engine("svg") == "svg"
+
+    with pytest.raises(ValueError, match="unsupported GraphFakos render engine"):
+        validate_render_engine("webgl")
 
 
 def test_review_preset_manifest_exposes_shared_review_flows() -> None:

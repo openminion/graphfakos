@@ -23,6 +23,7 @@ class GraphFakosViewerState:
     screen: str = "explore"
     layout: str = "force"
     selected_node_id: str | None = None
+    selected_node_ids: tuple[str, ...] = ()
     selected_edge_id: str | None = None
     camera_x: float = 0.0
     camera_y: float = 0.0
@@ -37,6 +38,27 @@ class GraphFakosViewerState:
     show_neighbor_links: bool = True
     edge_clutter: str = "normal"
     analytics_overlay: str = "degree"
+    center_force: float = 0.012
+    repel_force: float = 1.0
+    link_distance: float = 1.0
+    node_scale: float = 1.0
+    edge_scale: float = 1.0
+    edge_opacity: float = 1.0
+    label_density: float = 1.0
+    pinned_positions: dict[str, tuple[float, float]] = field(default_factory=dict)
+    style_color_by: str = "kind"
+    style_size_by: str = "score"
+    style_edge_width_by: str = "kind"
+    min_degree: int | None = None
+    max_degree: int | None = None
+    component_id: str = ""
+    connected_to_node_id: str = ""
+    evidence_filter: str = ""
+    cluster_id: str = ""
+    timeline_frame: str = ""
+    timeline_playback: str = "stopped"
+    pivot_node_id: str = ""
+    pivot_mode: str = ""
 
     @classmethod
     def from_request(cls, request: GraphFakosRequest) -> GraphFakosViewerState:
@@ -44,6 +66,7 @@ class GraphFakosViewerState:
             screen=request.screen,
             layout=request.layout,
             selected_node_id=request.focus_node_id,
+            selected_node_ids=request.selected_node_ids,
             selected_edge_id=request.selected_edge_id,
             camera_x=request.camera_x if request.camera_x is not None else 0.0,
             camera_y=request.camera_y if request.camera_y is not None else 0.0,
@@ -56,6 +79,27 @@ class GraphFakosViewerState:
             show_neighbor_links=request.show_neighbor_links,
             edge_clutter=request.edge_clutter,
             analytics_overlay=request.analytics_overlay,
+            center_force=request.center_force,
+            repel_force=request.repel_force,
+            link_distance=request.link_distance,
+            node_scale=request.node_scale,
+            edge_scale=request.edge_scale,
+            edge_opacity=request.edge_opacity,
+            label_density=request.label_density,
+            pinned_positions=dict(request.pinned_positions),
+            style_color_by=request.style_color_by,
+            style_size_by=request.style_size_by,
+            style_edge_width_by=request.style_edge_width_by,
+            min_degree=request.min_degree,
+            max_degree=request.max_degree,
+            component_id=request.component_id,
+            connected_to_node_id=request.connected_to_node_id,
+            evidence_filter=request.evidence_filter,
+            cluster_id=request.cluster_id,
+            timeline_frame=request.timeline_frame,
+            timeline_playback=request.timeline_playback,
+            pivot_node_id=request.pivot_node_id,
+            pivot_mode=request.pivot_mode,
         )
 
     def to_route_query(self) -> dict[str, object]:
@@ -71,9 +115,31 @@ class GraphFakosViewerState:
             "show_neighbor_links": self.show_neighbor_links,
             "edge_clutter": self.edge_clutter,
             "analytics_overlay": self.analytics_overlay,
+            "center_force": self.center_force,
+            "repel_force": self.repel_force,
+            "link_distance": self.link_distance,
+            "node_scale": self.node_scale,
+            "edge_scale": self.edge_scale,
+            "edge_opacity": self.edge_opacity,
+            "label_density": self.label_density,
+            "style_color_by": self.style_color_by,
+            "style_size_by": self.style_size_by,
+            "style_edge_width_by": self.style_edge_width_by,
+            "min_degree": self.min_degree,
+            "max_degree": self.max_degree,
+            "component_id": self.component_id,
+            "connected_to_node_id": self.connected_to_node_id,
+            "evidence_filter": self.evidence_filter,
+            "cluster_id": self.cluster_id,
+            "timeline_frame": self.timeline_frame,
+            "timeline_playback": self.timeline_playback,
+            "pivot_node_id": self.pivot_node_id,
+            "pivot_mode": self.pivot_mode,
         }
         if self.selected_node_id:
             payload["focus_node_id"] = self.selected_node_id
+        if self.selected_node_ids:
+            payload["selected_node_ids"] = ",".join(self.selected_node_ids)
         if self.selected_edge_id:
             payload["selected_edge_id"] = self.selected_edge_id
         if self.saved_view_id:
@@ -90,6 +156,7 @@ class GraphFakosViewerState:
             "screen": self.screen,
             "layout": self.layout,
             "selected_node_id": self.selected_node_id,
+            "selected_node_ids": list(self.selected_node_ids),
             "selected_edge_id": self.selected_edge_id,
             "camera_x": self.camera_x,
             "camera_y": self.camera_y,
@@ -104,6 +171,30 @@ class GraphFakosViewerState:
             "show_neighbor_links": self.show_neighbor_links,
             "edge_clutter": self.edge_clutter,
             "analytics_overlay": self.analytics_overlay,
+            "center_force": self.center_force,
+            "repel_force": self.repel_force,
+            "link_distance": self.link_distance,
+            "node_scale": self.node_scale,
+            "edge_scale": self.edge_scale,
+            "edge_opacity": self.edge_opacity,
+            "label_density": self.label_density,
+            "pinned_positions": {
+                node_id: [x, y]
+                for node_id, (x, y) in sorted(self.pinned_positions.items())
+            },
+            "style_color_by": self.style_color_by,
+            "style_size_by": self.style_size_by,
+            "style_edge_width_by": self.style_edge_width_by,
+            "min_degree": self.min_degree,
+            "max_degree": self.max_degree,
+            "component_id": self.component_id,
+            "connected_to_node_id": self.connected_to_node_id,
+            "evidence_filter": self.evidence_filter,
+            "cluster_id": self.cluster_id,
+            "timeline_frame": self.timeline_frame,
+            "timeline_playback": self.timeline_playback,
+            "pivot_node_id": self.pivot_node_id,
+            "pivot_mode": self.pivot_mode,
         }
 
     @classmethod
@@ -113,6 +204,10 @@ class GraphFakosViewerState:
             layout=_string(payload.get("layout", "force"), "viewer_state.layout"),
             selected_node_id=_string_or_none(
                 payload.get("selected_node_id"), "viewer_state.selected_node_id"
+            ),
+            selected_node_ids=_tag_tuple(
+                payload.get("selected_node_ids", ()),
+                "viewer_state.selected_node_ids",
             ),
             selected_edge_id=_string_or_none(
                 payload.get("selected_edge_id"), "viewer_state.selected_edge_id"
@@ -151,6 +246,73 @@ class GraphFakosViewerState:
             analytics_overlay=_string(
                 payload.get("analytics_overlay", "degree"),
                 "viewer_state.analytics_overlay",
+            ),
+            center_force=_float(
+                payload.get("center_force", 0.012), "viewer_state.center_force"
+            ),
+            repel_force=_float(
+                payload.get("repel_force", 1.0), "viewer_state.repel_force"
+            ),
+            link_distance=_float(
+                payload.get("link_distance", 1.0), "viewer_state.link_distance"
+            ),
+            node_scale=_float(
+                payload.get("node_scale", 1.0), "viewer_state.node_scale"
+            ),
+            edge_scale=_float(
+                payload.get("edge_scale", 1.0), "viewer_state.edge_scale"
+            ),
+            edge_opacity=_float(
+                payload.get("edge_opacity", 1.0), "viewer_state.edge_opacity"
+            ),
+            label_density=_float(
+                payload.get("label_density", 1.0), "viewer_state.label_density"
+            ),
+            pinned_positions=_position_dict(
+                payload.get("pinned_positions", {}),
+                "viewer_state.pinned_positions",
+            ),
+            style_color_by=_string(
+                payload.get("style_color_by", "kind"), "viewer_state.style_color_by"
+            ),
+            style_size_by=_string(
+                payload.get("style_size_by", "score"), "viewer_state.style_size_by"
+            ),
+            style_edge_width_by=_string(
+                payload.get("style_edge_width_by", "kind"),
+                "viewer_state.style_edge_width_by",
+            ),
+            min_degree=_int_or_none(
+                payload.get("min_degree"), "viewer_state.min_degree"
+            ),
+            max_degree=_int_or_none(
+                payload.get("max_degree"), "viewer_state.max_degree"
+            ),
+            component_id=_string(
+                payload.get("component_id", ""), "viewer_state.component_id"
+            ),
+            connected_to_node_id=_string(
+                payload.get("connected_to_node_id", ""),
+                "viewer_state.connected_to_node_id",
+            ),
+            evidence_filter=_string(
+                payload.get("evidence_filter", ""), "viewer_state.evidence_filter"
+            ),
+            cluster_id=_string(
+                payload.get("cluster_id", ""), "viewer_state.cluster_id"
+            ),
+            timeline_frame=_string(
+                payload.get("timeline_frame", ""), "viewer_state.timeline_frame"
+            ),
+            timeline_playback=_string(
+                payload.get("timeline_playback", "stopped"),
+                "viewer_state.timeline_playback",
+            ),
+            pivot_node_id=_string(
+                payload.get("pivot_node_id", ""), "viewer_state.pivot_node_id"
+            ),
+            pivot_mode=_string(
+                payload.get("pivot_mode", ""), "viewer_state.pivot_mode"
             ),
         )
 
@@ -338,7 +500,9 @@ class GraphFakosSavedView:
             view_id=view_id,
             label=label,
             state=GraphFakosViewerState.from_request(request),
-            pinned_positions=pinned_positions or {},
+            pinned_positions=pinned_positions
+            if pinned_positions is not None
+            else dict(request.pinned_positions),
             saved_queries=saved_queries,
             provider_payload=provider_payload or {},
         )
@@ -1091,6 +1255,7 @@ class GraphFakosRequest:
     preset_id: str = ""
     query: str = ""
     focus_node_id: str | None = None
+    selected_node_ids: tuple[str, ...] = ()
     selected_edge_id: str | None = None
     source_node_id: str | None = None
     target_node_id: str | None = None
@@ -1112,6 +1277,27 @@ class GraphFakosRequest:
     show_neighbor_links: bool = True
     edge_clutter: str = "normal"
     analytics_overlay: str = "degree"
+    center_force: float = 0.012
+    repel_force: float = 1.0
+    link_distance: float = 1.0
+    node_scale: float = 1.0
+    edge_scale: float = 1.0
+    edge_opacity: float = 1.0
+    label_density: float = 1.0
+    pinned_positions: dict[str, tuple[float, float]] = field(default_factory=dict)
+    style_color_by: str = "kind"
+    style_size_by: str = "score"
+    style_edge_width_by: str = "kind"
+    min_degree: int | None = None
+    max_degree: int | None = None
+    component_id: str = ""
+    connected_to_node_id: str = ""
+    evidence_filter: str = ""
+    cluster_id: str = ""
+    timeline_frame: str = ""
+    timeline_playback: str = "stopped"
+    pivot_node_id: str = ""
+    pivot_mode: str = ""
 
     def with_screen(self, screen: GraphFakosScreen) -> GraphFakosRequest:
         return GraphFakosRequest(
@@ -1119,6 +1305,7 @@ class GraphFakosRequest:
             preset_id=self.preset_id,
             query=self.query,
             focus_node_id=self.focus_node_id,
+            selected_node_ids=self.selected_node_ids,
             selected_edge_id=self.selected_edge_id,
             source_node_id=self.source_node_id,
             target_node_id=self.target_node_id,
@@ -1140,6 +1327,27 @@ class GraphFakosRequest:
             show_neighbor_links=self.show_neighbor_links,
             edge_clutter=self.edge_clutter,
             analytics_overlay=self.analytics_overlay,
+            center_force=self.center_force,
+            repel_force=self.repel_force,
+            link_distance=self.link_distance,
+            node_scale=self.node_scale,
+            edge_scale=self.edge_scale,
+            edge_opacity=self.edge_opacity,
+            label_density=self.label_density,
+            pinned_positions=dict(self.pinned_positions),
+            style_color_by=self.style_color_by,
+            style_size_by=self.style_size_by,
+            style_edge_width_by=self.style_edge_width_by,
+            min_degree=self.min_degree,
+            max_degree=self.max_degree,
+            component_id=self.component_id,
+            connected_to_node_id=self.connected_to_node_id,
+            evidence_filter=self.evidence_filter,
+            cluster_id=self.cluster_id,
+            timeline_frame=self.timeline_frame,
+            timeline_playback=self.timeline_playback,
+            pivot_node_id=self.pivot_node_id,
+            pivot_mode=self.pivot_mode,
         )
 
     def to_dict(self) -> dict[str, object]:
@@ -1148,6 +1356,7 @@ class GraphFakosRequest:
             "preset_id": self.preset_id,
             "query": self.query,
             "focus_node_id": self.focus_node_id,
+            "selected_node_ids": list(self.selected_node_ids),
             "selected_edge_id": self.selected_edge_id,
             "source_node_id": self.source_node_id,
             "target_node_id": self.target_node_id,
@@ -1169,6 +1378,30 @@ class GraphFakosRequest:
             "show_neighbor_links": self.show_neighbor_links,
             "edge_clutter": self.edge_clutter,
             "analytics_overlay": self.analytics_overlay,
+            "center_force": self.center_force,
+            "repel_force": self.repel_force,
+            "link_distance": self.link_distance,
+            "node_scale": self.node_scale,
+            "edge_scale": self.edge_scale,
+            "edge_opacity": self.edge_opacity,
+            "label_density": self.label_density,
+            "pinned_positions": {
+                node_id: [x, y]
+                for node_id, (x, y) in sorted(self.pinned_positions.items())
+            },
+            "style_color_by": self.style_color_by,
+            "style_size_by": self.style_size_by,
+            "style_edge_width_by": self.style_edge_width_by,
+            "min_degree": self.min_degree,
+            "max_degree": self.max_degree,
+            "component_id": self.component_id,
+            "connected_to_node_id": self.connected_to_node_id,
+            "evidence_filter": self.evidence_filter,
+            "cluster_id": self.cluster_id,
+            "timeline_frame": self.timeline_frame,
+            "timeline_playback": self.timeline_playback,
+            "pivot_node_id": self.pivot_node_id,
+            "pivot_mode": self.pivot_mode,
         }
 
     @classmethod
@@ -1182,6 +1415,9 @@ class GraphFakosRequest:
             query=_string(payload.get("query", ""), "request.query"),
             focus_node_id=_string_or_none(
                 payload.get("focus_node_id"), "request.focus_node_id"
+            ),
+            selected_node_ids=_tag_tuple(
+                payload.get("selected_node_ids", ()), "request.selected_node_ids"
             ),
             selected_edge_id=_string_or_none(
                 payload.get("selected_edge_id"),
@@ -1241,6 +1477,58 @@ class GraphFakosRequest:
                 payload.get("analytics_overlay", "degree"),
                 "request.analytics_overlay",
             ),
+            center_force=_float(
+                payload.get("center_force", 0.012), "request.center_force"
+            ),
+            repel_force=_float(payload.get("repel_force", 1.0), "request.repel_force"),
+            link_distance=_float(
+                payload.get("link_distance", 1.0), "request.link_distance"
+            ),
+            node_scale=_float(payload.get("node_scale", 1.0), "request.node_scale"),
+            edge_scale=_float(payload.get("edge_scale", 1.0), "request.edge_scale"),
+            edge_opacity=_float(
+                payload.get("edge_opacity", 1.0), "request.edge_opacity"
+            ),
+            label_density=_float(
+                payload.get("label_density", 1.0), "request.label_density"
+            ),
+            pinned_positions=_position_dict(
+                payload.get("pinned_positions", {}), "request.pinned_positions"
+            ),
+            style_color_by=_string(
+                payload.get("style_color_by", "kind"), "request.style_color_by"
+            ),
+            style_size_by=_string(
+                payload.get("style_size_by", "score"), "request.style_size_by"
+            ),
+            style_edge_width_by=_string(
+                payload.get("style_edge_width_by", "kind"),
+                "request.style_edge_width_by",
+            ),
+            min_degree=_int_or_none(payload.get("min_degree"), "request.min_degree"),
+            max_degree=_int_or_none(payload.get("max_degree"), "request.max_degree"),
+            component_id=_string(
+                payload.get("component_id", ""), "request.component_id"
+            ),
+            connected_to_node_id=_string(
+                payload.get("connected_to_node_id", ""),
+                "request.connected_to_node_id",
+            ),
+            evidence_filter=_string(
+                payload.get("evidence_filter", ""), "request.evidence_filter"
+            ),
+            cluster_id=_string(payload.get("cluster_id", ""), "request.cluster_id"),
+            timeline_frame=_string(
+                payload.get("timeline_frame", ""), "request.timeline_frame"
+            ),
+            timeline_playback=_string(
+                payload.get("timeline_playback", "stopped"),
+                "request.timeline_playback",
+            ),
+            pivot_node_id=_string(
+                payload.get("pivot_node_id", ""), "request.pivot_node_id"
+            ),
+            pivot_mode=_string(payload.get("pivot_mode", ""), "request.pivot_mode"),
         )
 
 

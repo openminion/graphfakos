@@ -29,6 +29,8 @@ let state = runtime.normalizeState({
   analytics_overlay: "degree"
 });
 state = runtime.reduce(state, { name: "select-node", target_id: "provider:third-party" });
+state = runtime.reduce(state, { name: "select-node", target_id: "memory:operator-preference", payload: { additive: true } });
+state = runtime.reduce(state, { name: "pin-node", target_id: "provider:third-party", payload: { x: 320, y: 180 } });
 state = runtime.reduce(state, { name: "camera", payload: { x: 8, y: -2, zoom: 1.25 } });
 state = runtime.reduce(state, { name: "group-toggle", target_id: "provider" });
 state = runtime.reduce(state, { name: "filter", target_id: "node_kind", payload: { value: "memory" } });
@@ -45,7 +47,12 @@ process.stdout.write(JSON.stringify({ state, eventName: runtime.eventName("selec
     payload = json.loads(result.stdout)
 
     assert payload["eventName"] == "graphfakos:select-node"
-    assert payload["state"]["selected_node_id"] == "provider:third-party"
+    assert payload["state"]["selected_node_id"] == "memory:operator-preference"
+    assert payload["state"]["selected_node_ids"] == [
+        "memory:operator-preference",
+        "provider:third-party",
+    ]
+    assert payload["state"]["pinned_positions"]["provider:third-party"] == [320, 180]
     assert payload["state"]["camera_x"] == 8
     assert payload["state"]["camera_y"] == -2
     assert payload["state"]["camera_zoom"] == 1.25

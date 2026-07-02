@@ -67,9 +67,21 @@ def test_static_viewer_renders_competitive_workbench_controls() -> None:
 
     assert "data-theme='ink'" in html
     assert "render-engine='canvas'" in html
-    assert "Requested renderer canvas" in html
+    assert "Canvas renderer is enabled" in html
+    assert "data-gf-canvas='true'" in html
+    assert "data-gf-canvas-payload='true'" in html
     assert "aria-label='Saved workspace controls'" in html
     assert "aria-label='Local graph controls'" in html
+    assert "aria-label='Physics and display controls'" in html
+    assert "Advanced Filters" in html
+    assert "Component Explorer" in html
+    assert "Multi-Select Workbench" in html
+    assert "Attribute Styling" in html
+    assert "Timeline/Diff Animation" in html
+    assert "Investigation Pivot" in html
+    assert "Context Menus" in html
+    assert "Node Actions" in html
+    assert "Edge Actions" in html
     assert "Command Palette" in html
     assert "Analytics Overlay" in html
     assert "Export and Replay" in html

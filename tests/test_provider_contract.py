@@ -210,6 +210,8 @@ def test_viewer_route_helpers_are_public_and_stable() -> None:
         camera_x=11.25,
         camera_y=-3.5,
         camera_zoom=1.3,
+        center_force=0.0,
+        label_density=0.0,
     )
 
     route = build_viewer_route(request)
@@ -224,6 +226,8 @@ def test_viewer_route_helpers_are_public_and_stable() -> None:
             "camera_x": ["11.25"],
             "camera_y": ["-3.5"],
             "camera_zoom": ["1.3"],
+            "center_force": ["0"],
+            "label_density": ["0"],
         },
     )
 
@@ -235,6 +239,10 @@ def test_viewer_route_helpers_are_public_and_stable() -> None:
     assert parsed.camera_x == 11.25
     assert parsed.camera_y == -3.5
     assert parsed.camera_zoom == 1.3
+    assert parsed.center_force == 0.0
+    assert parsed.label_density == 0.0
+    assert "center_force=0.0" in route
+    assert "label_density=0.0" in route
 
 
 def test_dynamic_viewer_contracts_round_trip() -> None:
@@ -247,6 +255,26 @@ def test_dynamic_viewer_contracts_round_trip() -> None:
         camera_x=4.5,
         camera_y=-2.0,
         camera_zoom=1.4,
+        selected_node_ids=("provider:third-party", "memory:operator-preference"),
+        center_force=0.02,
+        repel_force=1.4,
+        link_distance=1.2,
+        node_scale=1.15,
+        edge_scale=1.25,
+        edge_opacity=0.75,
+        label_density=0.6,
+        pinned_positions={"provider:third-party": (320.0, 180.0)},
+        style_color_by="component",
+        style_size_by="degree",
+        style_edge_width_by="weight",
+        min_degree=1,
+        component_id="component:1",
+        connected_to_node_id="provider:third-party",
+        evidence_filter="with_provenance",
+        timeline_frame="2026-06-25",
+        timeline_playback="step",
+        pivot_node_id="provider:third-party",
+        pivot_mode="evidence_bundle",
     )
 
     state = GraphFakosViewerState.from_request(request)
@@ -272,6 +300,14 @@ def test_dynamic_viewer_contracts_round_trip() -> None:
     )
 
     assert rebuilt_state.selected_node_id == "provider:third-party"
+    assert rebuilt_state.selected_node_ids == (
+        "provider:third-party",
+        "memory:operator-preference",
+    )
+    assert rebuilt_state.pinned_positions["provider:third-party"] == (320.0, 180.0)
+    assert rebuilt_state.style_color_by == "component"
+    assert rebuilt_state.timeline_playback == "step"
+    assert rebuilt_state.pivot_mode == "evidence_bundle"
     assert rebuilt_state.to_route_query()["node_kind"] == "provider"
     assert GraphFakosViewerCommand.from_dict(command.to_dict()).payload == {
         "value": "provider"
@@ -318,6 +354,11 @@ def test_saved_view_action_analytics_and_replay_contracts_round_trip() -> None:
         show_neighbor_links=False,
         edge_clutter="reduced",
         analytics_overlay="degree",
+        pinned_positions={"provider:third-party": (310.0, 220.0)},
+        selected_node_ids=("provider:third-party",),
+        style_color_by="source",
+        style_size_by="degree",
+        style_edge_width_by="weight",
     )
     saved_query = GraphFakosSavedQuery(
         query_id="hubs",
@@ -353,6 +394,9 @@ def test_saved_view_action_analytics_and_replay_contracts_round_trip() -> None:
     rebuilt_view = GraphFakosSavedView.from_dict(saved_view.to_dict())
     assert rebuilt_view.state.theme == "ink"
     assert rebuilt_view.state.show_orphans is False
+    assert rebuilt_view.pinned_positions["provider:third-party"] == (310.0, 220.0)
+    assert rebuilt_view.state.selected_node_ids == ("provider:third-party",)
+    assert rebuilt_view.state.style_edge_width_by == "weight"
     assert (
         GraphFakosGraphAction.from_dict(action.to_dict()).action_type == "merge_alias"
     )
@@ -382,8 +426,9 @@ def test_build_graph_replay_bundle_uses_provider_neutral_state() -> None:
 
 
 def test_renderer_selection_contract_rejects_unsupported_engines() -> None:
-    assert SUPPORTED_RENDER_ENGINES == ("svg",)
+    assert SUPPORTED_RENDER_ENGINES == ("svg", "canvas")
     assert validate_render_engine("svg") == "svg"
+    assert validate_render_engine("canvas") == "canvas"
 
     with pytest.raises(ValueError, match="unsupported GraphFakos render engine"):
         validate_render_engine("webgl")

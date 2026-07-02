@@ -9,6 +9,7 @@
     screen: "explore",
     layout: "force",
     selected_node_id: null,
+    selected_node_ids: [],
     selected_edge_id: null,
     camera_x: 0,
     camera_y: 0,
@@ -23,6 +24,27 @@
     show_neighbor_links: true,
     edge_clutter: "normal",
     analytics_overlay: "degree",
+    center_force: 0.012,
+    repel_force: 1,
+    link_distance: 1,
+    node_scale: 1,
+    edge_scale: 1,
+    edge_opacity: 1,
+    label_density: 1,
+    pinned_positions: {},
+    style_color_by: "kind",
+    style_size_by: "score",
+    style_edge_width_by: "kind",
+    min_degree: null,
+    max_degree: null,
+    component_id: "",
+    connected_to_node_id: "",
+    evidence_filter: "",
+    cluster_id: "",
+    timeline_frame: "",
+    timeline_playback: "stopped",
+    pivot_node_id: "",
+    pivot_mode: "",
   };
 
   const normalizeState = (state) => {
@@ -31,10 +53,19 @@
     next.camera_y = number(next.camera_y, 0);
     next.camera_zoom = clamp(number(next.camera_zoom, 1), 0.35, 3);
     next.filters = clone(next.filters);
+    next.selected_node_ids = Array.isArray(next.selected_node_ids) ? next.selected_node_ids.filter(Boolean) : [];
     next.expanded_groups = Array.isArray(next.expanded_groups) ? next.expanded_groups : [];
     next.hidden_groups = Array.isArray(next.hidden_groups) ? next.hidden_groups : [];
+    next.pinned_positions = clone(next.pinned_positions);
     next.show_orphans = next.show_orphans !== false && next.show_orphans !== "false";
     next.show_neighbor_links = next.show_neighbor_links !== false && next.show_neighbor_links !== "false";
+    next.center_force = number(next.center_force, defaultState.center_force);
+    next.repel_force = number(next.repel_force, defaultState.repel_force);
+    next.link_distance = number(next.link_distance, defaultState.link_distance);
+    next.node_scale = number(next.node_scale, defaultState.node_scale);
+    next.edge_scale = number(next.edge_scale, defaultState.edge_scale);
+    next.edge_opacity = clamp(number(next.edge_opacity, defaultState.edge_opacity), 0.15, 1);
+    next.label_density = clamp(number(next.label_density, defaultState.label_density), 0, 1);
     return next;
   };
 
@@ -43,10 +74,33 @@
     const action = command?.name || "";
     const payload = clone(command?.payload);
     if (action === "select-node") {
-      next.selected_node_id = command.target_id || payload.node_id || null;
+      const nodeId = command.target_id || payload.node_id || null;
+      next.selected_node_id = nodeId;
+      next.selected_edge_id = null;
+      if (nodeId && payload.additive) {
+        const selected = new Set(next.selected_node_ids);
+        if (selected.has(nodeId)) selected.delete(nodeId);
+        else selected.add(nodeId);
+        next.selected_node_ids = [...selected].sort();
+      } else {
+        next.selected_node_ids = nodeId ? [nodeId] : [];
+      }
+    }
+    if (action === "select-many") next.selected_node_ids = Array.isArray(payload.node_ids) ? payload.node_ids.filter(Boolean).sort() : [];
+    if (action === "clear-selection") {
+      next.selected_node_id = null;
+      next.selected_node_ids = [];
       next.selected_edge_id = null;
     }
     if (action === "select-edge") next.selected_edge_id = command.target_id || payload.edge_id || null;
+    if (action === "pin-node") {
+      const nodeId = command.target_id || payload.node_id;
+      if (nodeId) next.pinned_positions[nodeId] = [number(payload.x, 0), number(payload.y, 0)];
+    }
+    if (action === "unpin-node") {
+      const nodeId = command.target_id || payload.node_id;
+      if (nodeId) delete next.pinned_positions[nodeId];
+    }
     if (action === "camera") {
       next.camera_x = number(payload.x ?? payload.camera_x, next.camera_x);
       next.camera_y = number(payload.y ?? payload.camera_y, next.camera_y);
@@ -122,6 +176,49 @@
     updateSavedLink(shell.closest("graphfakos-viewer") || document, state);
   };
 
+  const drawCanvas = (shell) => {
+    const canvas = shell.querySelector(".gf-canvas-renderer");
+    if (!canvas?.getContext) return;
+    const context = canvas.getContext("2d");
+    if (!context) return;
+    const nodes = new Map([...shell.querySelectorAll(".gf-node")].map((node) => [
+      node.dataset.nodeId,
+      {
+        x: number(node.dataset.x, 0),
+        y: number(node.dataset.y, 0),
+        selected: node.dataset.selected === "true",
+        kind: node.dataset.kind || "node",
+        degree: number(node.dataset.degree, 0),
+      },
+    ]));
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    context.save();
+    context.lineCap = "round";
+    shell.querySelectorAll(".gf-edge").forEach((edge) => {
+      const source = nodes.get(edge.dataset.sourceId);
+      const target = nodes.get(edge.dataset.targetId);
+      if (!source || !target) return;
+      context.beginPath();
+      context.moveTo(source.x, source.y);
+      context.lineTo(target.x, target.y);
+      context.strokeStyle = edge.dataset.selected === "true" ? "#f97316" : "rgba(62,74,92,0.34)";
+      context.lineWidth = number(edge.dataset.edgeWidth, 1.4);
+      context.globalAlpha = number(edge.dataset.edgeOpacity, 1);
+      context.stroke();
+    });
+    context.globalAlpha = 1;
+    nodes.forEach((node) => {
+      context.beginPath();
+      context.arc(node.x, node.y, Math.max(7, Math.min(18, 8 + node.degree * 2)), 0, Math.PI * 2);
+      context.fillStyle = node.selected ? "#f97316" : node.kind === "provider" ? "#2563eb" : "#111827";
+      context.fill();
+      context.strokeStyle = "rgba(255,255,255,0.85)";
+      context.lineWidth = 2;
+      context.stroke();
+    });
+    context.restore();
+  };
+
   class GraphFakosViewer extends (typeof HTMLElement === "undefined" ? class {} : HTMLElement) {
     #wired = false;
 
@@ -131,6 +228,7 @@
       this.setAttribute("data-render-engine", this.state.render_engine);
       this.setAttribute("data-theme", this.state.theme);
       this.#wireFallbackDom();
+      this.querySelectorAll(".gf-canvas-shell").forEach((shell) => drawCanvas(shell));
       emit(this, "ready", { state: this.getState(), graph: this.graph });
     }
 
@@ -312,7 +410,8 @@
       this.setAttribute("data-state-json", JSON.stringify(this.state));
       this.querySelectorAll(".gf-canvas-shell").forEach((shell) => applyCamera(shell, this.state));
       this.querySelectorAll(".gf-node").forEach((node) => {
-        node.dataset.selected = node.dataset.nodeId === this.state.selected_node_id ? "true" : "false";
+        node.dataset.selected = this.state.selected_node_ids.includes(node.dataset.nodeId) ? "true" : "false";
+        node.dataset.pinned = this.state.pinned_positions[node.dataset.nodeId] ? "true" : node.dataset.pinned || "false";
         node.dataset.hidden = this.state.hidden_groups.includes(node.dataset.kind) ? "true" : "false";
       });
       this.querySelectorAll(".gf-edge").forEach((edge) => {
@@ -322,6 +421,7 @@
         edge.dataset.selected = selected ? "true" : "false";
         edge.dataset.hidden = source?.dataset.hidden === "true" || target?.dataset.hidden === "true" ? "true" : "false";
       });
+      this.querySelectorAll(".gf-canvas-shell").forEach((shell) => drawCanvas(shell));
       emit(this, action, { previous, state: this.getState() });
     }
 
@@ -367,7 +467,11 @@
         });
       });
       this.querySelectorAll(".gf-node").forEach((node) => {
-        node.addEventListener("click", () => this.dispatch({ name: "select-node", target_id: node.dataset.nodeId || "" }));
+        node.addEventListener("click", (event) => this.dispatch({
+          name: "select-node",
+          target_id: node.dataset.nodeId || "",
+          payload: { additive: event.shiftKey },
+        }));
       });
       this.querySelectorAll(".gf-edge").forEach((edge) => {
         edge.addEventListener("click", () => this.dispatch({ name: "select-edge", target_id: edge.dataset.edgeId || "" }));

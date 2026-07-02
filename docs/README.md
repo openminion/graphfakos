@@ -10,6 +10,8 @@ Start with:
 - [UI contracts](ui-contracts.md)
 - [Competitive viewer roadmap spec](specs/competitive-viewer-roadmap-2026-07-01-spec.md)
 - [Competitive viewer roadmap tracker](trackers/competitive-viewer-roadmap-2026-07-01-tracker.md)
+- [Competitive viewer next-parity spec](specs/competitive-viewer-next-parity-2026-07-02-spec.md)
+- [Competitive viewer next-parity tracker](trackers/competitive-viewer-next-parity-2026-07-02-tracker.md)
 - [Custom provider example](custom-provider-example.md)
 - [API compatibility](../API_COMPATIBILITY.md)
 - [Release process](../RELEASING.md)

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-SUPPORTED_RENDER_ENGINES = ("svg",)
+SUPPORTED_RENDER_ENGINES = ("svg", "canvas")
 
 
 def validate_render_engine(render_engine: str) -> str:

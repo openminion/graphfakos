@@ -53,6 +53,47 @@ _GRAPH_ACTION_TYPES: tuple[tuple[str, str], ...] = (
 _MINIMAP_WIDTH = 180
 _MINIMAP_HEIGHT = 90
 _MINIMAP_NODE_RADIUS = 4
+_FILTER_TOOLBAR_STATE_EXCLUDES = (
+    "query",
+    "layout",
+    "render_engine",
+    "theme",
+    "limit",
+    "render_limit",
+    "saved_view_id",
+    "show_orphans",
+    "show_neighbor_links",
+    "edge_clutter",
+    "analytics_overlay",
+    "preset_id",
+    "focus_node_id",
+    "selected_edge_id",
+    "comparison_graph_id",
+)
+_LOCAL_CONTROL_STATE_EXCLUDES = (
+    "focus_node_id",
+    "layout",
+    "query",
+    "max_depth",
+    "show_neighbor_links",
+    "show_orphans",
+    "edge_clutter",
+    "analytics_overlay",
+)
+_PHYSICS_STATE_EXCLUDES = (
+    "center_force",
+    "repel_force",
+    "link_distance",
+    "node_scale",
+    "edge_scale",
+    "edge_opacity",
+    "label_density",
+)
+_STYLE_STATE_EXCLUDES = (
+    "style_color_by",
+    "style_size_by",
+    "style_edge_width_by",
+)
 
 
 def screen_manifest() -> tuple[dict[str, str], ...]:
@@ -200,6 +241,9 @@ def _request_from_query(
             or _first_query_value(query, "node_id")
             or request.focus_node_id
         ),
+        selected_node_ids=_tuple_query_value(
+            query, "selected_node_ids", request.selected_node_ids
+        ),
         selected_edge_id=_first_query_value(query, "selected_edge_id")
         or request.selected_edge_id,
         source_node_id=_first_query_value(query, "source_node_id")
@@ -234,6 +278,37 @@ def _request_from_query(
         edge_clutter=_first_query_value(query, "edge_clutter") or request.edge_clutter,
         analytics_overlay=_first_query_value(query, "analytics_overlay")
         or request.analytics_overlay,
+        center_force=_float_query_value(query, "center_force", request.center_force),
+        repel_force=_float_query_value(query, "repel_force", request.repel_force),
+        link_distance=_float_query_value(query, "link_distance", request.link_distance),
+        node_scale=_float_query_value(query, "node_scale", request.node_scale),
+        edge_scale=_float_query_value(query, "edge_scale", request.edge_scale),
+        edge_opacity=_float_query_value(query, "edge_opacity", request.edge_opacity),
+        label_density=_float_query_value(query, "label_density", request.label_density),
+        pinned_positions=_positions_query_value(
+            query, "pinned_positions", request.pinned_positions
+        ),
+        style_color_by=_first_query_value(query, "style_color_by")
+        or request.style_color_by,
+        style_size_by=_first_query_value(query, "style_size_by")
+        or request.style_size_by,
+        style_edge_width_by=_first_query_value(query, "style_edge_width_by")
+        or request.style_edge_width_by,
+        min_degree=_int_query_value(query, "min_degree", request.min_degree),
+        max_degree=_int_query_value(query, "max_degree", request.max_degree),
+        component_id=_first_query_value(query, "component_id") or request.component_id,
+        connected_to_node_id=_first_query_value(query, "connected_to_node_id")
+        or request.connected_to_node_id,
+        evidence_filter=_first_query_value(query, "evidence_filter")
+        or request.evidence_filter,
+        cluster_id=_first_query_value(query, "cluster_id") or request.cluster_id,
+        timeline_frame=_first_query_value(query, "timeline_frame")
+        or request.timeline_frame,
+        timeline_playback=_first_query_value(query, "timeline_playback")
+        or request.timeline_playback,
+        pivot_node_id=_first_query_value(query, "pivot_node_id")
+        or request.pivot_node_id,
+        pivot_mode=_first_query_value(query, "pivot_mode") or request.pivot_mode,
     )
 
 
@@ -254,6 +329,58 @@ def _float_query_value(
         return float(value)
     except ValueError:
         return fallback
+
+
+def _int_query_value(
+    query: dict[str, list[str]],
+    key: str,
+    fallback: int | None,
+) -> int | None:
+    value = _first_query_value(query, key)
+    if value is None:
+        return fallback
+    try:
+        return int(value)
+    except ValueError:
+        return fallback
+
+
+def _tuple_query_value(
+    query: dict[str, list[str]],
+    key: str,
+    fallback: tuple[str, ...],
+) -> tuple[str, ...]:
+    value = _first_query_value(query, key)
+    if value is None:
+        return fallback
+    return tuple(item.strip() for item in value.split(",") if item.strip())
+
+
+def _positions_query_value(
+    query: dict[str, list[str]],
+    key: str,
+    fallback: dict[str, tuple[float, float]],
+) -> dict[str, tuple[float, float]]:
+    value = _first_query_value(query, key)
+    if value is None:
+        return dict(fallback)
+    try:
+        payload = json.loads(value)
+    except json.JSONDecodeError:
+        return dict(fallback)
+    parsed: dict[str, tuple[float, float]] = {}
+    if not isinstance(payload, dict):
+        return dict(fallback)
+    for node_id, position in payload.items():
+        if not isinstance(node_id, str):
+            continue
+        if not isinstance(position, (list, tuple)) or len(position) != 2:
+            continue
+        try:
+            parsed[node_id] = (float(position[0]), float(position[1]))
+        except (TypeError, ValueError):
+            continue
+    return parsed
 
 
 def _bool_query_value(
@@ -487,14 +614,24 @@ def _route_href(
             continue
         route_key = "preset" if key == "preset_id" else key
         if isinstance(value, dict):
+            if route_key == "pinned_positions":
+                if value:
+                    payload[route_key] = json.dumps(
+                        value, sort_keys=True, separators=(",", ":")
+                    )
+                continue
             for filter_key, filter_value in value.items():
                 if filter_value not in ("", None):
                     payload[filter_key] = filter_value
             continue
+        if isinstance(value, list | tuple):
+            if value:
+                payload[route_key] = ",".join(str(item) for item in value)
+            continue
         if isinstance(value, bool):
             payload[route_key] = "true" if value else "false"
             continue
-        if value not in ("", None, False):
+        if not _route_value_is_empty(value):
             payload[route_key] = value
     if overrides:
         for key, value in overrides.items():
@@ -504,6 +641,10 @@ def _route_href(
                 continue
             payload[route_key] = value
     return route + (f"?{urlencode(payload)}" if payload else "")
+
+
+def _route_value_is_empty(value: object) -> bool:
+    return value is None or value == "" or (isinstance(value, bool) and not value)
 
 
 def _nav(request: GraphFakosRequest) -> str:
@@ -687,6 +828,7 @@ def _render_explore(graph: GraphFakosGraph, request: GraphFakosRequest) -> str:
         f"{_filter_toolbar(graph, request, '/explore')}"
         f"{_workspace_controls(graph, request)}"
         f"{_local_graph_controls(graph, request, focus)}"
+        f"{_physics_display_controls(request)}"
         f"{_graph_canvas(filtered_graph, request, focus.id if focus else None, selected_edge.id if selected_edge else None)}"
         f"{_selection_summary(filtered_graph, focus, selected_edge)}"
         f"{_query_summary(active_query)}"
@@ -696,6 +838,13 @@ def _render_explore(graph: GraphFakosGraph, request: GraphFakosRequest) -> str:
     secondary = (
         _graph_navigator(graph, filtered_graph, request, focus)
         + _command_palette(graph, request)
+        + _advanced_filter_panel(filtered_graph, request)
+        + _component_explorer_panel(graph, request)
+        + _selection_workbench_panel(filtered_graph, request)
+        + _style_rules_panel(filtered_graph, request)
+        + _timeline_animation_panel(graph, request)
+        + _investigation_pivot_panel(filtered_graph, request, focus)
+        + _context_menu_panel(focus, selected_edge)
         + _analytics_panel(graph, request)
         + _export_replay_panel(graph, request)
         + _focus_workflow(graph, request, focus)
@@ -1085,6 +1234,7 @@ def _filter_toolbar(
         f"<input type='hidden' name='focus_node_id' value='{escape(request.focus_node_id or '')}'>"
         f"<input type='hidden' name='selected_edge_id' value='{escape(request.selected_edge_id or '')}'>"
         f"<input type='hidden' name='comparison_graph_id' value='{escape(request.comparison_graph_id or '')}'>"
+        f"{_state_hidden_inputs(request, exclude=_FILTER_TOOLBAR_STATE_EXCLUDES)}"
         "<button type='submit'>Filter</button>"
         "</form></section>"
     )
@@ -1138,10 +1288,30 @@ def _local_graph_controls(
         f"{_select('show_orphans', 'Orphans', ('true', 'false'), str(request.show_orphans).lower())}"
         f"{_select('edge_clutter', 'Edge clutter', ('normal', 'reduced'), request.edge_clutter)}"
         f"{_select('analytics_overlay', 'Overlay', ('degree', 'components', 'provenance'), request.analytics_overlay)}"
+        f"{_state_hidden_inputs(request, exclude=_LOCAL_CONTROL_STATE_EXCLUDES)}"
         "<button type='submit'>Apply Local Lens</button>"
         "</form>"
         f"<p class='gf-note'>Local controls: {analytics.component_count} component(s), "
         f"{len(analytics.orphan_node_ids)} orphan node(s), max degree {analytics.max_degree}.</p>"
+        "</section>"
+    )
+
+
+def _physics_display_controls(request: GraphFakosRequest) -> str:
+    return (
+        "<section class='gf-toolbar gf-physics-controls' aria-label='Physics and display controls'>"
+        "<form method='get' action='/explore'>"
+        f"<input name='center_force' value='{request.center_force:g}' placeholder='Center force'>"
+        f"<input name='repel_force' value='{request.repel_force:g}' placeholder='Repel force'>"
+        f"<input name='link_distance' value='{request.link_distance:g}' placeholder='Link distance'>"
+        f"<input name='node_scale' value='{request.node_scale:g}' placeholder='Node scale'>"
+        f"<input name='edge_scale' value='{request.edge_scale:g}' placeholder='Edge scale'>"
+        f"<input name='edge_opacity' value='{request.edge_opacity:g}' placeholder='Edge opacity'>"
+        f"<input name='label_density' value='{request.label_density:g}' placeholder='Label density'>"
+        f"{_state_hidden_inputs(request, exclude=_PHYSICS_STATE_EXCLUDES)}"
+        "<button type='submit'>Tune View</button>"
+        "</form>"
+        "<p class='gf-note'>Physics and display controls are route-backed so SVG export, local server, and embeds share the same view model.</p>"
         "</section>"
     )
 
@@ -1310,6 +1480,215 @@ def _select_pairs(
     return f"{html}</select>"
 
 
+def _state_hidden_inputs(
+    request: GraphFakosRequest,
+    *,
+    exclude: tuple[str, ...] = (),
+) -> str:
+    excluded = {
+        "screen",
+        "filters",
+        "include_provenance",
+        "include_provider_payload",
+        *exclude,
+    }
+    fields = []
+    for key, value in request.to_dict().items():
+        if key in excluded:
+            continue
+        route_key = "preset" if key == "preset_id" else key
+        if isinstance(value, bool):
+            encoded = "true" if value else "false"
+        elif _route_value_is_empty(value):
+            continue
+        elif isinstance(value, dict):
+            if not value:
+                continue
+            encoded = json.dumps(value, sort_keys=True, separators=(",", ":"))
+        elif isinstance(value, (list, tuple)):
+            if not value:
+                continue
+            encoded = ",".join(str(item) for item in value)
+        else:
+            encoded = str(value)
+        fields.append(
+            f"<input type='hidden' name='{escape(route_key)}' value='{escape(encoded)}'>"
+        )
+    for filter_key, filter_value in sorted(request.filters.items()):
+        if filter_key in excluded or not filter_value:
+            continue
+        fields.append(
+            f"<input type='hidden' name='{escape(filter_key)}' value='{escape(filter_value)}'>"
+        )
+    return "".join(fields)
+
+
+def _advanced_filter_panel(graph: GraphFakosGraph, request: GraphFakosRequest) -> str:
+    node_options = tuple((node.id, node.label) for node in graph.nodes)
+    return _panel(
+        "Advanced Filters",
+        "<form method='get' action='/explore' class='gf-panel-form' aria-label='Advanced graph filters'>"
+        f"<input name='min_degree' value='{'' if request.min_degree is None else request.min_degree}' placeholder='Min degree'>"
+        f"<input name='max_degree' value='{'' if request.max_degree is None else request.max_degree}' placeholder='Max degree'>"
+        f"{_select_pairs('connected_to_node_id', 'Connected to', node_options, request.connected_to_node_id)}"
+        f"{_select('evidence_filter', 'Evidence', ('with_provenance', 'with_citation', 'missing_provenance', 'missing_citation', 'warnings'), request.evidence_filter)}"
+        f"{_state_hidden_inputs(request, exclude=('min_degree', 'max_degree', 'connected_to_node_id', 'evidence_filter'))}"
+        "<button type='submit'>Apply Advanced Filters</button>"
+        "</form>"
+        + _summary_note(
+            "Degree, neighbor, and evidence filters stay structural and provider-neutral."
+        ),
+    )
+
+
+def _component_explorer_panel(
+    graph: GraphFakosGraph,
+    request: GraphFakosRequest,
+) -> str:
+    components = _component_groups(graph)
+    rows = []
+    for component_id, node_ids in components.items():
+        selected = " selected" if request.component_id == component_id else ""
+        rows.append(
+            f"<option value='{escape(component_id)}'{selected}>"
+            f"{escape(component_id)} ({len(node_ids)} nodes)</option>"
+        )
+    component_list = [
+        f"{component_id}: {len(node_ids)} node(s)"
+        for component_id, node_ids in components.items()
+    ]
+    return _panel(
+        "Component Explorer",
+        "<form method='get' action='/explore' class='gf-panel-form' aria-label='Component explorer'>"
+        "<select name='component_id' aria-label='Component'>"
+        "<option value=''>All components</option>"
+        f"{''.join(rows)}</select>"
+        f"<input name='cluster_id' value='{escape(request.cluster_id)}' placeholder='Provider cluster id'>"
+        f"{_state_hidden_inputs(request, exclude=('component_id', 'cluster_id'))}"
+        "<button type='submit'>Open Component</button>"
+        "</form>" + _panel_body("Structural Components", _list(component_list)),
+    )
+
+
+def _selection_workbench_panel(
+    graph: GraphFakosGraph,
+    request: GraphFakosRequest,
+) -> str:
+    selected_ids = request.selected_node_ids or (
+        (request.focus_node_id,) if request.focus_node_id else ()
+    )
+    node_map = graph.node_map()
+    selected_labels = [
+        node_map[node_id].label if node_id in node_map else node_id
+        for node_id in selected_ids
+    ]
+    node_options = tuple((node.id, node.label) for node in graph.nodes)
+    return _panel(
+        "Multi-Select Workbench",
+        _summary_note(
+            f"{len(selected_ids)} selected node(s). Shift-click in the enhanced viewer toggles multi-select."
+        )
+        + "<form method='get' action='/explore' class='gf-panel-form' aria-label='Multi-select controls'>"
+        f"<input name='selected_node_ids' value='{escape(','.join(selected_ids))}' placeholder='node:a,node:b'>"
+        f"{_select_pairs('focus_node_id', 'Focus node', node_options, request.focus_node_id or '')}"
+        f"{_state_hidden_inputs(request, exclude=('selected_node_ids', 'focus_node_id'))}"
+        "<button type='submit'>Review Selection</button>"
+        "</form>" + _panel_body("Selected Subgraph", _list(selected_labels)),
+    )
+
+
+def _style_rules_panel(graph: GraphFakosGraph, request: GraphFakosRequest) -> str:
+    style_payload = {
+        "color_by": request.style_color_by,
+        "size_by": request.style_size_by,
+        "edge_width_by": request.style_edge_width_by,
+        "kinds": list(_graph_facets(graph).get("node_kind", ())),
+    }
+    return _panel(
+        "Attribute Styling",
+        "<form method='get' action='/explore' class='gf-panel-form' aria-label='Attribute style controls'>"
+        f"{_select('style_color_by', 'Color by', ('kind', 'source', 'score', 'component'), request.style_color_by)}"
+        f"{_select('style_size_by', 'Size by', ('score', 'degree', 'confidence', 'kind'), request.style_size_by)}"
+        f"{_select('style_edge_width_by', 'Edge width by', ('kind', 'weight', 'confidence'), request.style_edge_width_by)}"
+        f"{_state_hidden_inputs(request, exclude=_STYLE_STATE_EXCLUDES)}"
+        "<button type='submit'>Apply Styling</button>"
+        "</form>"
+        + _badges(
+            (
+                (f"color:{request.style_color_by}", "accent"),
+                (f"size:{request.style_size_by}", "blue"),
+                (f"edge:{request.style_edge_width_by}", "neutral"),
+            )
+        )
+        + _json_script("data-gf-style-rules", style_payload),
+    )
+
+
+def _timeline_animation_panel(
+    graph: GraphFakosGraph, request: GraphFakosRequest
+) -> str:
+    frames = _timeline_frames(graph)
+    return _panel(
+        "Timeline/Diff Animation",
+        "<form method='get' action='/explore' class='gf-panel-form' aria-label='Timeline animation controls'>"
+        f"{_select('timeline_frame', 'Timeline frame', frames, request.timeline_frame)}"
+        f"{_select('timeline_playback', 'Playback', ('stopped', 'playing', 'step'), request.timeline_playback)}"
+        f"{_state_hidden_inputs(request, exclude=('timeline_frame', 'timeline_playback'))}"
+        "<button type='submit'>Scrub Timeline</button>"
+        "</form>"
+        + _summary_note(
+            "Animation is optional; static export renders the selected frame and exposes replay metadata."
+        )
+        + _json_script("data-gf-diff-frames", {"frames": list(frames)}),
+    )
+
+
+def _investigation_pivot_panel(
+    graph: GraphFakosGraph,
+    request: GraphFakosRequest,
+    focus: GraphFakosNode | None,
+) -> str:
+    pivot_id = request.pivot_node_id or (focus.id if focus is not None else "")
+    node_options = tuple((node.id, node.label) for node in graph.nodes)
+    case_packet = {
+        "pivot_node_id": pivot_id,
+        "pivot_mode": request.pivot_mode or "neighbors",
+        "route": _route_href(request, overrides={"pivot_node_id": pivot_id}),
+    }
+    return _panel(
+        "Investigation Pivot",
+        "<form method='get' action='/explore' class='gf-panel-form' aria-label='Investigation pivot controls'>"
+        f"{_select_pairs('pivot_node_id', 'Pivot node', node_options, pivot_id)}"
+        f"{_select('pivot_mode', 'Pivot mode', ('neighbors', 'paths', 'timeline', 'evidence_bundle'), request.pivot_mode)}"
+        f"{_state_hidden_inputs(request, exclude=('pivot_node_id', 'pivot_mode'))}"
+        "<button type='submit'>Build Case Packet</button>"
+        "</form>"
+        + _summary_note(
+            "GraphFakos packages structural pivots only; providers own semantic truth and enrichment."
+        )
+        + _json_script("data-gf-investigation-case", case_packet),
+    )
+
+
+def _context_menu_panel(
+    node: GraphFakosNode | None,
+    edge: GraphFakosEdge | None,
+) -> str:
+    node_id = node.id if node is not None else ""
+    edge_id = edge.id if edge is not None else ""
+    node_target = node_id or "none"
+    edge_target = edge_id or "none"
+    return _panel(
+        "Context Menus",
+        "<details class='gf-context-menu' open><summary>Node Actions</summary>"
+        f"{_list(['Focus node', 'Pin node', 'Expand neighborhood', f'Target: {node_target}'])}"
+        "</details>"
+        "<details class='gf-context-menu'><summary>Edge Actions</summary>"
+        f"{_list(['Inspect edge', 'Trace path', 'Draft relationship note', f'Target: {edge_target}'])}"
+        "</details>",
+    )
+
+
 def _graph_facets(graph: GraphFakosGraph) -> dict[str, tuple[str, ...]]:
     return {
         "node_kind": tuple(sorted({node.kind for node in graph.nodes if node.kind})),
@@ -1348,6 +1727,9 @@ def _filtered_graph(
                 request.focus_node_id,
                 request.source_node_id,
                 request.target_node_id,
+                request.connected_to_node_id,
+                request.pivot_node_id,
+                *request.selected_node_ids,
             )
             if item_id
         },
@@ -1363,12 +1745,23 @@ def _filtered_nodes(
     filters = request.filters
     min_score = _min_score(filters.get("min_score", ""))
     orphan_node_ids = set(diagnose_graph(graph).orphan_node_ids)
+    degree_map = _node_degree_map(graph)
+    connected_ids = _connected_node_ids(graph, request.connected_to_node_id)
+    component_ids = _node_component_ids(graph)
     return tuple(
         node
         for node in graph.nodes
         if _node_matches_query(node, parsed_query)
         and _node_matches_filters(node, filters, min_score)
         and (request.show_orphans or node.id not in orphan_node_ids)
+        and _node_matches_advanced_filters(
+            node,
+            graph,
+            request,
+            degree_map,
+            connected_ids,
+            component_ids,
+        )
     )
 
 
@@ -1439,6 +1832,55 @@ def _node_matches_filters(
     if filters.get("source") and node.source != filters["source"]:
         return False
     return min_score is None or (node.score is not None and node.score >= min_score)
+
+
+def _node_matches_advanced_filters(
+    node: GraphFakosNode,
+    graph: GraphFakosGraph,
+    request: GraphFakosRequest,
+    degree_map: dict[str, int],
+    connected_ids: set[str],
+    component_ids: dict[str, str],
+) -> bool:
+    degree = degree_map.get(node.id, 0)
+    if request.min_degree is not None and degree < request.min_degree:
+        return False
+    if request.max_degree is not None and degree > request.max_degree:
+        return False
+    if connected_ids and node.id not in connected_ids:
+        return False
+    if request.component_id and component_ids.get(node.id) != request.component_id:
+        return False
+    if request.evidence_filter and not _node_matches_evidence_filter(
+        node, graph, request.evidence_filter
+    ):
+        return False
+    return not request.cluster_id or _node_cluster_id(node) == request.cluster_id
+
+
+def _node_matches_evidence_filter(
+    node: GraphFakosNode,
+    graph: GraphFakosGraph,
+    evidence_filter: str,
+) -> bool:
+    provenance_ids = {item.id for item in graph.provenance}
+    citation_ids = {item.id for item in graph.citations}
+    if evidence_filter == "with_provenance":
+        return bool(node.provenance_ids)
+    if evidence_filter == "with_citation":
+        return bool(node.citation_ids)
+    if evidence_filter == "missing_provenance":
+        return not node.provenance_ids or any(
+            item_id not in provenance_ids for item_id in node.provenance_ids
+        )
+    if evidence_filter == "missing_citation":
+        return not node.citation_ids or any(
+            item_id not in citation_ids for item_id in node.citation_ids
+        )
+    if evidence_filter == "warnings":
+        text = " ".join(graph.warnings).casefold()
+        return node.id.casefold() in text or node.label.casefold() in text
+    return True
 
 
 def _filter_edges_by_request(
@@ -2096,6 +2538,10 @@ def _graph_canvas(
     height = 460
     positions = _layout_positions(graph, request, width, height, selected_id)
     degree_map = _node_degree_map(graph)
+    component_ids = _node_component_ids(graph)
+    selected_node_ids = set(request.selected_node_ids)
+    if selected_id:
+        selected_node_ids.add(selected_id)
     hidden_nodes = int(graph.stats.get("hidden_nodes", 0) or 0)
     hidden_edges = int(graph.stats.get("hidden_edges", 0) or 0)
     edge_lines = ""
@@ -2106,33 +2552,49 @@ def _graph_canvas(
         x2, y2 = positions[edge.target_id]
         selected = "true" if edge.id == selected_edge_id else "false"
         path_edge = "true" if request.screen == "path" else "false"
+        edge_width = _edge_width(edge, request)
+        edge_opacity = _clamped(request.edge_opacity, 0.15, 1.0)
         edge_lines += (
             f"<a href='{_explore_href(request, selected_edge_id=edge.id, focus_node_id=selected_id)}'>"
             f"<line class='gf-edge' data-edge-id='{escape(edge.id)}' "
             f"data-source-id='{escape(edge.source_id)}' data-target-id='{escape(edge.target_id)}' "
             f"data-kind='{escape(edge.kind)}' data-selected='{selected}' "
             f"data-path='{path_edge}' data-clutter='{escape(request.edge_clutter)}' "
+            f"data-edge-width='{edge_width:.2f}' data-edge-opacity='{edge_opacity:.2f}' "
             f"x1='{x1:.1f}' y1='{y1:.1f}' "
-            f"x2='{x2:.1f}' y2='{y2:.1f}' marker-end='url(#gf-arrow)'>"
+            f"x2='{x2:.1f}' y2='{y2:.1f}' stroke-width='{edge_width:.2f}' "
+            f"opacity='{edge_opacity:.2f}' marker-end='url(#gf-arrow)'>"
             f"<title>{escape(edge.label or edge.kind)}</title></line>"
             "</a>"
         )
     node_marks = ""
     for index, node in enumerate(graph.nodes):
         x, y = positions[node.id]
-        selected = "true" if node.id == selected_id else "false"
-        pinned = "true" if node.visual.pinned else "false"
+        selected = "true" if node.id in selected_node_ids else "false"
+        pinned = (
+            "true"
+            if node.visual.pinned or node.id in request.pinned_positions
+            else "false"
+        )
         degree = degree_map.get(node.id, 0)
+        label = (
+            f"<text y='{_node_label_y(index):.1f}' text-anchor='middle'>{escape(_node_label(node))}</text>"
+            if _should_show_label(node, index, degree, request)
+            else ""
+        )
         node_marks += (
             f"<a href='{_explore_href(request, focus_node_id=node.id)}'>"
             f"<g class='gf-node' data-kind='{escape(node.kind)}' data-selected='{selected}' "
             f"data-node-id='{escape(node.id)}' data-node-ref='{escape(node.id)}' "
             f"data-provenance-ids='{escape(' '.join(node.provenance_ids))}' "
             f"data-citation-ids='{escape(' '.join(node.citation_ids))}' "
+            f"data-component-id='{escape(component_ids.get(node.id, ''))}' "
+            f"data-style-color='{escape(_style_value(node, request.style_color_by, component_ids))}' "
+            f"data-style-size='{escape(_style_value(node, request.style_size_by, component_ids, degree=degree))}' "
             f"data-pinned='{pinned}' data-degree='{degree}' data-x='{x:.1f}' data-y='{y:.1f}' "
             f"transform='translate({x:.1f} {y:.1f})'>"
-            f"{_node_shape(node)}"
-            f"<text y='{_node_label_y(index):.1f}' text-anchor='middle'>{escape(_node_label(node))}</text>"
+            f"{_node_shape(node, request, degree)}"
+            f"{label}"
             f"<title>{escape(node.summary or node.label)}</title></g></a>"
         )
     camera_x = request.camera_x if request.camera_x is not None else 0
@@ -2150,6 +2612,7 @@ def _graph_canvas(
         f"<div class='gf-canvas-grid'><div class='gf-canvas-shell' tabindex='0' "
         f"data-camera-x='{camera_x:.2f}' data-camera-y='{camera_y:.2f}' "
         f"data-camera-zoom='{camera_zoom:.2f}'>"
+        f"{_canvas_renderer(graph, request)}"
         f"<svg class='gf-canvas' viewBox='0 0 {width} {height}' "
         "role='img' aria-label='GraphFakos graph canvas'>"
         "<defs><marker id='gf-arrow' markerWidth='8' markerHeight='8' refX='7' "
@@ -2158,7 +2621,7 @@ def _graph_canvas(
         f"{edge_lines}{node_marks}</g></svg></div>"
         f"{_graph_minimap(graph, positions, width, height, selected_id)}</div>"
         f"{_group_controls(graph, request)}"
-        f"{_graph_canvas_legend(graph)}</section>"
+        f"{_graph_canvas_legend(graph, request)}</section>"
     )
 
 
@@ -2204,12 +2667,103 @@ def _graph_search_panel(graph: GraphFakosGraph, request: GraphFakosRequest) -> s
 def _renderer_notice(request: GraphFakosRequest) -> str:
     if request.render_engine == "svg":
         return ""
+    if request.render_engine == "canvas":
+        return (
+            "<p class='gf-note gf-renderer-notice'>"
+            "Canvas renderer is enabled for progressive drawing; the SVG graph remains "
+            "available as the static fallback and accessibility surface."
+            "</p>"
+        )
     return (
         "<p class='gf-note gf-renderer-notice'>"
         f"Requested renderer {escape(request.render_engine)} is recorded for host workbenches; "
         "this portable export degrades to the static SVG renderer."
         "</p>"
     )
+
+
+def _canvas_renderer(graph: GraphFakosGraph, request: GraphFakosRequest) -> str:
+    if request.render_engine != "canvas":
+        return ""
+    payload = {
+        "graph_id": graph.graph_id,
+        "nodes": [
+            {
+                "id": node.id,
+                "label": node.label,
+                "kind": node.kind,
+                "score": node.score,
+            }
+            for node in graph.nodes
+        ],
+        "edges": [
+            {
+                "id": edge.id,
+                "source_id": edge.source_id,
+                "target_id": edge.target_id,
+                "kind": edge.kind,
+                "weight": edge.weight,
+            }
+            for edge in graph.edges
+        ],
+    }
+    return (
+        "<canvas class='gf-canvas-renderer' data-gf-canvas='true' "
+        "width='920' height='460' aria-label='Canvas graph renderer'></canvas>"
+        f"{_json_script('data-gf-canvas-payload', payload)}"
+    )
+
+
+def _edge_width(edge: GraphFakosEdge, request: GraphFakosRequest) -> float:
+    base = 1.4
+    if request.style_edge_width_by == "weight" and edge.weight is not None:
+        base = 1.0 + edge.weight * 2.0
+    elif request.style_edge_width_by == "confidence" and edge.confidence is not None:
+        base = 1.0 + edge.confidence * 2.0
+    elif request.style_edge_width_by == "kind":
+        base = 1.2 + (abs(hash(edge.kind)) % 4) * 0.35
+    return _clamped(base * request.edge_scale, 0.5, 7.0)
+
+
+def _should_show_label(
+    node: GraphFakosNode,
+    index: int,
+    degree: int,
+    request: GraphFakosRequest,
+) -> bool:
+    density = _clamped(request.label_density, 0.0, 1.0)
+    if density >= 0.95:
+        return True
+    if node.id == request.focus_node_id or node.id in request.selected_node_ids:
+        return True
+    if degree >= 3:
+        return density >= 0.25
+    cadence = max(1, int(round(1 / max(density, 0.12))))
+    return index % cadence == 0
+
+
+def _style_value(
+    node: GraphFakosNode,
+    style_field: str,
+    component_ids: dict[str, str],
+    *,
+    degree: int = 0,
+) -> str:
+    if style_field == "source":
+        return node.source
+    if style_field == "score":
+        return "scored" if node.score is not None else "unscored"
+    if style_field == "confidence":
+        return "confident" if node.confidence is not None else "unknown"
+    if style_field == "component":
+        return component_ids.get(node.id, "")
+    if style_field == "degree":
+        return str(degree)
+    return node.kind
+
+
+def _clamped(value: float, minimum: float, maximum: float) -> float:
+    return min(max(value, minimum), maximum)
 
 
 def _render_budget_panel(
@@ -2230,8 +2784,12 @@ def _render_budget_panel(
     )
 
 
-def _node_shape(node: GraphFakosNode) -> str:
-    radius = _node_radius(node)
+def _node_shape(
+    node: GraphFakosNode,
+    request: GraphFakosRequest,
+    degree: int,
+) -> str:
+    radius = _node_radius(node, request, degree)
     shape = (node.visual.shape or "").casefold()
     if shape == "square" or node.kind == "provider":
         size = radius * 1.7
@@ -2325,10 +2883,22 @@ def _explore_href(
     )
 
 
-def _node_radius(node: GraphFakosNode) -> int:
-    if node.score is None:
-        return 18
-    return max(16, min(28, int(16 + node.score * 10)))
+def _node_radius(
+    node: GraphFakosNode,
+    request: GraphFakosRequest | None = None,
+    degree: int = 0,
+) -> int:
+    scale = request.node_scale if request is not None else 1.0
+    base = 18 if node.score is None else max(16, min(28, int(16 + node.score * 10)))
+    if request is not None and request.style_size_by == "degree":
+        base = max(base, 16 + min(degree, 8) * 2)
+    if (
+        request is not None
+        and request.style_size_by == "confidence"
+        and node.confidence
+    ):
+        base = max(base, int(16 + node.confidence * 10))
+    return max(10, min(44, int(base * _clamped(scale, 0.45, 2.2))))
 
 
 def _node_label(node: GraphFakosNode) -> str:
@@ -2498,16 +3068,26 @@ def _node_badges(
     return badges
 
 
-def _graph_canvas_legend(graph: GraphFakosGraph) -> str:
+def _graph_canvas_legend(
+    graph: GraphFakosGraph,
+    request: GraphFakosRequest | None = None,
+) -> str:
     degree_map = _node_degree_map(graph)
     pinned_count = sum(1 for node in graph.nodes if node.visual.pinned)
     hub_count = sum(1 for node in graph.nodes if degree_map.get(node.id, 0) >= 3)
     kind_count = len(_graph_facets(graph).get("node_kind", ()))
+    style_note = ""
+    if request is not None:
+        style_note = (
+            f"{_badge(f'color:{request.style_color_by}', 'accent')}"
+            f"{_badge(f'size:{request.style_size_by}', 'blue')}"
+        )
     return (
         "<div class='gf-canvas-legend'>"
         f"{_badge(f'{pinned_count} pinned', 'blue')}"
         f"{_badge(f'{hub_count} hubs', 'neutral')}"
         f"{_badge(f'{kind_count} kinds', 'accent')}"
+        f"{style_note}"
         "</div>"
     )
 
@@ -2635,6 +3215,63 @@ def _adjacency_map(
     return {key: tuple(value) for key, value in adjacency.items()}
 
 
+def _connected_node_ids(graph: GraphFakosGraph, node_id: str) -> set[str]:
+    if not node_id:
+        return set()
+    connected = {node_id}
+    for edge, neighbor_id in _adjacency_map(graph).get(node_id, ()):
+        connected.add(edge.source_id)
+        connected.add(edge.target_id)
+        connected.add(neighbor_id)
+    return connected
+
+
+def _component_groups(graph: GraphFakosGraph) -> dict[str, tuple[str, ...]]:
+    adjacency = _adjacency_map(graph)
+    remaining = {node.id for node in graph.nodes}
+    components: dict[str, tuple[str, ...]] = {}
+    index = 1
+    while remaining:
+        start = sorted(remaining)[0]
+        queue = deque([start])
+        seen = {start}
+        while queue:
+            current = queue.popleft()
+            for _edge, neighbor_id in adjacency.get(current, ()):
+                if neighbor_id not in seen:
+                    seen.add(neighbor_id)
+                    queue.append(neighbor_id)
+        remaining -= seen
+        components[f"component:{index}"] = tuple(sorted(seen))
+        index += 1
+    return components
+
+
+def _node_component_ids(graph: GraphFakosGraph) -> dict[str, str]:
+    return {
+        node_id: component_id
+        for component_id, node_ids in _component_groups(graph).items()
+        for node_id in node_ids
+    }
+
+
+def _node_cluster_id(node: GraphFakosNode) -> str:
+    value = node.provider_payload.get("cluster_id") or node.visual.group
+    return value if isinstance(value, str) else ""
+
+
+def _timeline_frames(graph: GraphFakosGraph) -> tuple[str, ...]:
+    frames = sorted(
+        {
+            timestamp
+            for node in graph.nodes
+            for timestamp in node.timestamps.values()
+            if timestamp
+        }
+    )
+    return tuple(frames[:12])
+
+
 def _node_degree_map(graph: GraphFakosGraph) -> dict[str, int]:
     degrees = {node.id: 0 for node in graph.nodes}
     for edge in graph.edges:
@@ -2725,22 +3362,25 @@ def _layout_positions(
     focus_node_id: str | None,
 ) -> dict[str, tuple[float, float]]:
     if request.layout == "timeline":
-        return _timeline_positions(graph, width, height)
-    if request.layout == "circle":
-        return _ring_positions(graph, width, height)
-    if request.layout == "grouped":
-        return _grouped_positions(graph, width, height)
-    if request.layout == "focus":
-        return _focus_positions(graph, width, height, focus_node_id)
-    if request.layout == "radial":
-        return _radial_positions(graph, width, height, focus_node_id)
-    if request.layout == "hierarchical":
-        return _hierarchical_positions(graph, width, height, focus_node_id)
-    return _force_positions(graph, width, height, focus_node_id)
+        positions = _timeline_positions(graph, width, height)
+    elif request.layout == "circle":
+        positions = _ring_positions(graph, width, height)
+    elif request.layout == "grouped":
+        positions = _grouped_positions(graph, width, height)
+    elif request.layout == "focus":
+        positions = _focus_positions(graph, width, height, focus_node_id)
+    elif request.layout == "radial":
+        positions = _radial_positions(graph, width, height, focus_node_id)
+    elif request.layout == "hierarchical":
+        positions = _hierarchical_positions(graph, width, height, focus_node_id)
+    else:
+        positions = _force_positions(graph, request, width, height, focus_node_id)
+    return _apply_pinned_positions(graph, request, positions, width, height)
 
 
 def _force_positions(
     graph: GraphFakosGraph,
+    request: GraphFakosRequest,
     width: int,
     height: int,
     focus_node_id: str | None,
@@ -2770,8 +3410,9 @@ def _force_positions(
         for node in _ranked_nodes(graph, {anchor, *inner_ring})
         if node.id not in {anchor, *inner_ring}
     ]
-    inner_radius = min(width, height) * 0.2
-    outer_radius = min(width, height) * 0.36
+    distance_scale = _clamped(request.link_distance, 0.45, 2.2)
+    inner_radius = min(width, height) * 0.2 * distance_scale
+    outer_radius = min(width, height) * 0.36 * distance_scale
     for index, node_id in enumerate(inner_ring):
         angle = (2 * pi * index / max(len(inner_ring), 1)) - (pi / 2)
         positions[node_id] = (
@@ -2786,7 +3427,7 @@ def _force_positions(
         )
     for node in graph.nodes:
         positions.setdefault(node.id, center)
-    return _relax_force_positions(graph, positions, anchor, width, height)
+    return _relax_force_positions(graph, request, positions, anchor, width, height)
 
 
 def _force_anchor_id(graph: GraphFakosGraph, focus_node_id: str | None) -> str:
@@ -2799,6 +3440,7 @@ def _force_anchor_id(graph: GraphFakosGraph, focus_node_id: str | None) -> str:
 
 def _relax_force_positions(
     graph: GraphFakosGraph,
+    request: GraphFakosRequest,
     positions: dict[str, tuple[float, float]],
     anchor: str,
     width: int,
@@ -2809,7 +3451,9 @@ def _relax_force_positions(
         return _bounded_positions(graph, positions, anchor, width, height)
     margin = 46.0
     area = max((width - margin * 2) * (height - margin * 2), 1.0)
-    ideal_distance = sqrt(area / len(node_ids)) * 0.82
+    ideal_distance = (
+        sqrt(area / len(node_ids)) * 0.82 * _clamped(request.link_distance, 0.45, 2.2)
+    )
     fixed_ids = {
         node.id
         for node in graph.nodes
@@ -2831,7 +3475,11 @@ def _relax_force_positions(
                 dx = left_x - right_x
                 dy = left_y - right_y
                 distance = sqrt(dx * dx + dy * dy) or 0.01
-                force = (ideal_distance * ideal_distance) / distance
+                force = (
+                    (ideal_distance * ideal_distance)
+                    / distance
+                    * _clamped(request.repel_force, 0.1, 4.0)
+                )
                 offset_x = dx / distance * force
                 offset_y = dy / distance * force
                 shifts[left_id][0] += offset_x
@@ -2862,11 +3510,31 @@ def _relax_force_positions(
             move = min(length, temperature)
             next_x = x + shift_x / length * move
             next_y = y + shift_y / length * move
-            center_pull = 0.012 if step > 36 else 0.006
+            center_pull = (
+                request.center_force if step > 36 else request.center_force / 2
+            )
             next_x += (width / 2 - next_x) * center_pull
             next_y += (height / 2 - next_y) * center_pull
             positions[node_id] = _bounded_point(next_x, next_y, width, height, margin)
     return _bounded_positions(graph, positions, anchor, width, height)
+
+
+def _apply_pinned_positions(
+    graph: GraphFakosGraph,
+    request: GraphFakosRequest,
+    positions: dict[str, tuple[float, float]],
+    width: int,
+    height: int,
+) -> dict[str, tuple[float, float]]:
+    if not request.pinned_positions:
+        return positions
+    pinned = dict(positions)
+    for node in graph.nodes:
+        if node.id not in request.pinned_positions:
+            continue
+        x, y = request.pinned_positions[node.id]
+        pinned[node.id] = _bounded_point(x, y, width, height, 46.0)
+    return pinned
 
 
 def _bounded_positions(
@@ -3515,6 +4183,29 @@ body.gf-page[data-theme="paper"] {
   font: inherit;
   font-weight: 700;
 }
+.gf-panel-form {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.gf-panel-form input,
+.gf-panel-form select {
+  border: 1px solid var(--gf-line);
+  border-radius: 8px;
+  color: var(--gf-ink);
+  font: inherit;
+  min-width: 0;
+  padding: 9px 10px;
+}
+.gf-panel-form button {
+  border: 1px solid var(--gf-accent);
+  border-radius: 8px;
+  background: var(--gf-accent);
+  color: white;
+  font: inherit;
+  font-weight: 700;
+  padding: 9px 10px;
+}
 .gf-panel-heading {
   display: flex;
   align-items: center;
@@ -3595,7 +4286,8 @@ body.gf-page[data-theme="paper"] {
 }
 .gf-action-panel,
 .gf-workspace-controls,
-.gf-local-controls {
+.gf-local-controls,
+.gf-physics-controls {
   border-color: color-mix(in srgb, var(--gf-accent) 24%, var(--gf-line));
 }
 .gf-capture-form {
@@ -3644,6 +4336,16 @@ body.gf-page[data-theme="paper"] {
 .gf-capture-status[data-state="saved"] {
   color: var(--gf-accent);
 }
+.gf-context-menu {
+  border: 1px solid var(--gf-line);
+  border-radius: 10px;
+  margin-bottom: 10px;
+  padding: 8px 10px;
+}
+.gf-context-menu summary {
+  cursor: pointer;
+  font-weight: 800;
+}
 .gf-canvas-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 190px;
@@ -3653,6 +4355,7 @@ body.gf-page[data-theme="paper"] {
 .gf-canvas-shell {
   min-width: 0;
   outline: none;
+  position: relative;
 }
 .gf-canvas-shell:focus-visible {
   box-shadow: 0 0 0 3px var(--gf-accent-soft);
@@ -3668,6 +4371,15 @@ body.gf-page[data-theme="paper"] {
   background-size: 28px 28px;
   cursor: grab;
   touch-action: none;
+}
+.gf-canvas-renderer {
+  background: color-mix(in srgb, var(--gf-panel) 92%, var(--gf-blue));
+  border: 1px solid var(--gf-line);
+  border-radius: 8px;
+  display: block;
+  height: auto;
+  margin-bottom: 10px;
+  width: 100%;
 }
 .gf-canvas:active { cursor: grabbing; }
 .gf-canvas defs path,

@@ -14,6 +14,39 @@ def test_packaged_viewer_runtime_reducer_runs_in_node() -> None:
     assert "knowledge-saved" in viewer_runtime_script()
     assert "submitAction" in viewer_runtime_script()
     assert "action-saved" in viewer_runtime_script()
+    assert "Refreshing graph..." in viewer_runtime_script()
+    assert "source_id" in viewer_runtime_script()
+    assert "target_node_id" in viewer_runtime_script()
+    assert "splitList" in viewer_runtime_script()
+    assert "pointerdown" in viewer_runtime_script()
+    assert "data-gf-pin='reset'" in viewer_runtime_script()
+    assert "gf-selection-box" in viewer_runtime_script()
+    assert "contextmenu" in viewer_runtime_script()
+    assert "surface-menu" in viewer_runtime_script()
+    assert "Copy node ID" in viewer_runtime_script()
+    assert "Trace path" in viewer_runtime_script()
+    assert "Case packet" in viewer_runtime_script()
+    assert "ContextMenu" in viewer_runtime_script()
+    assert "F10" in viewer_runtime_script()
+    assert "keyboardShortcuts" in viewer_runtime_script()
+    assert "fittedCameraState" in viewer_runtime_script()
+    assert "minimapViewportRect" in viewer_runtime_script()
+    assert "isGraphSearchShortcut" in viewer_runtime_script()
+    assert "search-focus" in viewer_runtime_script()
+    assert "minimap-select" in viewer_runtime_script()
+    assert "selectionStatusText" in viewer_runtime_script()
+    assert "clear-selection" in viewer_runtime_script()
+    assert "viewerContext" in viewer_runtime_script()
+    assert "viewerContextRows" in viewer_runtime_script()
+    assert "authoringDefaults" in viewer_runtime_script()
+    assert "updateWorkbenchForms" in viewer_runtime_script()
+    assert "captureTemplatePayload" in viewer_runtime_script()
+    assert "Template selected:" in viewer_runtime_script()
+    assert "workbookSlotPayload" in viewer_runtime_script()
+    assert "workbook-saved" in viewer_runtime_script()
+    assert "graphfakos:viewer-workbook:v1" in viewer_runtime_script()
+    assert "commandPaletteActionMatches" in viewer_runtime_script()
+    assert "command-palette-filtered" in viewer_runtime_script()
     script = (
         viewer_runtime_script()
         + """
@@ -31,10 +64,172 @@ let state = runtime.normalizeState({
 state = runtime.reduce(state, { name: "select-node", target_id: "provider:third-party" });
 state = runtime.reduce(state, { name: "select-node", target_id: "memory:operator-preference", payload: { additive: true } });
 state = runtime.reduce(state, { name: "pin-node", target_id: "provider:third-party", payload: { x: 320, y: 180 } });
+const pinnedState = runtime.reduce(state, { name: "pin-node", target_id: "memory:operator-preference", payload: { x: 100, y: 80 } });
+const resetState = runtime.reduce(pinnedState, { name: "reset-pins" });
 state = runtime.reduce(state, { name: "camera", payload: { x: 8, y: -2, zoom: 1.25 } });
 state = runtime.reduce(state, { name: "group-toggle", target_id: "provider" });
 state = runtime.reduce(state, { name: "filter", target_id: "node_kind", payload: { value: "memory" } });
-process.stdout.write(JSON.stringify({ state, eventName: runtime.eventName("select-node") }));
+const bounded = runtime.selectedNodeIdsInBounds(
+  [
+    { id: "inside:b", x: 20, y: 30 },
+    { id: "outside", x: 80, y: 30 },
+    { id: "inside:a", x: 10, y: 10 }
+  ],
+  { minX: 0, minY: 0, maxX: 40, maxY: 40 }
+);
+const emptyStatus = runtime.selectionStatusText(runtime.normalizeState({}), { nodes: {}, edges: {} });
+const selectedStatus = runtime.selectionStatusText(
+  runtime.normalizeState({
+    selected_node_ids: ["node:a", "node:b", "node:c", "node:d"],
+    selected_edge_id: "edge:ab"
+  }),
+  {
+    nodes: { "node:a": "Alpha", "node:b": "Beta", "node:c": "Gamma", "node:d": "Delta" },
+    edges: { "edge:ab": "connects" }
+  }
+);
+const fittedState = runtime.fittedCameraState(
+  runtime.normalizeState({ camera_x: 99, camera_y: 88, camera_zoom: 0.5 }),
+  [
+    { id: "node:a", x: 100, y: 100 },
+    { id: "node:b", x: 300, y: 200 }
+  ],
+  { width: 400, height: 200, padding: 40 }
+);
+const emptyFitState = runtime.fittedCameraState(
+  runtime.normalizeState({ camera_x: 99, camera_y: 88, camera_zoom: 0.5 }),
+  [],
+  { width: 400, height: 200, padding: 40 }
+);
+const minimapViewport = runtime.minimapViewportRect(
+  runtime.normalizeState({ camera_x: 20, camera_y: -10, camera_zoom: 2 }),
+  { width: 400, height: 200 },
+  { width: 80, height: 40 }
+);
+const nodeAuthoringDefaults = runtime.authoringDefaults(runtime.normalizeState({
+  selected_node_id: "node:b",
+  selected_node_ids: ["node:a", "node:b"]
+}));
+const edgeAuthoringDefaults = runtime.authoringDefaults(
+  runtime.normalizeState({ selected_edge_id: "edge:ab" }),
+  [{ id: "edge:ab", source_id: "node:a", target_id: "node:b" }]
+);
+const viewerContext = runtime.viewerContext(runtime.normalizeState({
+  screen: "neighborhood",
+  query: "kind:memory",
+  selected_node_id: "node:b",
+  selected_node_ids: ["node:a", "node:b"],
+  selected_edge_id: "edge:ab",
+  camera_x: 8,
+  camera_y: -2,
+  camera_zoom: 1.25,
+  render_engine: "canvas",
+  theme: "ink",
+  saved_view_id: "ops-review",
+  filters: { node_kind: "memory" }
+}));
+const viewerContextRows = runtime.viewerContextRows(
+  runtime.normalizeState({
+    screen: "neighborhood",
+    query: "kind:memory",
+    selected_node_id: "node:b",
+    selected_node_ids: ["node:a", "node:b"],
+    selected_edge_id: "edge:ab",
+    camera_x: 8,
+    camera_y: -2,
+    camera_zoom: 1.25,
+    render_engine: "canvas",
+    theme: "ink",
+    filters: { node_kind: "memory" }
+  }),
+  {
+    nodes: { "node:a": "Alpha", "node:b": "Beta" },
+    edges: { "edge:ab": "connects" }
+  }
+);
+const captureTemplate = runtime.captureTemplatePayload({
+  dataset: {
+    kind: "question",
+    tags: "question, follow-up",
+    source: "workbench",
+    placeholder: "Ask what should be checked next in this graph context."
+  },
+  textContent: "Question"
+});
+const savedRoute = runtime.savedViewRoute(runtime.normalizeState({
+  screen: "explore",
+  query: "kind:memory",
+  selected_node_id: "node:b",
+  selected_node_ids: ["node:a", "node:b"],
+  selected_edge_id: "edge:ab",
+  camera_x: 8,
+  camera_y: -2,
+  camera_zoom: 1.25,
+  render_engine: "canvas",
+  theme: "ink",
+  saved_view_id: "ops-review",
+  hidden_groups: ["provider"],
+  filters: { node_kind: "memory" },
+  pinned_positions: { "node:a": [10, 20] }
+}));
+const workbookSlot = runtime.workbookSlotPayload(
+  runtime.normalizeState({
+    screen: "explore",
+    query: "kind:memory",
+    selected_node_id: "node:b",
+    camera_x: 8,
+    camera_y: -2,
+    camera_zoom: 1.25,
+    render_engine: "canvas",
+    theme: "ink",
+    filters: { node_kind: "memory" }
+  }),
+  "Ops Review",
+  "2026-07-02T12:00:00.000Z"
+);
+const storage = {
+  value: JSON.stringify([workbookSlot]),
+  getItem: () => storage.value
+};
+const workbookSlots = runtime.workbookSlotsFromStorage(storage);
+const commandActions = [
+  { id: "local", label: "Local neighborhood", summary: "Inspect focus node", group: "navigate", route: "/neighborhood" },
+  { id: "capture", label: "Capture knowledge", summary: "Jump to authoring form", group: "author", route: "/explore#capture-knowledge" },
+  { id: "evidence", label: "Evidence review", summary: "Show provenance", group: "review", route: "/explore?query=has%3Aprovenance" }
+];
+const commandSummary = runtime.commandPaletteFilterSummary(commandActions, "author capture");
+process.stdout.write(JSON.stringify({
+  state,
+  resetState,
+  bounded,
+  emptyStatus,
+  selectedStatus,
+  fittedState,
+  emptyFitState,
+  minimapViewport,
+  nodeAuthoringDefaults,
+  edgeAuthoringDefaults,
+  viewerContext,
+  viewerContextRows,
+  captureTemplate,
+  savedRoute,
+  workbookSlot,
+  workbookSlots,
+  commandSummary,
+  commandMatches: [
+    runtime.commandPaletteActionMatches(commandActions[0], "local focus"),
+    runtime.commandPaletteActionMatches(commandActions[1], "author capture"),
+    runtime.commandPaletteActionMatches(commandActions[2], "missing")
+  ],
+  searchShortcuts: [
+    runtime.isGraphSearchShortcut({ key: "/" }),
+    runtime.isGraphSearchShortcut({ key: "k", ctrlKey: true }),
+    runtime.isGraphSearchShortcut({ key: "k", metaKey: true }),
+    runtime.isGraphSearchShortcut({ key: "k" })
+  ],
+  shortcuts: runtime.keyboardShortcuts,
+  eventName: runtime.eventName("select-node")
+}));
 """
     )
 
@@ -53,6 +248,94 @@ process.stdout.write(JSON.stringify({ state, eventName: runtime.eventName("selec
         "provider:third-party",
     ]
     assert payload["state"]["pinned_positions"]["provider:third-party"] == [320, 180]
+    assert payload["resetState"]["pinned_positions"] == {}
+    assert payload["bounded"] == ["inside:a", "inside:b"]
+    assert payload["emptyStatus"] == (
+        "No selected graph items. Shift-click nodes or Shift-drag canvas to select several."
+    )
+    assert payload["selectedStatus"] == (
+        "Selected 4 nodes: Alpha, Beta, Gamma, ... Selected edge: connects."
+    )
+    assert payload["fittedState"]["camera_x"] == -40
+    assert payload["fittedState"]["camera_y"] == -80
+    assert payload["fittedState"]["camera_zoom"] == 1.2
+    assert payload["emptyFitState"]["camera_x"] == 0
+    assert payload["emptyFitState"]["camera_y"] == 0
+    assert payload["emptyFitState"]["camera_zoom"] == 1
+    assert payload["minimapViewport"] == {
+        "x": 0,
+        "y": 1,
+        "width": 38,
+        "height": 20,
+    }
+    assert payload["nodeAuthoringDefaults"] == {
+        "action_type": "draft_edge",
+        "target_id": "node:b",
+        "source_id": "node:a",
+        "target_node_id": "node:b",
+    }
+    assert payload["edgeAuthoringDefaults"] == {
+        "action_type": "draft_edge",
+        "target_id": "node:a",
+        "source_id": "node:a",
+        "target_node_id": "node:b",
+    }
+    assert payload["viewerContext"] == {
+        "screen": "neighborhood",
+        "query": "kind:memory",
+        "selected_node_id": "node:b",
+        "selected_node_ids": ["node:a", "node:b"],
+        "selected_edge_id": "edge:ab",
+        "camera": {"x": 8, "y": -2, "zoom": 1.25},
+        "layout": "force",
+        "render_engine": "canvas",
+        "theme": "ink",
+        "saved_view_id": "ops-review",
+        "filters": {"node_kind": "memory"},
+    }
+    assert payload["viewerContextRows"] == {
+        "screen": "neighborhood: kind:memory",
+        "selection": "connects",
+        "camera": "x=8.0, y=-2.0, zoom=1.25",
+        "view": "force / canvas / ink",
+        "filters": "node_kind=memory",
+    }
+    assert payload["captureTemplate"] == {
+        "label": "Question",
+        "kind": "question",
+        "tags": "question, follow-up",
+        "source": "workbench",
+        "placeholder": "Ask what should be checked next in this graph context.",
+    }
+    assert payload["savedRoute"].startswith("/explore?")
+    assert "query=kind%3Amemory" in payload["savedRoute"]
+    assert "selected_node_ids=node%3Aa%2Cnode%3Ab" in payload["savedRoute"]
+    assert "selected_edge_id=edge%3Aab" in payload["savedRoute"]
+    assert "camera_zoom=1.25" in payload["savedRoute"]
+    assert "render_engine=canvas" in payload["savedRoute"]
+    assert "hidden_groups=provider" in payload["savedRoute"]
+    assert "pinned_positions=" in payload["savedRoute"]
+    assert payload["workbookSlot"]["id"] == "ops-review:2026-07-02T12:00:00.000Z"
+    assert payload["workbookSlot"]["label"] == "Ops Review"
+    assert payload["workbookSlot"]["state"]["query"] == "kind:memory"
+    assert payload["workbookSlot"]["route"].startswith("/explore?")
+    assert payload["workbookSlots"][0]["label"] == "Ops Review"
+    assert payload["commandSummary"] == {
+        "query": "author capture",
+        "total_count": 3,
+        "visible_count": 1,
+        "first_action_id": "capture",
+        "first_route": "/explore#capture-knowledge",
+    }
+    assert payload["commandMatches"] == [True, True, False]
+    assert payload["searchShortcuts"] == [True, True, True, False]
+    assert {item["key"] for item in payload["shortcuts"]} >= {
+        "/ or Ctrl/Meta+K",
+        "+ / =",
+        "-",
+        "Arrow keys / WASD",
+        "Delete / Backspace",
+    }
     assert payload["state"]["camera_x"] == 8
     assert payload["state"]["camera_y"] == -2
     assert payload["state"]["camera_zoom"] == 1.25

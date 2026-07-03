@@ -67,8 +67,9 @@ It supports:
   SVG canvas,
 - minimap orientation, group toggles, and render-budget fallback links for
   larger visible graphs,
-- saved workspace, local graph control, command palette, analytics overlay,
-  replay/export, and graph-authoring panels,
+- saved workspace, local graph control, route-backed command palette with
+  progressive keyboard filtering, analytics overlay, replay/export, and
+  graph-authoring panels,
 - hub-aware navigator panels for global, local-depth, evidence, path, status,
   and context graph lenses,
 - depth-aware neighborhoods,
@@ -126,20 +127,23 @@ make preview-timeline
 make preview-warnings
 make preview-path
 make preview-provenance
+make preview-workbench
 make preview-budget
 make preview-islands
 ```
 
 The demo provider is deterministic and package-local. It can simulate
-agent-memory, source-code, dense-cluster, timeline, provider-warning,
-pathfinding, evidence-heavy, facet-rich, render-budget, and disconnected-island
-graph shapes without Sophiagraph, PragmaGraph, OpenMinion, or external data.
+agent-memory, source-code, dense, timeline, warnings, pathfinding, provenance,
+facets, workbench-mixed, budget, and islands graph shapes without Sophiagraph,
+PragmaGraph, OpenMinion, or external data.
 
 Core-feature scenario map:
 
 - `pathfinding`: path screen, source/target controls, shortest-path highlight.
 - `provenance`: provenance screen, citation cards, evidence coverage.
 - `facets`: filter controls across node kind, edge kind, tag, and source.
+- `workbench-mixed`: combined agent/session memory, code, docs, tests, human
+  notes, evidence gaps, and preview-only graph actions.
 - `budget`: render-limit behavior, summarized hidden nodes, show-more route.
 - `islands`: provider-status diagnostics for disconnected components.
 - `agent-memory`: graph-side knowledge capture beside an agent/memory graph.
@@ -158,6 +162,7 @@ graphfakos-ui --demo-scenario source-code --screen explore --serve --open
 graphfakos-ui --demo-scenario dense --screen explore --layout grouped --render-limit 240 --serve --open
 graphfakos-ui --demo-scenario timeline --screen timeline --layout timeline --serve --open
 graphfakos-ui --demo-scenario pathfinding --screen path --source-node-id provider:entry --target-node-id artifact:result --serve --open
+graphfakos-ui --demo-scenario workbench-mixed --screen explore --focus-node-id agent:reviewer --serve --open
 ```
 
 Fake third-party provider static export:

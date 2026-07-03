@@ -38,9 +38,9 @@ builder or memory store.
 
 ## Initial Release Status
 
-GraphFakos is a `0.0.1` semantic-alpha package. The initial public release is
-intended for local package integrations, adapter development, and visual graph
-inspection. The stable starting contract is the provider-neutral DTO model,
+GraphFakos is a `0.0.2rc1` semantic-alpha release candidate intended for
+local package integrations, adapter development, and visual graph inspection.
+The stable package contract is the provider-neutral DTO model,
 `GraphFakosProvider`, static HTML export, local preview serving, console
 scripts, and reusable viewer assertions.
 
@@ -104,6 +104,8 @@ python3.11 -m pip install -e .
   browser runtime assets
 - camera-aware saved-view routes with `camera_x`, `camera_y`, and
   `camera_zoom`
+- browser-local saved-view slots for workbench iteration without implying
+  provider persistence or hosted collaboration
 - serializable viewer state plus provider-neutral command, event,
   expansion-request, knowledge-capture, saved-view, saved-query, graph-action,
   action-status, graph-analytics, replay-bundle, and theme DTOs for host
@@ -118,7 +120,9 @@ python3.11 -m pip install -e .
 - depth-aware neighborhood expansion, orphan visibility, neighbor-link
   visibility, edge-clutter controls, analytics overlays, and path source/target
   controls
-- command-palette and saved-query panels for faster graph navigation
+- route-backed command palette with saved queries, navigation, evidence review,
+  authoring jumps, export-state shortcuts, and progressive keyboard filtering
+  for faster graph workbench flow
 - hub-aware navigation panels that recommend global, local-depth, evidence,
   path, status, and context routes for larger graphs
 - preview-server knowledge capture forms so host providers or workers can
@@ -224,6 +228,7 @@ make preview-timeline
 make preview-warnings
 make preview-path
 make preview-provenance
+make preview-workbench
 make preview-budget
 make preview-islands
 ```
@@ -231,13 +236,15 @@ make preview-islands
 These commands use deterministic demo scenarios instead of real provider data,
 which makes UI work easier to repeat. The available scenarios are
 `agent-memory`, `source-code`, `dense`, `timeline`, `warnings`, `pathfinding`,
-`provenance`, `facets`, `budget`, and `islands`.
+`provenance`, `facets`, `workbench-mixed`, `budget`, and `islands`.
 
 Use the scenarios as a core-feature plus UI matrix:
 
 - `pathfinding`: path screen, source/target controls, shortest-path highlight.
 - `provenance`: provenance screen, citation cards, evidence coverage.
 - `facets`: filter controls across node kind, edge kind, tag, and source.
+- `workbench-mixed`: combined agent/session memory, code, docs, tests, human
+  notes, evidence gaps, and preview-only graph actions.
 - `budget`: render-limit behavior, summarized hidden nodes, show-more route.
 - `islands`: provider-status diagnostics for disconnected components.
 - `agent-memory`: knowledge capture workflow beside a focused agent/memory
@@ -257,6 +264,7 @@ graphfakos-ui --demo-scenario source-code --screen explore --serve --open
 graphfakos-ui --demo-scenario dense --screen explore --layout grouped --render-limit 240 --serve --open
 graphfakos-ui --demo-scenario timeline --screen timeline --layout timeline --serve --open
 graphfakos-ui --demo-scenario pathfinding --screen path --source-node-id provider:entry --target-node-id artifact:result --serve --open
+graphfakos-ui --demo-scenario workbench-mixed --screen explore --focus-node-id agent:reviewer --serve --open
 ```
 
 Render the built-in third-party fixture manually:

@@ -8,7 +8,7 @@ PRE_COMMIT := $(PYTHON) -m pre_commit
 PYTEST := $(PYTHON) -m pytest
 RUFF := $(PYTHON) -m ruff
 
-.PHONY: help venv dev-install hooks-install hooks-run preview preview-demo preview-dense preview-timeline preview-warnings preview-path preview-provenance preview-budget preview-islands preview-html clean-preview fix format format-check lint test browser-test check release-check
+.PHONY: help venv dev-install hooks-install hooks-run preview preview-demo preview-dense preview-timeline preview-warnings preview-path preview-provenance preview-workbench preview-budget preview-islands preview-html clean-preview fix format format-check lint test browser-test check release-check
 
 help:
 	@printf '%s\n' \
@@ -23,6 +23,7 @@ help:
 		'  make preview-warnings Serve generated warning-state demo data' \
 		'  make preview-path  Serve generated pathfinding demo data' \
 		'  make preview-provenance Serve generated evidence/provenance demo data' \
+		'  make preview-workbench Serve mixed code/knowledge workbench demo data' \
 		'  make preview-budget Serve generated render-budget stress data' \
 		'  make preview-islands Serve generated disconnected-islands data' \
 		'  make preview-html  Write/open a repo-local static export under .graphfakos-preview/' \
@@ -72,6 +73,9 @@ preview-path: $(DEV_STAMP)
 
 preview-provenance: $(DEV_STAMP)
 	PYTHONPATH="$(REPO_ROOT)/src" $(PYTHON) -m graphfakos ui --demo-scenario provenance --screen provenance --serve --open
+
+preview-workbench: $(DEV_STAMP)
+	PYTHONPATH="$(REPO_ROOT)/src" $(PYTHON) -m graphfakos ui --demo-scenario workbench-mixed --screen explore --focus-node-id agent:reviewer --style-color-by source --style-size-by degree --style-edge-width-by confidence --serve --open
 
 preview-budget: $(DEV_STAMP)
 	PYTHONPATH="$(REPO_ROOT)/src" $(PYTHON) -m graphfakos ui --demo-scenario budget --screen explore --render-limit 24 --serve --open

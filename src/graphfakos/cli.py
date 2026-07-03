@@ -48,7 +48,7 @@ _SCREENS: tuple[GraphFakosScreen, ...] = (
 def smoke_payload() -> dict[str, object]:
     return {
         "package": "graphfakos",
-        "version": "0.0.1",
+        "version": "0.0.2rc1",
         "status": "semantic-alpha",
         "semantic_contract": True,
         "openminion_imports": False,
@@ -260,7 +260,7 @@ def _validate_provider_args(args: argparse.Namespace) -> None:
         raise SystemExit("--provider-class requires --provider-module")
 
 
-def _handle_provider_action(
+def handle_provider_action(
     provider: GraphFakosProvider,
     path: str,
     payload: dict[str, object],
@@ -399,7 +399,7 @@ def ui_preview_main(argv: list[str] | None = None) -> int:
                 path,
                 query,
             ),
-            handle_action=lambda path, payload: _handle_provider_action(
+            handle_action=lambda path, payload: handle_provider_action(
                 provider,
                 path,
                 payload,

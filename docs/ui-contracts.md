@@ -61,9 +61,51 @@ GraphFakos-owned responsibilities:
 
 The shared viewer must keep the static HTML export useful without JavaScript.
 The baseline graph canvas is a provider-neutral SVG with route-backed node and
-edge links. Client-side behavior may add pan, zoom, fit, reset, fullscreen,
-drag, group toggle, minimap, keyboard, and cross-panel highlight behavior, but
-those enhancements must not replace the static route/export contract.
+edge links. Client-side behavior may add pan, zoom, fit-to-selection or
+fit-to-visible-graph, reset, fullscreen, drag-to-pan, drag-to-pin, Shift-drag
+box selection, group toggle, minimap node focus/fitting, keyboard camera,
+search, and selection shortcuts, synced minimap viewport frame,
+keyboard-accessible graph-surface action menus, route-backed static action
+panels for focus, neighborhood, evidence, path tracing, edge filtering, and
+case-packet pivots, structural case-packet summaries for neighbors, paths,
+evidence, timeline markers, and component samples, relationship-trail panels
+for direct hops and shortest-path targets, route-backed component cards
+with hub and case-packet links, route-backed timeline frame rails and event
+cards, route-backed diff change cards for node, edge, snapshot, and case review,
+route-backed interaction guides that explain search, camera, selection, local,
+evidence, and authoring workflows with static fallback notes,
+route-backed search/jump result panels derived from the currently visible graph,
+route-backed navigation maps that expose global, local, path, evidence,
+timeline, diff, status, and case-packet lanes,
+route-backed command palettes that group saved queries, graph navigation,
+evidence review, authoring jumps, and export shortcuts without requiring
+JavaScript, plus progressive input filtering, Escape clear, Enter execution,
+and live result counts when the packaged browser runtime is available,
+route-backed active-lens summaries with reset links for stacked query, filter,
+focus, selection, camera, and renderer state, provider-neutral expansion
+planners that serialize `GraphFakosExpansionRequest` without fetching neighbors,
+canvas visual legends that explain visible node kinds, edge kinds, style rules,
+selection, pins, hubs, and evidence markers,
+visible graph data tables that keep node metrics, selection, evidence counts,
+and route-backed focus/local/case/select actions beside the canvas,
+visible relationship data tables that keep edge endpoints, evidence counts,
+and route-backed inspect/source/target/path/kind actions beside the canvas,
+route-backed evidence coverage maps that report declared provenance and
+citation presence or gaps across visible nodes and edges,
+route-backed facet explorers for visible node kind, source, tag, component,
+evidence, and degree buckets,
+structural readability coaches for display pressure, render budget, label
+density, edge opacity, and renderer fallback tuning, live selection status,
+route-backed display recipes for readable review, dense scan, local focus,
+evidence review, timeline review, and presentation export,
+route-backed selection-set recipes for visible nodes, hubs, evidence-bearing
+nodes, focus components, and clear-selection review,
+selection-synced capture/action form defaults, graph-aware action-type defaults
+for node versus edge contexts, and cross-panel highlight behavior, but those
+enhancements must not replace the static route/export contract.
+Selection, context-menu actions, and pinned node positions are viewer state or
+provider-neutral action affordances only unless a provider or host explicitly
+persists the saved view or accepts a graph action.
 
 Automated package tests should cover generated HTML, route state, camera
 parameters, controls, data attributes, and no-JavaScript SVG fallback. Pointer
@@ -86,6 +128,10 @@ The dynamic runtime owns only structural viewer state:
 3. provider-neutral viewer events emitted as `graphfakos:<name>` custom events,
 4. local fallback DOM synchronization for the SVG canvas, minimap, group
    toggles, inspector cards, and saved-view links.
+5. browser-local saved-view slots for workbench convenience. These slots may
+   serialize camera, filters, selection, pins, and route state into
+   `localStorage`, but they are not provider persistence, collaboration, or a
+   durable graph database.
 
 Provider or host packages still own remote data loading, authorization,
 mutation, persistence, semantic ranking, and product chrome. GraphFakos may
@@ -124,17 +170,53 @@ host supplies an action handler:
 1. `POST /api/knowledge` accepts `GraphFakosKnowledgeCapture` fields such as
    `text`, `kind`, `tags`, `source`, `link_node_id`, `link_edge_kind`, and
    `provider_payload`.
-2. Providers that implement the optional capture protocol decide whether to
+2. Knowledge-capture controls should expose visible graph-node attachment and
+   relationship selectors where possible while preserving stable DTO field
+   names for `link_node_id` and `link_edge_kind`.
+3. Knowledge-capture panels may include provider-neutral templates such as
+   notes, questions, code observations, and warnings. Templates may prefill
+   workbench form fields and placeholders, but they must not generate note
+   content, infer semantic truth, or imply durable persistence.
+4. `POST /api/action` accepts `GraphFakosGraphAction` fields such as
+   `action_id`, `action_type`, `target_id`, `source_id`, `target_node_id`,
+   `label`, `body`, `tags`, and `provider_payload`.
+5. Providers that implement the optional capture protocol decide whether to
    persist the note, enqueue a worker, rebuild a code/static graph, or attach a
    temporary preview-only node.
-3. Providers that do not implement the protocol must fail clearly; GraphFakos
-   must not pretend the capture was stored.
-4. Static HTML exports must treat the capture form as read-only and direct
-   users back to the local preview server for mutations.
+6. Providers that implement the optional graph-action protocol decide whether
+   to queue, reject, preview, or apply the edit. GraphFakos only shapes the
+   provider-neutral action payload and displays the returned status.
+7. Providers that do not implement either protocol must fail clearly;
+   GraphFakos must not pretend the capture or action was stored.
+8. Graph-action authoring controls should use visible graph-node selectors
+   where possible while preserving stable DTO field names for `target_id`,
+   `source_id`, and `target_node_id`.
+9. Static HTML exports must treat capture and graph-action forms as read-only
+   and direct users back to the local preview server for mutations.
+10. In local preview mode, accepted captures and graph actions should refresh
+   the current route-backed viewer fragment so preview-only graph items become
+   visible without a manual browser reload.
+11. The local server should accept both JavaScript-submitted JSON payloads and
+    ordinary `application/x-www-form-urlencoded` browser form submissions for
+    preview actions, so the editor remains useful when JavaScript enhancement is
+    unavailable or a host submits forms directly.
+12. Successful browser form submissions should redirect back to the current
+    viewer route, while JavaScript/API submissions that request JSON should keep
+    receiving JSON action results for in-place fragment refresh.
+13. Capture and action submissions may include
+    `provider_payload.viewer_context` with route, selection, camera, renderer,
+    theme, saved-view, query, and filter state so providers can understand the
+    user's workbench context without GraphFakos assigning semantic truth.
+14. Editor panels should show a compact submission-context preview beside the
+    hidden payload field, so users can see which route, selection, camera, and
+    filters will accompany a provider-owned capture or graph action.
 
 Viewer iteration can use `DemoGraphProvider` and the `--demo-scenario` CLI
 switch to simulate representative graph shapes without real provider data. Demo
-scenarios must remain deterministic so UI regressions are repeatable.
+scenarios must remain deterministic so UI regressions are repeatable. Demo
+knowledge captures and graph actions are preview-only graph items; they are
+there so viewer/editor behavior can be tested without implying durable storage
+or semantic truth.
 
 ## Provider Adapter Shape
 

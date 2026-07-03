@@ -96,7 +96,7 @@ from .ui import (
 )
 from .browser import viewer_runtime_script
 
-__version__ = "0.0.1"
+__version__ = "0.0.2rc1"
 PACKAGE_STATUS = "semantic-alpha"
 STABLE_IMPORT_ROOTS = (
     "graphfakos.artifacts",

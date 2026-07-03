@@ -76,9 +76,96 @@ version.
     package links, and validation evidence.
 11. Merge or backfill the release commit into the default branch so GitHub's
     README and source tree match the published PyPI package.
+12. Run the post-release surface audit below and record any cache lag or
+    expected TestPyPI differences before calling the release complete.
 
 Do not reuse a PyPI or TestPyPI version after upload. If a publish succeeds and
 the README or metadata needs correction, release a new patch version.
+
+## Post-Release Surface Audit
+
+After both TestPyPI and PyPI workflows complete, verify each public surface
+separately. Do not treat one stale UI element as proof that the package publish
+failed.
+
+1. Production PyPI package metadata:
+   ```bash
+   python3.11 - <<'PY'
+   import json, urllib.request
+
+   with urllib.request.urlopen(
+       "https://pypi.org/pypi/graphfakos/json",
+       timeout=20,
+   ) as response:
+       data = json.load(response)
+
+   print(data["info"]["version"])
+   print(sorted(data["releases"]))
+   PY
+   ```
+2. Production PyPI version-specific metadata:
+   ```bash
+   python3.11 - <<'PY'
+   import json, urllib.request
+
+   version = "0.0.3"
+   with urllib.request.urlopen(
+       f"https://pypi.org/pypi/graphfakos/{version}/json",
+       timeout=20,
+   ) as response:
+       data = json.load(response)
+
+   description = data["info"].get("description") or ""
+   print(data["info"]["version"])
+   print([file["filename"] for file in data["urls"]])
+   print("body has final version:", version in description)
+   PY
+   ```
+3. Fresh production install:
+   ```bash
+   python3.11 -m venv /tmp/graphfakos-pypi-smoke
+   /tmp/graphfakos-pypi-smoke/bin/python -m pip install --upgrade pip
+   /tmp/graphfakos-pypi-smoke/bin/python -m pip install --no-cache-dir graphfakos==0.0.3
+   /tmp/graphfakos-pypi-smoke/bin/graphfakos-smoke --json
+   ```
+4. TestPyPI RC install:
+   ```bash
+   python3.11 -m venv /tmp/graphfakos-testpypi-smoke
+   /tmp/graphfakos-testpypi-smoke/bin/python -m pip install --upgrade pip
+   /tmp/graphfakos-testpypi-smoke/bin/python -m pip install --no-cache-dir \
+     --index-url https://test.pypi.org/simple/ \
+     --extra-index-url https://pypi.org/simple/ \
+     graphfakos==0.0.3rc1
+   /tmp/graphfakos-testpypi-smoke/bin/graphfakos-smoke --json
+   ```
+5. GitHub default branch:
+   ```bash
+   git fetch --prune origin
+   git show origin/main:README.md | rg '0\.0\.3|0\.0\.2|0\.0\.1|cacheSeconds'
+   git show origin/main:RELEASING.md | rg 'RC-to-Production|invalid-publisher|PyPI stores the README'
+   ```
+
+Expected outcomes:
+
+- Production PyPI should show the final version, such as `0.0.3`.
+- The version-specific PyPI page should contain the final version in the README
+  body and no older release-status text.
+- TestPyPI may still label an older non-RC release, such as `0.0.1`, as its
+  latest stable release when the newer TestPyPI uploads are RCs. This is
+  expected. Confirm the RC appears in release history and can be installed
+  explicitly.
+- The PyPI simple index and pip may lag the JSON API briefly after upload.
+  Retry with `--no-cache-dir` after a short wait before assuming a publish
+  failed.
+- Dynamic README badges, especially `img.shields.io/pypi/v/graphfakos`, may
+  lag behind PyPI metadata. For example, a `0.0.3` PyPI page can have correct
+  package metadata and README body while the Shields badge still renders
+  `v0.0.2`. This is badge cache, not a package publish failure.
+
+For future releases, avoid relying on a dynamic PyPI version badge inside the
+README snapshot published to PyPI. Prefer either a static release badge that is
+bumped with the version or no PyPI version badge in the README body. PyPI
+already shows the package version in the page header.
 
 ## Publishing Setup Notes
 

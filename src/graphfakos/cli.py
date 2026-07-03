@@ -48,7 +48,7 @@ _SCREENS: tuple[GraphFakosScreen, ...] = (
 def smoke_payload() -> dict[str, object]:
     return {
         "package": "graphfakos",
-        "version": "0.0.3",
+        "version": "0.0.4rc1",
         "status": "semantic-alpha",
         "semantic_contract": True,
         "openminion_imports": False,

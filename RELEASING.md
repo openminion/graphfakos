@@ -53,9 +53,15 @@ source commit.
 Use a release candidate on TestPyPI before publishing a production PyPI
 version.
 
+The RC and final release must share the same base version. For example,
+`0.0.4rc1` is the TestPyPI candidate for `0.0.4`; do not validate `0.0.4rc1`
+and then publish a different final base version. The final step is a metadata
+change from `0.0.4rc1` to `0.0.4` on the same release branch after RC proof
+passes.
+
 1. Start from a clean branch based on the intended release source.
 2. Bump package metadata and public version references to an RC such as
-   `0.0.3rc1`.
+   `0.0.4rc1`.
 3. Run local proof:
    ```bash
    make dev-install
@@ -63,20 +69,25 @@ version.
    PYTHONDONTWRITEBYTECODE=1 make browser-test
    PYTHONDONTWRITEBYTECODE=1 make release-check
    ```
-4. Push an RC tag such as `v0.0.3rc1`; the release workflow publishes to
+4. Push an RC tag such as `v0.0.4rc1`; the release workflow publishes to
    TestPyPI because the tag contains `rc`.
 5. Install from TestPyPI in a fresh environment and run CLI smoke proof.
 6. Bump package metadata and public version references to the final version,
-   such as `0.0.3`.
+   such as `0.0.4`.
 7. Rerun the same local proof.
-8. Push the final tag, such as `v0.0.3`; the release workflow publishes to
+8. If TestPyPI should also show the current final version rather than only an
+   RC, manually dispatch the release workflow from the final release branch
+   with `target=testpypi` before pushing the final production tag. Then install
+   that exact final version from TestPyPI and run CLI smoke proof.
+9. Push the final tag, such as `v0.0.4`; the release workflow publishes to
    production PyPI because the tag does not contain `rc`.
-9. Install from production PyPI in a fresh environment and run CLI smoke proof.
-10. Create a GitHub Release page for the final tag with highlights, linked PRs,
-    package links, and validation evidence.
-11. Merge or backfill the release commit into the default branch so GitHub's
+10. Install from production PyPI in a fresh environment and run CLI smoke proof.
+11. Create a GitHub Release page for the final tag with the bare version as the
+    title, such as `0.0.4`, not `GraphFakos 0.0.4`. Include highlights, linked
+    PRs, package links, and validation evidence in the body.
+12. Merge or backfill the release commit into the default branch so GitHub's
     README and source tree match the published PyPI package.
-12. Run the post-release surface audit below and record any cache lag or
+13. Run the post-release surface audit below and record any cache lag or
     expected TestPyPI differences before calling the release complete.
 
 Do not reuse a PyPI or TestPyPI version after upload. If a publish succeeds and
@@ -108,7 +119,7 @@ failed.
    python3.11 - <<'PY'
    import json, urllib.request
 
-   version = "0.0.3"
+   version = "0.0.4"
    with urllib.request.urlopen(
        f"https://pypi.org/pypi/graphfakos/{version}/json",
        timeout=20,
@@ -125,7 +136,7 @@ failed.
    ```bash
    python3.11 -m venv /tmp/graphfakos-pypi-smoke
    /tmp/graphfakos-pypi-smoke/bin/python -m pip install --upgrade pip
-   /tmp/graphfakos-pypi-smoke/bin/python -m pip install --no-cache-dir graphfakos==0.0.3
+   /tmp/graphfakos-pypi-smoke/bin/python -m pip install --no-cache-dir graphfakos==0.0.4
    /tmp/graphfakos-pypi-smoke/bin/graphfakos-smoke --json
    ```
 4. TestPyPI RC install:
@@ -135,7 +146,7 @@ failed.
    /tmp/graphfakos-testpypi-smoke/bin/python -m pip install --no-cache-dir \
      --index-url https://test.pypi.org/simple/ \
      --extra-index-url https://pypi.org/simple/ \
-     graphfakos==0.0.3rc1
+     graphfakos==0.0.4rc1
    /tmp/graphfakos-testpypi-smoke/bin/graphfakos-smoke --json
    ```
 5. GitHub default branch:
@@ -147,13 +158,14 @@ failed.
 
 Expected outcomes:
 
-- Production PyPI should show the final version, such as `0.0.3`.
+- Production PyPI should show the final version, such as `0.0.4`.
 - The version-specific PyPI page should contain the final version in the README
   body and no older release-status text.
-- TestPyPI may still label an older non-RC release, such as `0.0.1`, as its
-  latest stable release when the newer TestPyPI uploads are RCs. This is
-  expected. Confirm the RC appears in release history and can be installed
-  explicitly.
+- If only RCs were uploaded to TestPyPI, TestPyPI may still label an older
+  non-RC release, such as `0.0.1`, as its latest stable release. This is
+  expected for an RC-only rehearsal. If the final version was also dispatched
+  to TestPyPI, TestPyPI should show that final version as the latest stable
+  release.
 - The PyPI simple index and pip may lag the JSON API briefly after upload.
   Retry with `--no-cache-dir` after a short wait before assuming a publish
   failed.
@@ -162,10 +174,10 @@ Expected outcomes:
   package metadata and README body while the Shields badge still renders
   `v0.0.2`. This is badge cache, not a package publish failure.
 
-For future releases, avoid relying on a dynamic PyPI version badge inside the
-README snapshot published to PyPI. Prefer either a static release badge that is
-bumped with the version or no PyPI version badge in the README body. PyPI
-already shows the package version in the page header.
+Avoid relying on a dynamic PyPI version badge inside the README snapshot
+published to PyPI. Prefer either a static release badge that is bumped with the
+version or no PyPI version badge in the README body. PyPI already shows the
+package version in the page header.
 
 ## Publishing Setup Notes
 

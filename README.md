@@ -38,7 +38,7 @@ builder or memory store.
 
 ## Initial Release Status
 
-GraphFakos is a `0.0.2` semantic-alpha release intended for
+GraphFakos is a `0.0.3rc1` semantic-alpha release candidate intended for
 local package integrations, adapter development, and visual graph inspection.
 The stable package contract is the provider-neutral DTO model,
 `GraphFakosProvider`, static HTML export, local preview serving, console

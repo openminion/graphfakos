@@ -16,9 +16,9 @@
 </p>
 
 <p align="center">
-  <a href="https://pypi.org/project/graphfakos/"><img alt="PyPI" src="https://img.shields.io/pypi/v/graphfakos?color=3775A9"></a>
-  <a href="https://pypi.org/project/graphfakos/"><img alt="Python" src="https://img.shields.io/pypi/pyversions/graphfakos"></a>
-  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-blue"></a>
+  <a href="https://pypi.org/project/graphfakos/"><img alt="PyPI" src="https://img.shields.io/pypi/v/graphfakos?color=3775A9&cacheSeconds=300"></a>
+  <a href="https://pypi.org/project/graphfakos/"><img alt="Python" src="https://img.shields.io/pypi/pyversions/graphfakos?cacheSeconds=300"></a>
+  <a href="https://github.com/openminion/graphfakos/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-blue"></a>
   <img alt="Status" src="https://img.shields.io/badge/status-publish--ready%20alpha-5B8DEF">
 </p>
 
@@ -373,17 +373,17 @@ reloaded = load_graph_artifact("graphfakos-artifact.json")
 ```
 
 For package-to-package replay flows, CI attachments, and issue-review examples,
-see [Artifact interchange](docs/artifact-interchange.md).
+see [Artifact interchange](https://github.com/openminion/graphfakos/blob/main/docs/artifact-interchange.md).
 
 ## Docs and Release
 
-- [API compatibility](API_COMPATIBILITY.md)
-- [Release process](RELEASING.md)
-- [Package docs](docs/README.md)
-- [Artifact interchange](docs/artifact-interchange.md)
-- [Custom provider example](docs/custom-provider-example.md)
-- [UI contracts](docs/ui-contracts.md)
-- [Source tree owner map](docs/source-tree-owner-map.md)
+- [API compatibility](https://github.com/openminion/graphfakos/blob/main/API_COMPATIBILITY.md)
+- [Release process](https://github.com/openminion/graphfakos/blob/main/RELEASING.md)
+- [Package docs](https://github.com/openminion/graphfakos/blob/main/docs/README.md)
+- [Artifact interchange](https://github.com/openminion/graphfakos/blob/main/docs/artifact-interchange.md)
+- [Custom provider example](https://github.com/openminion/graphfakos/blob/main/docs/custom-provider-example.md)
+- [UI contracts](https://github.com/openminion/graphfakos/blob/main/docs/ui-contracts.md)
+- [Source tree owner map](https://github.com/openminion/graphfakos/blob/main/docs/source-tree-owner-map.md)
 
 Run local release checks:
 

@@ -32,15 +32,16 @@ The release check must prove:
 
 Do not publish a release from only `src/` imports.
 
-## Initial Public Release Checklist
+## Public Release Checklist
 
-Before publishing `0.0.1`:
+Before publishing a release:
 
 1. confirm the canonical GitHub repository and PyPI project are owned by the
    project maintainers,
 2. run `scripts/release_check.py` without skip flags,
 3. inspect `dist/` only as release output, not as source-controlled content,
-4. verify Sophiagraph and PragmaGraph can install `graphfakos>=0.0.1,<1`,
+4. verify Sophiagraph and PragmaGraph can install the target `graphfakos`
+   version from TestPyPI before production PyPI,
 5. tag the release from the committed source tree.
 
 After release validation, remove local generated artifacts such as `build/`,

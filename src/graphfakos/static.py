@@ -8,9 +8,16 @@ from pathlib import Path
 import webbrowser
 
 from .artifacts import write_graph_artifact
-from .models import GraphFakosGraph, GraphFakosRequest, GraphFakosViewerState
+from .models import (
+    GraphFakosGraph,
+    GraphFakosReplayBundle,
+    GraphFakosRequest,
+    GraphFakosSavedView,
+    GraphFakosViewerState,
+)
 from .provider import (
     GraphFakosProvider,
+    analyze_graph,
     diagnose_graph,
     load_comparison_graph,
     load_overlay_graphs,
@@ -75,6 +82,12 @@ def _graph_report_payload(
     report: dict[str, object] = {
         "request": request.to_dict(),
         "viewer_state": GraphFakosViewerState.from_request(request).to_dict(),
+        "saved_view": GraphFakosSavedView.from_request(
+            request,
+            view_id=request.saved_view_id or "route",
+            label="Current route view",
+        ).to_dict(),
+        "analytics": analyze_graph(graph).to_dict(),
         "graph": graph.to_dict(),
         "diagnostics": diagnose_graph(graph).to_dict(),
         "screen_manifest": list(screen_manifest()),
@@ -116,6 +129,27 @@ class GraphPreviewOutputPaths:
     report_path: str = ""
     markdown_report_path: str = ""
     dot_path: str = ""
+    bundle_path: str = ""
+
+
+def build_graph_replay_bundle(
+    provider: GraphFakosProvider,
+    request: GraphFakosRequest,
+) -> GraphFakosReplayBundle:
+    graph = load_provider_graph(provider, request)
+    saved_view = GraphFakosSavedView.from_request(
+        request,
+        view_id=request.saved_view_id or "route",
+        label="Current route view",
+    )
+    return GraphFakosReplayBundle(
+        bundle_id=f"{graph.graph_id}:{request.screen}",
+        graph=graph,
+        viewer_state=GraphFakosViewerState.from_request(request),
+        created_at=graph.generated_at,
+        saved_views=(saved_view,),
+        analytics=analyze_graph(graph),
+    )
 
 
 def render_graph_markdown_report(
@@ -236,6 +270,20 @@ def write_graph_report(
     }
 
 
+def write_graph_replay_bundle(
+    provider: GraphFakosProvider,
+    request: GraphFakosRequest,
+    output_path: str,
+) -> dict[str, object]:
+    bundle = build_graph_replay_bundle(provider, request)
+    return _write_json_output(
+        bundle.to_dict(),
+        output_path,
+        screen=request.screen,
+        key="replay_bundle",
+    )
+
+
 def write_graph_markdown_report(
     provider: GraphFakosProvider,
     request: GraphFakosRequest,
@@ -354,6 +402,27 @@ def write_provider_preview_outputs(
             output_paths.dot_path,
             screen=request.screen,
         )
+    if output_paths.bundle_path:
+        bundle = GraphFakosReplayBundle(
+            bundle_id=f"{graph.graph_id}:{request.screen}",
+            graph=graph,
+            viewer_state=GraphFakosViewerState.from_request(request),
+            created_at=graph.generated_at,
+            saved_views=(
+                GraphFakosSavedView.from_request(
+                    request,
+                    view_id=request.saved_view_id or "route",
+                    label="Current route view",
+                ),
+            ),
+            analytics=analyze_graph(graph),
+        )
+        payload["replay_bundle"] = _write_json_output(
+            bundle.to_dict(),
+            output_paths.bundle_path,
+            screen=request.screen,
+            key="replay_bundle",
+        )
     payload.update(
         {
             "provider_id": graph.provider_id,
@@ -455,12 +524,14 @@ def _resolved_output_path(output_path: str) -> Path:
 
 __all__ = [
     "GraphPreviewOutputPaths",
+    "build_graph_replay_bundle",
     "build_graph_report",
     "render_graph_dot",
     "render_embeddable_html",
     "render_graph_markdown_report",
     "render_static_html",
     "write_graph_dot",
+    "write_graph_replay_bundle",
     "write_embeddable_html",
     "write_graph_markdown_report",
     "write_provider_preview_outputs",

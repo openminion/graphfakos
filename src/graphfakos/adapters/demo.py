@@ -5,9 +5,11 @@ from __future__ import annotations
 from dataclasses import replace
 
 from graphfakos.models import (
+    GraphFakosActionStatus,
     GraphFakosCitation,
     GraphFakosEdge,
     GraphFakosGraph,
+    GraphFakosGraphAction,
     GraphFakosKnowledgeCapture,
     GraphFakosNode,
     GraphFakosProvenance,
@@ -25,6 +27,7 @@ DEMO_SCENARIOS = (
     "pathfinding",
     "provenance",
     "facets",
+    "workbench-mixed",
     "budget",
     "islands",
 )
@@ -32,6 +35,7 @@ DEMO_SCENARIOS = (
 _KIND_STYLES = {
     "agent": ("#2563eb", "circle"),
     "artifact": ("#d97706", "pill"),
+    "action": ("#be123c", "diamond"),
     "chunk": ("#0891b2", "circle"),
     "decision": ("#7c3aed", "diamond"),
     "document": ("#16a34a", "diamond"),
@@ -71,6 +75,8 @@ def build_demo_graph(
         nodes, edges = _evidence_graph()
     elif scenario == "facets":
         nodes, edges = _facets_graph()
+    elif scenario == "workbench-mixed":
+        nodes, edges = _workbench_mixed_graph()
     elif scenario == "budget":
         nodes, edges = _budget_graph()
     elif scenario == "islands":
@@ -98,6 +104,7 @@ def build_demo_graph(
             "static_export",
             "local_preview",
             "knowledge_capture",
+            "graph_action",
         ),
         nodes=nodes,
         edges=edges,
@@ -133,6 +140,9 @@ def build_demo_graph(
             "provider_status": "Exercise diagnostics, facets, and warning states.",
             "knowledge_capture": (
                 "Accept temporary workbench captures during local preview sessions."
+            ),
+            "graph_action": (
+                "Render provider-neutral graph edit requests as preview-only action nodes."
             ),
         },
         available_facets=_facets(nodes, edges),
@@ -255,15 +265,21 @@ class DemoGraphProvider:
         "static_export",
         "local_preview",
         "knowledge_capture",
+        "graph_action",
     )
 
     def __init__(self, scenario: str = "agent-memory") -> None:
         self.scenario = _normalize_scenario(scenario)
         self._captures: list[GraphFakosKnowledgeCapture] = []
+        self._actions: list[GraphFakosGraphAction] = []
 
     def load_graph(self, request: GraphFakosRequest) -> GraphFakosGraph:
         graph = build_demo_graph(self.scenario, request)
-        return _graph_with_captures(graph, tuple(self._captures))
+        return _graph_with_workbench_items(
+            graph,
+            tuple(self._captures),
+            tuple(self._actions),
+        )
 
     def load_comparison_graph(self, request: GraphFakosRequest) -> GraphFakosGraph:
         return build_demo_baseline_graph(self.scenario, request)
@@ -280,6 +296,107 @@ class DemoGraphProvider:
     ) -> GraphFakosGraph:
         self._captures.append(capture)
         return self.load_graph(GraphFakosRequest())
+
+    def submit_graph_action(
+        self,
+        action: GraphFakosGraphAction,
+    ) -> GraphFakosActionStatus:
+        self._actions.append(action)
+        return GraphFakosActionStatus(
+            action_id=action.action_id,
+            status="previewed",
+            message="demo provider rendered this provider-neutral graph action as preview-only graph content",
+            graph_id=f"demo-{self.scenario}",
+            provider_payload={
+                "preview_node_id": f"action:{len(self._actions):03d}",
+                "preview_only": True,
+            },
+        )
+
+
+def _graph_with_workbench_items(
+    graph: GraphFakosGraph,
+    captures: tuple[GraphFakosKnowledgeCapture, ...],
+    actions: tuple[GraphFakosGraphAction, ...],
+) -> GraphFakosGraph:
+    graph = _graph_with_captures(graph, captures)
+    return _graph_with_actions(graph, actions)
+
+
+def _graph_with_actions(
+    graph: GraphFakosGraph,
+    actions: tuple[GraphFakosGraphAction, ...],
+) -> GraphFakosGraph:
+    if not actions:
+        return graph
+    node_ids = {node.id for node in graph.nodes}
+    nodes = list(graph.nodes)
+    edges = list(graph.edges)
+    for index, action in enumerate(actions, start=1):
+        node_id = f"action:{index:03d}"
+        label = action.label or action.action_type.replace("_", " ").title()
+        nodes.append(
+            GraphFakosNode(
+                id=node_id,
+                label=_capture_label(label),
+                kind="action",
+                summary=action.body or "Preview-only provider-neutral graph action.",
+                tags=action.tags,
+                source="workbench-action",
+                provenance_ids=("prov:demo-generator",),
+                citation_ids=("cite:demo-contract",),
+                visual=_visual_for("action"),
+                provider_payload={"action": action.to_dict(), "preview_only": True},
+            )
+        )
+        if action.target_id and action.target_id in node_ids:
+            edges.append(
+                GraphFakosEdge(
+                    id=f"edge:action:{index:03d}:target",
+                    source_id=action.target_id,
+                    target_id=node_id,
+                    kind=action.action_type,
+                    label=action.action_type.replace("_", " "),
+                    confidence=1.0,
+                    provenance_ids=("prov:demo-generator",),
+                    citation_ids=("cite:demo-contract",),
+                )
+            )
+        if action.source_id in node_ids and action.target_node_id in node_ids:
+            edges.append(
+                GraphFakosEdge(
+                    id=f"edge:action:{index:03d}:proposed",
+                    source_id=action.source_id,
+                    target_id=action.target_node_id,
+                    kind=action.action_type,
+                    label=f"proposed {action.action_type.replace('_', ' ')}",
+                    confidence=0.5,
+                    provenance_ids=("prov:demo-generator",),
+                    citation_ids=("cite:demo-contract",),
+                    provider_payload={
+                        "action_id": action.action_id,
+                        "preview_only": True,
+                    },
+                )
+            )
+        node_ids.add(node_id)
+    return replace(
+        graph,
+        nodes=tuple(nodes),
+        edges=tuple(edges),
+        stats={
+            **graph.stats,
+            "action_count": len(actions),
+            "node_count": len(nodes),
+            "edge_count": len(edges),
+        },
+        available_facets=_facets(tuple(nodes), tuple(edges)),
+        provider_payload={
+            **graph.provider_payload,
+            "workbench_action_count": len(actions),
+            "workbench_actions_preview_only": True,
+        },
+    )
 
 
 def _graph_with_captures(
@@ -503,6 +620,169 @@ def _source_code_graph() -> tuple[
         ("edge:server-renders-ui", "file:server", "file:ui-app", "renders"),
     )
     return _nodes(rows), _edges(edges)
+
+
+def _workbench_mixed_graph() -> tuple[
+    tuple[GraphFakosNode, ...], tuple[GraphFakosEdge, ...]
+]:
+    rows = (
+        ("provider:openminion", "OpenMinion Runtime", "provider", "provider runtime"),
+        ("agent:reviewer", "Reviewer Agent", "agent", "agent review"),
+        (
+            "session:graph-polish",
+            "Graph Polish Session",
+            "session",
+            "session review",
+        ),
+        (
+            "memory:layout-preference",
+            "Layout Preference",
+            "memory",
+            "memory ui",
+        ),
+        ("memory:evidence-policy", "Evidence Policy Note", "memory", "memory evidence"),
+        ("document:ui-contracts", "UI Contracts Doc", "document", "document contract"),
+        (
+            "document:viewer-roadmap",
+            "Viewer Roadmap",
+            "document",
+            "document roadmap",
+        ),
+        ("module:graphfakos", "graphfakos package", "module", "module package"),
+        ("file:ui-app", "ui/app.py", "file", "file renderer"),
+        ("file:viewer-js", "assets/viewer.js", "file", "file browser"),
+        ("symbol:graph-viewer", "render_graph_viewer", "symbol", "symbol renderer"),
+        ("test:browser-runtime", "Browser Runtime Tests", "test", "test browser"),
+        (
+            "artifact:preview-server",
+            "Local Preview Server",
+            "artifact",
+            "artifact preview",
+        ),
+        ("note:operator-followup", "Operator Follow-up Note", "note", "note human"),
+        (
+            "question:canvas-scale",
+            "Canvas Scale Question",
+            "question",
+            "question renderer",
+        ),
+        ("warning:evidence-gap", "Evidence Gap Warning", "warning", "warning evidence"),
+        ("task:visual-qa", "Visual QA Task", "task", "task qa"),
+        ("action:proposed-link", "Proposed Link Action", "action", "action preview"),
+    )
+    edges = (
+        ("edge:runtime-hosts-agent", "provider:openminion", "agent:reviewer", "hosts"),
+        (
+            "edge:agent-observes-session",
+            "agent:reviewer",
+            "session:graph-polish",
+            "observes",
+        ),
+        (
+            "edge:session-records-layout",
+            "session:graph-polish",
+            "memory:layout-preference",
+            "records",
+        ),
+        (
+            "edge:session-records-evidence",
+            "session:graph-polish",
+            "memory:evidence-policy",
+            "records",
+        ),
+        (
+            "edge:layout-informs-contracts",
+            "memory:layout-preference",
+            "document:ui-contracts",
+            "informs",
+        ),
+        (
+            "edge:evidence-informs-contracts",
+            "memory:evidence-policy",
+            "document:ui-contracts",
+            "informs",
+        ),
+        (
+            "edge:contracts-guide-roadmap",
+            "document:ui-contracts",
+            "document:viewer-roadmap",
+            "guides",
+        ),
+        (
+            "edge:roadmap-targets-module",
+            "document:viewer-roadmap",
+            "module:graphfakos",
+            "targets",
+        ),
+        ("edge:module-owns-ui", "module:graphfakos", "file:ui-app", "owns"),
+        ("edge:module-owns-viewer", "module:graphfakos", "file:viewer-js", "owns"),
+        ("edge:ui-defines-renderer", "file:ui-app", "symbol:graph-viewer", "defines"),
+        (
+            "edge:viewer-covered-by-browser-test",
+            "file:viewer-js",
+            "test:browser-runtime",
+            "covered_by",
+        ),
+        (
+            "edge:ui-renders-preview-server",
+            "file:ui-app",
+            "artifact:preview-server",
+            "renders",
+        ),
+        (
+            "edge:operator-note-links-agent",
+            "note:operator-followup",
+            "agent:reviewer",
+            "mentions",
+        ),
+        (
+            "edge:question-targets-canvas",
+            "question:canvas-scale",
+            "file:viewer-js",
+            "questions",
+        ),
+        (
+            "edge:warning-flags-evidence",
+            "warning:evidence-gap",
+            "document:ui-contracts",
+            "flags",
+        ),
+        (
+            "edge:task-verifies-preview",
+            "task:visual-qa",
+            "artifact:preview-server",
+            "verifies",
+        ),
+        (
+            "edge:action-links-note",
+            "action:proposed-link",
+            "note:operator-followup",
+            "queues",
+        ),
+        ("edge:agent-links-code", "agent:reviewer", "file:ui-app", "links"),
+    )
+    evidence_gap_node_ids = {
+        "question:canvas-scale",
+        "warning:evidence-gap",
+        "action:proposed-link",
+    }
+    evidence_gap_edge_ids = {
+        "edge:question-targets-canvas",
+        "edge:action-links-note",
+    }
+    nodes = tuple(
+        replace(node, provenance_ids=(), citation_ids=())
+        if node.id in evidence_gap_node_ids
+        else node
+        for node in _nodes(rows)
+    )
+    graph_edges = tuple(
+        replace(edge, provenance_ids=(), citation_ids=())
+        if edge.id in evidence_gap_edge_ids
+        else edge
+        for edge in _edges(edges)
+    )
+    return nodes, graph_edges
 
 
 def _dense_graph() -> tuple[tuple[GraphFakosNode, ...], tuple[GraphFakosEdge, ...]]:
@@ -995,6 +1275,10 @@ def _scenario_warnings(scenario: str) -> tuple[str, ...]:
         return ("dense graph intentionally stresses edge clutter and group controls",)
     if scenario == "islands":
         return ("synthetic disconnected islands for provider-status diagnostics",)
+    if scenario == "workbench-mixed":
+        return (
+            "mixed workbench graph intentionally includes preview-only actions and evidence gaps",
+        )
     if scenario == "budget":
         return ("synthetic large graph for render-budget and show-more review",)
     return ()

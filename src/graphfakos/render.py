@@ -2,12 +2,14 @@
 
 from .static import (
     GraphPreviewOutputPaths,
+    build_graph_replay_bundle,
     build_graph_report,
     render_graph_dot,
     render_embeddable_html,
     render_graph_markdown_report,
     render_static_html,
     write_graph_dot,
+    write_graph_replay_bundle,
     write_embeddable_html,
     write_graph_markdown_report,
     write_provider_graph_artifact,
@@ -30,6 +32,7 @@ from .ui import (
 
 __all__ = [
     "GraphPreviewOutputPaths",
+    "build_graph_replay_bundle",
     "build_graph_report",
     "build_graph_diff",
     "build_viewer_route",
@@ -46,6 +49,7 @@ __all__ = [
     "review_preset_manifest",
     "screen_manifest",
     "write_graph_dot",
+    "write_graph_replay_bundle",
     "write_embeddable_html",
     "write_graph_markdown_report",
     "write_provider_graph_artifact",

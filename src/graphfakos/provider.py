@@ -6,8 +6,11 @@ from collections import deque
 from typing import Protocol, runtime_checkable
 
 from .models import (
+    GraphFakosActionStatus,
     GraphFakosDiagnostics,
     GraphFakosGraph,
+    GraphFakosGraphAction,
+    GraphFakosGraphAnalytics,
     GraphFakosKnowledgeCapture,
     GraphFakosRequest,
 )
@@ -49,6 +52,15 @@ class GraphFakosKnowledgeCaptureProvider(Protocol):
         capture: GraphFakosKnowledgeCapture,
     ) -> GraphFakosGraph | dict[str, object] | None:
         """Accept a workbench note or observation and refresh provider graph state."""
+
+
+@runtime_checkable
+class GraphFakosGraphActionProvider(Protocol):
+    def submit_graph_action(
+        self,
+        action: GraphFakosGraphAction,
+    ) -> GraphFakosActionStatus | dict[str, object] | None:
+        """Accept a provider-neutral draft graph edit or merge request."""
 
 
 def validate_graph(graph: GraphFakosGraph) -> None:
@@ -118,6 +130,64 @@ def diagnose_graph(graph: GraphFakosGraph) -> GraphFakosDiagnostics:
     )
 
 
+def analyze_graph(graph: GraphFakosGraph) -> GraphFakosGraphAnalytics:
+    degrees = _degree_map(graph)
+    node_count = len(graph.nodes)
+    edge_count = len(graph.edges)
+    max_degree = max(degrees.values(), default=0)
+    hub_floor = max(3, max_degree - 1)
+    hub_node_ids = tuple(
+        sorted(node_id for node_id, degree in degrees.items() if degree >= hub_floor)
+    )
+    possible_edges = node_count * max(node_count - 1, 0)
+    density = edge_count / possible_edges if possible_edges else 0.0
+    return GraphFakosGraphAnalytics(
+        component_count=_component_count(graph),
+        node_count=node_count,
+        edge_count=edge_count,
+        hub_node_ids=hub_node_ids,
+        orphan_node_ids=diagnose_graph(graph).orphan_node_ids,
+        max_degree=max_degree,
+        average_degree=(sum(degrees.values()) / node_count if node_count else 0.0),
+        density=density,
+    )
+
+
+def _degree_map(graph: GraphFakosGraph) -> dict[str, int]:
+    degrees = {node.id: 0 for node in graph.nodes}
+    for edge in graph.edges:
+        if edge.source_id in degrees:
+            degrees[edge.source_id] += 1
+        if edge.target_id in degrees:
+            degrees[edge.target_id] += 1
+    return degrees
+
+
+def _component_count(graph: GraphFakosGraph) -> int:
+    if not graph.nodes:
+        return 0
+    adjacency: dict[str, set[str]] = {node.id: set() for node in graph.nodes}
+    for edge in graph.edges:
+        if edge.source_id in adjacency and edge.target_id in adjacency:
+            adjacency[edge.source_id].add(edge.target_id)
+            adjacency[edge.target_id].add(edge.source_id)
+    remaining = set(adjacency)
+    count = 0
+    while remaining:
+        count += 1
+        start = next(iter(remaining))
+        frontier: deque[str] = deque([start])
+        remaining.remove(start)
+        while frontier:
+            node_id = frontier.popleft()
+            for neighbor in adjacency.get(node_id, ()):
+                if neighbor not in remaining:
+                    continue
+                remaining.remove(neighbor)
+                frontier.append(neighbor)
+    return count
+
+
 def _disconnected_node_ids(graph: GraphFakosGraph) -> tuple[str, ...]:
     if not graph.nodes:
         return ()
@@ -184,8 +254,10 @@ def load_overlay_graphs(
 
 
 __all__ = [
+    "analyze_graph",
     "diagnose_graph",
     "GraphFakosComparisonProvider",
+    "GraphFakosGraphActionProvider",
     "GraphFakosKnowledgeCaptureProvider",
     "GraphFakosOverlayProvider",
     "GraphFakosProvider",

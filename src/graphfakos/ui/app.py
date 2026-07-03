@@ -5,15 +5,20 @@ from __future__ import annotations
 from collections import defaultdict, deque
 from html import escape
 import json
-from math import cos, pi, sin
+from math import cos, pi, sin, sqrt
 import shlex
 from urllib.parse import urlencode
 
 from graphfakos.browser import viewer_runtime_script
 from graphfakos.models import (
+    GraphFakosActionStatus,
     GraphFakosCitation,
     GraphFakosDiagnostics,
     GraphFakosEdge,
+    GraphFakosExpansionRequest,
+    GraphFakosGraphAction,
+    GraphFakosSavedQuery,
+    GraphFakosSavedView,
     GraphFakosGraph,
     GraphFakosNode,
     GraphFakosProvenance,
@@ -23,6 +28,7 @@ from graphfakos.models import (
 )
 from graphfakos.provider import (
     GraphFakosProvider,
+    analyze_graph,
     diagnose_graph,
     load_comparison_graph,
     load_overlay_graphs,
@@ -38,6 +44,86 @@ _SCREEN_NAV: tuple[tuple[GraphFakosScreen, str], ...] = (
     ("diff", "Diff"),
     ("provider_status", "Provider Status"),
     ("context_preview", "Context"),
+)
+
+_GRAPH_ACTION_TYPES: tuple[tuple[str, str], ...] = (
+    ("draft_node", "Draft node"),
+    ("draft_edge", "Draft edge"),
+    ("merge_alias", "Merge alias"),
+)
+_CAPTURE_TEMPLATES: tuple[tuple[str, str, str, str, str], ...] = (
+    (
+        "note",
+        "Note",
+        "note",
+        "ui, graph",
+        "Capture a durable observation about the selected graph context.",
+    ),
+    (
+        "question",
+        "Question",
+        "question",
+        "question, follow-up",
+        "Ask what should be checked next in this graph context.",
+    ),
+    (
+        "code",
+        "Code observation",
+        "code",
+        "code, graph",
+        "Capture a source or code observation tied to this graph context.",
+    ),
+    (
+        "warning",
+        "Warning",
+        "warning",
+        "warning, review",
+        "Flag a risk, stale edge, or unexpected graph relationship.",
+    ),
+)
+_MINIMAP_WIDTH = 180
+_MINIMAP_HEIGHT = 90
+_MINIMAP_NODE_RADIUS = 4
+_FILTER_TOOLBAR_STATE_EXCLUDES = (
+    "query",
+    "layout",
+    "render_engine",
+    "theme",
+    "limit",
+    "render_limit",
+    "saved_view_id",
+    "show_orphans",
+    "show_neighbor_links",
+    "edge_clutter",
+    "analytics_overlay",
+    "preset_id",
+    "focus_node_id",
+    "selected_edge_id",
+    "comparison_graph_id",
+)
+_LOCAL_CONTROL_STATE_EXCLUDES = (
+    "focus_node_id",
+    "layout",
+    "query",
+    "max_depth",
+    "show_neighbor_links",
+    "show_orphans",
+    "edge_clutter",
+    "analytics_overlay",
+)
+_PHYSICS_STATE_EXCLUDES = (
+    "center_force",
+    "repel_force",
+    "link_distance",
+    "node_scale",
+    "edge_scale",
+    "edge_opacity",
+    "label_density",
+)
+_STYLE_STATE_EXCLUDES = (
+    "style_color_by",
+    "style_size_by",
+    "style_edge_width_by",
 )
 
 
@@ -139,7 +225,8 @@ def render_graph_viewer(
         "<!doctype html><html><head><meta charset='utf-8'>"
         "<meta name='viewport' content='width=device-width, initial-scale=1'>"
         f"<title>{escape(graph.label)} - GraphFakos</title>"
-        f"{_STYLE}</head><body class='gf-page'><div class='gf-shell'>"
+        f"{_STYLE}</head><body class='gf-page' data-theme='{escape(request.theme)}'>"
+        "<div class='gf-shell'>"
         f"{_nav(request)}"
         f"{body}</div>{_viewer_script_tag()}</body></html>"
     )
@@ -185,6 +272,9 @@ def _request_from_query(
             or _first_query_value(query, "node_id")
             or request.focus_node_id
         ),
+        selected_node_ids=_tuple_query_value(
+            query, "selected_node_ids", request.selected_node_ids
+        ),
         selected_edge_id=_first_query_value(query, "selected_edge_id")
         or request.selected_edge_id,
         source_node_id=_first_query_value(query, "source_node_id")
@@ -205,6 +295,51 @@ def _request_from_query(
         camera_x=_float_query_value(query, "camera_x", request.camera_x),
         camera_y=_float_query_value(query, "camera_y", request.camera_y),
         camera_zoom=_float_query_value(query, "camera_zoom", request.camera_zoom),
+        render_engine=_first_query_value(query, "render_engine")
+        or request.render_engine,
+        theme=_first_query_value(query, "theme") or request.theme,
+        saved_view_id=_first_query_value(query, "saved_view_id")
+        or request.saved_view_id,
+        show_orphans=_bool_query_value(query, "show_orphans", request.show_orphans),
+        show_neighbor_links=_bool_query_value(
+            query,
+            "show_neighbor_links",
+            request.show_neighbor_links,
+        ),
+        edge_clutter=_first_query_value(query, "edge_clutter") or request.edge_clutter,
+        analytics_overlay=_first_query_value(query, "analytics_overlay")
+        or request.analytics_overlay,
+        center_force=_float_query_value(query, "center_force", request.center_force),
+        repel_force=_float_query_value(query, "repel_force", request.repel_force),
+        link_distance=_float_query_value(query, "link_distance", request.link_distance),
+        node_scale=_float_query_value(query, "node_scale", request.node_scale),
+        edge_scale=_float_query_value(query, "edge_scale", request.edge_scale),
+        edge_opacity=_float_query_value(query, "edge_opacity", request.edge_opacity),
+        label_density=_float_query_value(query, "label_density", request.label_density),
+        pinned_positions=_positions_query_value(
+            query, "pinned_positions", request.pinned_positions
+        ),
+        style_color_by=_first_query_value(query, "style_color_by")
+        or request.style_color_by,
+        style_size_by=_first_query_value(query, "style_size_by")
+        or request.style_size_by,
+        style_edge_width_by=_first_query_value(query, "style_edge_width_by")
+        or request.style_edge_width_by,
+        min_degree=_int_query_value(query, "min_degree", request.min_degree),
+        max_degree=_int_query_value(query, "max_degree", request.max_degree),
+        component_id=_first_query_value(query, "component_id") or request.component_id,
+        connected_to_node_id=_first_query_value(query, "connected_to_node_id")
+        or request.connected_to_node_id,
+        evidence_filter=_first_query_value(query, "evidence_filter")
+        or request.evidence_filter,
+        cluster_id=_first_query_value(query, "cluster_id") or request.cluster_id,
+        timeline_frame=_first_query_value(query, "timeline_frame")
+        or request.timeline_frame,
+        timeline_playback=_first_query_value(query, "timeline_playback")
+        or request.timeline_playback,
+        pivot_node_id=_first_query_value(query, "pivot_node_id")
+        or request.pivot_node_id,
+        pivot_mode=_first_query_value(query, "pivot_mode") or request.pivot_mode,
     )
 
 
@@ -225,6 +360,69 @@ def _float_query_value(
         return float(value)
     except ValueError:
         return fallback
+
+
+def _int_query_value(
+    query: dict[str, list[str]],
+    key: str,
+    fallback: int | None,
+) -> int | None:
+    value = _first_query_value(query, key)
+    if value is None:
+        return fallback
+    try:
+        return int(value)
+    except ValueError:
+        return fallback
+
+
+def _tuple_query_value(
+    query: dict[str, list[str]],
+    key: str,
+    fallback: tuple[str, ...],
+) -> tuple[str, ...]:
+    value = _first_query_value(query, key)
+    if value is None:
+        return fallback
+    return tuple(item.strip() for item in value.split(",") if item.strip())
+
+
+def _positions_query_value(
+    query: dict[str, list[str]],
+    key: str,
+    fallback: dict[str, tuple[float, float]],
+) -> dict[str, tuple[float, float]]:
+    value = _first_query_value(query, key)
+    if value is None:
+        return dict(fallback)
+    try:
+        payload = json.loads(value)
+    except json.JSONDecodeError:
+        return dict(fallback)
+    parsed: dict[str, tuple[float, float]] = {}
+    if not isinstance(payload, dict):
+        return dict(fallback)
+    for node_id, position in payload.items():
+        if not isinstance(node_id, str):
+            continue
+        if not isinstance(position, (list, tuple)) or len(position) != 2:
+            continue
+        try:
+            parsed[node_id] = (float(position[0]), float(position[1]))
+        except (TypeError, ValueError):
+            continue
+    return parsed
+
+
+def _bool_query_value(
+    query: dict[str, list[str]],
+    key: str,
+    fallback: bool,
+) -> bool:
+    value = _first_query_value(query, key)
+    if value is None:
+        return fallback
+    return value.casefold() not in {"0", "false", "no", "off"}
 
 
 def build_viewer_route(
@@ -402,7 +600,7 @@ def render_graph_fragment(
     return (
         "<graphfakos-viewer data-graphfakos-component='viewer' "
         f"data-state-json='{state_json}' data-graph-json='{graph_json}' "
-        "render-engine='svg' theme='default'>"
+        f"render-engine='{escape(request.render_engine)}' theme='{escape(request.theme)}'>"
         "<main class='gf-content gf-embed-root' data-graphfakos-embed='true' "
         f"data-graphfakos-screen='{escape(request.screen)}' "
         f"data-graphfakos-route='{escape(route)}' "
@@ -420,6 +618,16 @@ def _json_attribute(payload: object) -> str:
     )
 
 
+def _json_script(data_attribute: str, payload: object) -> str:
+    content = (
+        json.dumps(payload, sort_keys=True, separators=(",", ":"))
+        .replace("&", "\\u0026")
+        .replace("<", "\\u003c")
+        .replace(">", "\\u003e")
+    )
+    return f"<script type='application/json' {data_attribute}='true'>{content}</script>"
+
+
 def _viewer_script_tag() -> str:
     return f"<script>\n{viewer_runtime_script()}\n</script>"
 
@@ -428,20 +636,33 @@ def _route_href(
     request: GraphFakosRequest,
     *,
     screen: GraphFakosScreen | None = None,
-    overrides: dict[str, str | int | None] | None = None,
+    overrides: dict[str, object] | None = None,
 ) -> str:
     route = f"/{screen or request.screen}"
-    payload: dict[str, str | int] = {}
+    payload: dict[str, object] = {}
     for key, value in request.to_dict().items():
         if key == "screen":
             continue
         route_key = "preset" if key == "preset_id" else key
         if isinstance(value, dict):
+            if route_key == "pinned_positions":
+                if value:
+                    payload[route_key] = json.dumps(
+                        value, sort_keys=True, separators=(",", ":")
+                    )
+                continue
             for filter_key, filter_value in value.items():
                 if filter_value not in ("", None):
                     payload[filter_key] = filter_value
             continue
-        if value not in ("", None, False):
+        if isinstance(value, list | tuple):
+            if value:
+                payload[route_key] = ",".join(str(item) for item in value)
+            continue
+        if isinstance(value, bool):
+            payload[route_key] = "true" if value else "false"
+            continue
+        if not _route_value_is_empty(value):
             payload[route_key] = value
     if overrides:
         for key, value in overrides.items():
@@ -451,6 +672,10 @@ def _route_href(
                 continue
             payload[route_key] = value
     return route + (f"?{urlencode(payload)}" if payload else "")
+
+
+def _route_value_is_empty(value: object) -> bool:
+    return value is None or value == "" or (isinstance(value, bool) and not value)
 
 
 def _nav(request: GraphFakosRequest) -> str:
@@ -494,6 +719,8 @@ def _header(
         f"{_badge(f'{len(graph.nodes)} nodes', 'blue')}"
         f"{_badge(f'{len(graph.edges)} edges', 'neutral')}"
         f"{_badge(graph.provider_label, 'neutral')}"
+        f"{_badge(f'render:{request.render_engine}', 'neutral')}"
+        f"{_badge(f'theme:{request.theme}', 'blue')}"
         f"{diff_summary}{overlay_summary}"
         "</div></header>"
     )
@@ -613,7 +840,7 @@ def _render_screen(
     if request.screen == "provenance":
         return _render_provenance(graph)
     if request.screen == "timeline":
-        return _render_timeline(graph)
+        return _render_timeline(graph, request)
     if request.screen == "diff":
         return _render_diff(graph, request, comparison_graph, overlay_graphs)
     if request.screen == "provider_status":
@@ -630,6 +857,11 @@ def _render_explore(graph: GraphFakosGraph, request: GraphFakosRequest) -> str:
     active_query = _active_query_terms(request)
     primary = (
         f"{_filter_toolbar(graph, request, '/explore')}"
+        f"{_workspace_controls(graph, request)}"
+        f"{_local_graph_controls(graph, request, focus)}"
+        f"{_physics_display_controls(request)}"
+        f"{_active_lens_bar(graph, filtered_graph, request, focus, selected_edge)}"
+        f"{_interaction_guide_panel(graph, filtered_graph, request, focus, selected_edge)}"
         f"{_graph_canvas(filtered_graph, request, focus.id if focus else None, selected_edge.id if selected_edge else None)}"
         f"{_selection_summary(filtered_graph, focus, selected_edge)}"
         f"{_query_summary(active_query)}"
@@ -638,8 +870,29 @@ def _render_explore(graph: GraphFakosGraph, request: GraphFakosRequest) -> str:
     )
     secondary = (
         _graph_navigator(graph, filtered_graph, request, focus)
+        + _navigation_map_panel(graph, filtered_graph, request, focus, selected_edge)
+        + _relationship_trail_panel(filtered_graph, request, focus)
+        + _search_results_panel(filtered_graph, request, focus)
+        + _graph_data_table_panel(filtered_graph, request)
+        + _relationship_data_table_panel(filtered_graph, request)
+        + _evidence_coverage_map_panel(filtered_graph, request)
+        + _facet_explorer_panel(filtered_graph, request)
+        + _expansion_planner_panel(filtered_graph, request, focus)
+        + _command_palette(graph, filtered_graph, request, focus, selected_edge)
+        + _readability_coach_panel(filtered_graph, request)
+        + _display_recipes_panel(filtered_graph, request, focus)
+        + _advanced_filter_panel(filtered_graph, request)
+        + _component_explorer_panel(graph, request)
+        + _selection_workbench_panel(filtered_graph, request)
+        + _style_rules_panel(filtered_graph, request)
+        + _timeline_animation_panel(graph, request)
+        + _investigation_pivot_panel(filtered_graph, request, focus)
+        + _context_menu_panel(request, focus, selected_edge)
+        + _analytics_panel(graph, request)
+        + _export_replay_panel(graph, request)
         + _focus_workflow(graph, request, focus)
-        + _knowledge_capture_panel(request, focus)
+        + _knowledge_capture_panel(filtered_graph, request, focus)
+        + _graph_action_panel(filtered_graph, request, focus)
         + _inspector(graph, focus, selected_edge)
     )
     return _split(primary, secondary)
@@ -666,6 +919,7 @@ def _render_neighborhood(graph: GraphFakosGraph, request: GraphFakosRequest) -> 
     neighborhood_graph = _graph_with_items(graph, (focus, *neighbors), edges)
     primary = (
         f"{_neighborhood_toolbar(graph, request, focus.id)}"
+        f"{_local_graph_controls(graph, request, focus)}"
         f"{_graph_canvas(neighborhood_graph, request, focus.id, request.selected_edge_id)}"
     )
     primary += _panel(
@@ -675,8 +929,11 @@ def _render_neighborhood(graph: GraphFakosGraph, request: GraphFakosRequest) -> 
     )
     secondary = (
         _graph_navigator(graph, neighborhood_graph, request, focus)
+        + _relationship_trail_panel(neighborhood_graph, request, focus)
+        + _analytics_panel(graph, request)
         + _focus_workflow(graph, request, focus)
-        + _knowledge_capture_panel(request, focus)
+        + _knowledge_capture_panel(neighborhood_graph, request, focus)
+        + _graph_action_panel(neighborhood_graph, request, focus)
         + _inspector(graph, focus, _selected_edge(graph, request))
     )
     return _split(primary, secondary)
@@ -729,8 +986,11 @@ def _render_path(graph: GraphFakosGraph, request: GraphFakosRequest) -> str:
     )
     secondary = (
         _graph_navigator(graph, path_graph, request, source)
+        + _relationship_trail_panel(path_graph, request, source)
+        + _analytics_panel(graph, request)
         + _focus_workflow(graph, request, source)
-        + _knowledge_capture_panel(request, source)
+        + _knowledge_capture_panel(path_graph, request, source)
+        + _graph_action_panel(path_graph, request, source)
         + _inspector(graph, source, _selected_edge(graph, request))
     )
     return _split(primary, secondary)
@@ -785,18 +1045,117 @@ def _render_provenance(graph: GraphFakosGraph) -> str:
     )
 
 
-def _render_timeline(graph: GraphFakosGraph) -> str:
-    rows = []
-    for node in graph.nodes:
-        for key, value in sorted(node.timestamps.items()):
-            rows.append(f"{value} - {node.label} ({key})")
+def _render_timeline(graph: GraphFakosGraph, request: GraphFakosRequest) -> str:
+    events = _timeline_event_payloads(graph, request)
+    visible_events = [
+        event
+        for event in events
+        if not request.timeline_frame or event["value"] == request.timeline_frame
+    ]
     return _panel(
         "Timeline and Freshness",
         _summary_note(
-            f"{len(rows)} timestamp event(s) are visible across {len(graph.nodes)} node(s)."
+            f"{len(visible_events)} of {len(events)} timestamp event(s) are visible across {len(graph.nodes)} node(s)."
         )
-        + _list(rows),
+        + _timeline_frame_rail(graph, request)
+        + _timeline_event_cards(visible_events)
+        + _json_script(
+            "data-gf-timeline-events",
+            {
+                "events": visible_events,
+                "selected_frame": request.timeline_frame,
+                "playback": request.timeline_playback,
+            },
+        ),
     )
+
+
+def _timeline_event_payloads(
+    graph: GraphFakosGraph,
+    request: GraphFakosRequest,
+) -> list[dict[str, str]]:
+    events: list[dict[str, str]] = []
+    for node in graph.nodes:
+        for field, value in sorted(node.timestamps.items()):
+            events.append(
+                {
+                    "node_id": node.id,
+                    "label": node.label,
+                    "kind": node.kind,
+                    "field": field,
+                    "value": value,
+                    "route": _route_href(
+                        request.with_screen("timeline"),
+                        overrides={
+                            "timeline_frame": value,
+                            "timeline_playback": "step",
+                            "focus_node_id": node.id,
+                        },
+                    ),
+                    "focus_route": _explore_href(request, focus_node_id=node.id),
+                    "case_packet_route": _route_href(
+                        request.with_screen("explore"),
+                        overrides={
+                            "pivot_node_id": node.id,
+                            "pivot_mode": "timeline",
+                        },
+                    ),
+                }
+            )
+    return sorted(
+        events,
+        key=lambda event: (
+            event["value"],
+            event["label"].casefold(),
+            event["field"],
+        ),
+    )
+
+
+def _timeline_frame_rail(graph: GraphFakosGraph, request: GraphFakosRequest) -> str:
+    frames = _timeline_frames(graph)
+    if not frames:
+        return _empty("No timeline frames are available.")
+    links = [
+        (
+            "<a class='gf-route-chip' "
+            f"data-active='{str(frame == request.timeline_frame).lower()}' "
+            f"href='{escape(_route_href(request.with_screen('timeline'), overrides={'timeline_frame': frame, 'timeline_playback': 'step'}))}'>"
+            f"{escape(frame)}</a>"
+        )
+        for frame in frames
+    ]
+    return (
+        "<div class='gf-timeline-rail' data-gf-timeline-rail='true'>"
+        + "".join(links)
+        + "</div>"
+    )
+
+
+def _timeline_event_cards(events: list[dict[str, str]]) -> str:
+    if not events:
+        return _empty("No events match the selected timeline frame.")
+    html = "<div class='gf-timeline-grid' data-gf-timeline-cards='true'>"
+    for event in events:
+        html += (
+            "<article class='gf-card gf-timeline-card'>"
+            f"<h4>{escape(event['label'])}</h4>"
+            + _badges(
+                [
+                    (event["kind"], "accent"),
+                    (event["field"], "blue"),
+                    (event["value"], "neutral"),
+                ]
+            )
+            + "<div class='gf-route-row'>"
+            + f"<div>Open frame</div><a class='gf-inline-link' href='{escape(event['route'])}'>Open</a></div>"
+            + "<div class='gf-route-row'>"
+            + f"<div>Focus node</div><a class='gf-inline-link' href='{escape(event['focus_route'])}'>Open</a></div>"
+            + "<div class='gf-route-row'>"
+            + f"<div>Timeline case packet</div><a class='gf-inline-link' href='{escape(event['case_packet_route'])}'>Open</a></div>"
+            + "</article>"
+        )
+    return f"{html}</div>"
 
 
 def _render_diff(
@@ -827,6 +1186,7 @@ def _render_diff(
             )
         )
         + _key_values(diff["summary"])
+        + _diff_change_workbench(graph, comparison_graph, request, diff)
         + _diff_section("Change Hotspots", diff["change_hotspots"])
         + _diff_section("Added nodes", diff["added_nodes"])
         + _diff_section("Removed nodes", diff["removed_nodes"])
@@ -842,6 +1202,216 @@ def _render_diff(
     )
     right = _panel("Overlay Providers", _overlay_summary(overlay_graphs))
     return _split(left, right)
+
+
+def _diff_change_workbench(
+    graph: GraphFakosGraph,
+    comparison_graph: GraphFakosGraph,
+    request: GraphFakosRequest,
+    diff: dict[str, object],
+) -> str:
+    changes = _diff_change_payloads(graph, comparison_graph, request, diff)
+    if not changes:
+        return _empty("No route-backed diff changes are available.")
+    return (
+        "<section class='gf-diff-workbench' data-gf-diff-workbench='true'>"
+        "<h4>Diff Review Workbench</h4>"
+        + _diff_change_cards(changes)
+        + _json_script(
+            "data-gf-diff-workbench",
+            {
+                "changes": changes,
+                "current_graph_id": graph.graph_id,
+                "comparison_graph_id": comparison_graph.graph_id,
+            },
+        )
+        + "</section>"
+    )
+
+
+def _diff_change_payloads(
+    graph: GraphFakosGraph,
+    comparison_graph: GraphFakosGraph,
+    request: GraphFakosRequest,
+    diff: dict[str, object],
+) -> list[dict[str, object]]:
+    node_map = graph.node_map()
+    comparison_node_map = comparison_graph.node_map()
+    edge_map = graph.edge_map()
+    comparison_edge_map = comparison_graph.edge_map()
+    changes: list[dict[str, object]] = []
+
+    for node_id in _string_items(diff.get("added_nodes")):
+        node = node_map.get(node_id)
+        if node is not None:
+            changes.append(_diff_node_change("added_node", node, request))
+    for node_id in _string_items(diff.get("removed_nodes")):
+        node = comparison_node_map.get(node_id)
+        if node is not None:
+            changes.append(_diff_node_change("removed_node", node, request))
+    for detail in _dict_items(diff.get("changed_node_details")):
+        node_id = str(detail.get("id", ""))
+        node = node_map.get(node_id) or comparison_node_map.get(node_id)
+        if node is not None:
+            changes.append(
+                _diff_node_change(
+                    "changed_node",
+                    node,
+                    request,
+                    fields=_string_items(detail.get("fields")),
+                )
+            )
+
+    for edge_id in _string_items(diff.get("added_edges")):
+        edge = edge_map.get(edge_id)
+        if edge is not None:
+            changes.append(_diff_edge_change("added_edge", edge, graph, request))
+    for edge_id in _string_items(diff.get("removed_edges")):
+        edge = comparison_edge_map.get(edge_id)
+        if edge is not None:
+            changes.append(
+                _diff_edge_change("removed_edge", edge, comparison_graph, request)
+            )
+    for detail in _dict_items(diff.get("changed_edge_details")):
+        edge_id = str(detail.get("id", ""))
+        edge = edge_map.get(edge_id) or comparison_edge_map.get(edge_id)
+        owner_graph = graph if edge_id in edge_map else comparison_graph
+        if edge is not None:
+            changes.append(
+                _diff_edge_change(
+                    "changed_edge",
+                    edge,
+                    owner_graph,
+                    request,
+                    fields=_string_items(detail.get("fields")),
+                )
+            )
+
+    for item in _string_items(diff.get("snapshot_changes")):
+        changes.append(
+            {
+                "change_type": "snapshot",
+                "item_type": "snapshot",
+                "id": "snapshot",
+                "label": item,
+                "fields": [],
+                "route": _route_href(request.with_screen("diff")),
+            }
+        )
+    return changes[:12]
+
+
+def _diff_node_change(
+    change_type: str,
+    node: GraphFakosNode,
+    request: GraphFakosRequest,
+    *,
+    fields: list[str] | None = None,
+) -> dict[str, object]:
+    return {
+        "change_type": change_type,
+        "item_type": "node",
+        "id": node.id,
+        "label": node.label,
+        "kind": node.kind,
+        "fields": fields or [],
+        "route": _explore_href(request, focus_node_id=node.id),
+        "case_packet_route": _route_href(
+            request.with_screen("explore"),
+            overrides={"pivot_node_id": node.id, "pivot_mode": "evidence_bundle"},
+        ),
+    }
+
+
+def _diff_edge_change(
+    change_type: str,
+    edge: GraphFakosEdge,
+    graph: GraphFakosGraph,
+    request: GraphFakosRequest,
+    *,
+    fields: list[str] | None = None,
+) -> dict[str, object]:
+    node_map = graph.node_map()
+    source = node_map.get(edge.source_id)
+    target = node_map.get(edge.target_id)
+    label = (
+        f"{source.label if source else edge.source_id} -> "
+        f"{target.label if target else edge.target_id}"
+    )
+    return {
+        "change_type": change_type,
+        "item_type": "edge",
+        "id": edge.id,
+        "label": label,
+        "kind": edge.kind,
+        "fields": fields or [],
+        "route": _route_href(
+            request.with_screen("path"),
+            overrides={
+                "source_node_id": edge.source_id,
+                "target_node_id": edge.target_id,
+                "selected_edge_id": edge.id,
+                "layout": "focus",
+            },
+        ),
+        "source_route": _explore_href(request, focus_node_id=edge.source_id),
+        "target_route": _explore_href(request, focus_node_id=edge.target_id),
+    }
+
+
+def _diff_change_cards(changes: list[dict[str, object]]) -> str:
+    html = "<div class='gf-diff-grid' data-gf-diff-cards='true'>"
+    for change in changes:
+        fields = change.get("fields")
+        field_text = ", ".join(fields) if isinstance(fields, list) else ""
+        case_packet_route = change.get("case_packet_route")
+        source_route = change.get("source_route")
+        target_route = change.get("target_route")
+        extra_routes = ""
+        if isinstance(case_packet_route, str):
+            extra_routes += (
+                "<div class='gf-route-row'>"
+                f"<div>Case packet</div><a class='gf-inline-link' href='{escape(case_packet_route)}'>Open</a></div>"
+            )
+        if isinstance(source_route, str):
+            extra_routes += (
+                "<div class='gf-route-row'>"
+                f"<div>Source node</div><a class='gf-inline-link' href='{escape(source_route)}'>Open</a></div>"
+            )
+        if isinstance(target_route, str):
+            extra_routes += (
+                "<div class='gf-route-row'>"
+                f"<div>Target node</div><a class='gf-inline-link' href='{escape(target_route)}'>Open</a></div>"
+            )
+        html += (
+            "<article class='gf-card gf-diff-card'>"
+            f"<h4>{escape(str(change.get('label', change.get('id', 'change'))))}</h4>"
+            + _badges(
+                [
+                    (str(change.get("change_type", "change")), "accent"),
+                    (str(change.get("item_type", "item")), "blue"),
+                    (str(change.get("kind", "")), "neutral"),
+                ]
+            )
+            + (f"<p>Fields: {escape(field_text)}</p>" if field_text else "")
+            + "<div class='gf-route-row'>"
+            + f"<div>Review change</div><a class='gf-inline-link' href='{escape(str(change.get('route', '#')))}'>Open</a></div>"
+            + extra_routes
+            + "</article>"
+        )
+    return f"{html}</div>"
+
+
+def _string_items(value: object) -> list[str]:
+    if not isinstance(value, (list, tuple)):
+        return []
+    return [item for item in value if isinstance(item, str)]
+
+
+def _dict_items(value: object) -> list[dict[str, object]]:
+    if not isinstance(value, (list, tuple)):
+        return []
+    return [item for item in value if isinstance(item, dict)]
 
 
 def _render_provider_status(
@@ -872,6 +1442,7 @@ def _render_provider_status(
             + _facet_details(graph),
         ),
         _panel("Graph Health", _graph_health(diagnostics))
+        + _analytics_panel(graph, GraphFakosRequest(screen="provider_status"))
         + _panel(
             "Sample Nodes",
             _node_cards(graph.nodes[:5], GraphFakosRequest(screen="provider_status")),
@@ -1005,14 +1576,2137 @@ def _filter_toolbar(
         f"<input name='min_score' value='{escape(filters.get('min_score', ''))}' "
         "placeholder='Min score'>"
         f"{_select('layout', 'Layout', layout_options, request.layout)}"
+        f"{_select('render_engine', 'Renderer', ('svg', 'canvas', 'webgl'), request.render_engine)}"
+        f"{_select('theme', 'Theme', ('default', 'ink', 'paper'), request.theme)}"
         f"<input name='limit' value='{request.limit}' placeholder='Cards'>"
         f"<input name='render_limit' value='{request.render_limit}' placeholder='Canvas'>"
+        f"<input type='hidden' name='saved_view_id' value='{escape(request.saved_view_id)}'>"
+        f"<input type='hidden' name='show_orphans' value='{str(request.show_orphans).lower()}'>"
+        f"<input type='hidden' name='show_neighbor_links' value='{str(request.show_neighbor_links).lower()}'>"
+        f"<input type='hidden' name='edge_clutter' value='{escape(request.edge_clutter)}'>"
+        f"<input type='hidden' name='analytics_overlay' value='{escape(request.analytics_overlay)}'>"
         f"<input type='hidden' name='preset' value='{escape(request.preset_id)}'>"
         f"<input type='hidden' name='focus_node_id' value='{escape(request.focus_node_id or '')}'>"
         f"<input type='hidden' name='selected_edge_id' value='{escape(request.selected_edge_id or '')}'>"
         f"<input type='hidden' name='comparison_graph_id' value='{escape(request.comparison_graph_id or '')}'>"
+        f"{_state_hidden_inputs(request, exclude=_FILTER_TOOLBAR_STATE_EXCLUDES)}"
         "<button type='submit'>Filter</button>"
         "</form></section>"
+    )
+
+
+def _workspace_controls(graph: GraphFakosGraph, request: GraphFakosRequest) -> str:
+    saved_view = GraphFakosSavedView.from_request(
+        request,
+        view_id=request.saved_view_id or "route",
+        label="Current route view",
+    )
+    replay_route = _route_href(
+        request,
+        overrides={"saved_view_id": saved_view.view_id, "render_engine": "svg"},
+    )
+    return (
+        "<section class='gf-toolbar gf-workspace-controls' aria-label='Saved workspace controls'>"
+        "<form method='get' action='/explore'>"
+        f"<input name='saved_view_id' value='{escape(saved_view.view_id)}' placeholder='Saved view id'>"
+        f"{_select('theme', 'Theme', ('default', 'ink', 'paper'), request.theme)}"
+        f"<input type='hidden' name='query' value='{escape(request.query)}'>"
+        f"<input type='hidden' name='layout' value='{escape(request.layout)}'>"
+        f"<input type='hidden' name='focus_node_id' value='{escape(request.focus_node_id or '')}'>"
+        f"<input type='hidden' name='camera_x' value='{request.camera_x if request.camera_x is not None else 0}'>"
+        f"<input type='hidden' name='camera_y' value='{request.camera_y if request.camera_y is not None else 0}'>"
+        f"<input type='hidden' name='camera_zoom' value='{request.camera_zoom if request.camera_zoom is not None else 1}'>"
+        "<button type='submit'>Replay View</button>"
+        f"<a class='gf-inline-link' href='{escape(replay_route)}'>Share route</a>"
+        "</form>"
+        "<div class='gf-workbook' data-gf-workbook='true' aria-label='Local saved view slots'>"
+        "<div class='gf-workbook-row'>"
+        "<input data-gf-workbook-name='true' value='' placeholder='Local slot label'>"
+        "<button type='button' data-gf-workbook-action='save'>Save slot</button>"
+        "<button type='button' data-gf-workbook-action='clear'>Clear slots</button>"
+        "</div>"
+        "<div class='gf-workbook-list' data-gf-workbook-list='true'>"
+        "<p class='gf-note'>JavaScript can save local browser-only slots here; static export keeps the share route above.</p>"
+        "</div>"
+        "<p class='gf-capture-status' data-gf-workbook-status='true'></p>"
+        "</div>"
+        f"{_json_script('data-gf-saved-view', saved_view.to_dict())}"
+        f"<p class='gf-note'>Saved view JSON captures camera, filters, selected lens, renderer, theme, and layout for {escape(graph.provider_label)}.</p>"
+        "</section>"
+    )
+
+
+def _local_graph_controls(
+    graph: GraphFakosGraph,
+    request: GraphFakosRequest,
+    focus: GraphFakosNode | None,
+) -> str:
+    focus_id = focus.id if focus is not None else request.focus_node_id or ""
+    analytics = analyze_graph(graph)
+    return (
+        "<section class='gf-toolbar gf-local-controls' aria-label='Local graph controls'>"
+        "<form method='get' action='/neighborhood'>"
+        f"<input type='hidden' name='focus_node_id' value='{escape(focus_id)}'>"
+        f"<input type='hidden' name='layout' value='{escape(request.layout)}'>"
+        f"<input type='hidden' name='query' value='{escape(request.query)}'>"
+        f"{_select('max_depth', 'Depth', ('1', '2', '3'), str(max(request.max_depth, 1)))}"
+        f"{_select('show_neighbor_links', 'Neighbor links', ('true', 'false'), str(request.show_neighbor_links).lower())}"
+        f"{_select('show_orphans', 'Orphans', ('true', 'false'), str(request.show_orphans).lower())}"
+        f"{_select('edge_clutter', 'Edge clutter', ('normal', 'reduced'), request.edge_clutter)}"
+        f"{_select('analytics_overlay', 'Overlay', ('degree', 'components', 'provenance'), request.analytics_overlay)}"
+        f"{_state_hidden_inputs(request, exclude=_LOCAL_CONTROL_STATE_EXCLUDES)}"
+        "<button type='submit'>Apply Local Lens</button>"
+        "</form>"
+        f"<p class='gf-note'>Local controls: {analytics.component_count} component(s), "
+        f"{len(analytics.orphan_node_ids)} orphan node(s), max degree {analytics.max_degree}.</p>"
+        "</section>"
+    )
+
+
+def _physics_display_controls(request: GraphFakosRequest) -> str:
+    return (
+        "<section class='gf-toolbar gf-physics-controls' aria-label='Physics and display controls'>"
+        "<form method='get' action='/explore'>"
+        f"<input name='center_force' value='{request.center_force:g}' placeholder='Center force'>"
+        f"<input name='repel_force' value='{request.repel_force:g}' placeholder='Repel force'>"
+        f"<input name='link_distance' value='{request.link_distance:g}' placeholder='Link distance'>"
+        f"<input name='node_scale' value='{request.node_scale:g}' placeholder='Node scale'>"
+        f"<input name='edge_scale' value='{request.edge_scale:g}' placeholder='Edge scale'>"
+        f"<input name='edge_opacity' value='{request.edge_opacity:g}' placeholder='Edge opacity'>"
+        f"<input name='label_density' value='{request.label_density:g}' placeholder='Label density'>"
+        f"{_state_hidden_inputs(request, exclude=_PHYSICS_STATE_EXCLUDES)}"
+        "<button type='submit'>Tune View</button>"
+        "</form>"
+        "<p class='gf-note'>Physics and display controls are route-backed so SVG export, local server, and embeds share the same view model.</p>"
+        "</section>"
+    )
+
+
+def _active_lens_bar(
+    graph: GraphFakosGraph,
+    visible_graph: GraphFakosGraph,
+    request: GraphFakosRequest,
+    focus: GraphFakosNode | None,
+    selected_edge: GraphFakosEdge | None,
+) -> str:
+    payload = _active_lens_payload(graph, visible_graph, request, focus, selected_edge)
+    routes = payload["routes"]
+    route_links = ""
+    if isinstance(routes, dict):
+        route_links = "".join(
+            f"<a class='gf-route-chip' href='{escape(str(route))}'>{escape(label)}</a>"
+            for label, route in routes.items()
+        )
+    return (
+        "<section class='gf-active-lens' aria-label='Active graph lens' "
+        "data-gf-active-lens-panel='true'>"
+        "<div>"
+        "<p class='gf-eyebrow'>Active lens</p>"
+        f"{_badges(_active_lens_badges(payload))}"
+        "</div>"
+        f"<nav class='gf-active-lens-actions' aria-label='Active lens reset routes'>{route_links}</nav>"
+        f"{_json_script('data-gf-active-lens', payload)}"
+        "</section>"
+    )
+
+
+def _active_lens_payload(
+    graph: GraphFakosGraph,
+    visible_graph: GraphFakosGraph,
+    request: GraphFakosRequest,
+    focus: GraphFakosNode | None,
+    selected_edge: GraphFakosEdge | None,
+) -> dict[str, object]:
+    return {
+        "screen": request.screen,
+        "provider_id": graph.provider_id,
+        "query": request.query,
+        "filters": dict(request.filters),
+        "focus_node_id": focus.id if focus is not None else request.focus_node_id,
+        "focus_label": focus.label if focus is not None else "",
+        "selected_node_ids": list(request.selected_node_ids),
+        "selected_edge_id": selected_edge.id
+        if selected_edge is not None
+        else request.selected_edge_id,
+        "layout": request.layout,
+        "render_engine": request.render_engine,
+        "theme": request.theme,
+        "visible_node_count": len(visible_graph.nodes),
+        "visible_edge_count": len(visible_graph.edges),
+        "hidden_node_count": visible_graph.stats.get("hidden_nodes", 0),
+        "hidden_edge_count": visible_graph.stats.get("hidden_edges", 0),
+        "pinned_count": len(request.pinned_positions),
+        "advanced_filters": _active_advanced_filter_payload(request),
+        "routes": _active_lens_routes(request),
+    }
+
+
+def _active_lens_badges(payload: dict[str, object]) -> tuple[tuple[str, str], ...]:
+    badges: list[tuple[str, str]] = [
+        (f"screen:{payload['screen']}", "accent"),
+        (f"layout:{payload['layout']}", "neutral"),
+        (f"renderer:{payload['render_engine']}", "blue"),
+        (f"theme:{payload['theme']}", "neutral"),
+        (f"{payload['visible_node_count']} visible node(s)", "accent"),
+    ]
+    focus_label = str(payload.get("focus_label") or payload.get("focus_node_id") or "")
+    if focus_label:
+        badges.append((f"focus:{focus_label}", "blue"))
+    query = str(payload.get("query") or "")
+    if query:
+        badges.append((f"query:{query}", "neutral"))
+    filters = payload.get("filters")
+    if isinstance(filters, dict) and filters:
+        badges.append((f"{len(filters)} filter(s)", "neutral"))
+    selected_node_ids = payload.get("selected_node_ids")
+    if isinstance(selected_node_ids, list) and selected_node_ids:
+        badges.append((f"{len(selected_node_ids)} selected", "blue"))
+    selected_edge_id = str(payload.get("selected_edge_id") or "")
+    if selected_edge_id:
+        badges.append(("edge selected", "blue"))
+    pinned_count = int(payload.get("pinned_count") or 0)
+    if pinned_count:
+        badges.append((f"{pinned_count} pinned", "neutral"))
+    return tuple(badges)
+
+
+def _active_advanced_filter_payload(request: GraphFakosRequest) -> dict[str, object]:
+    return {
+        key: value
+        for key, value in {
+            "min_degree": request.min_degree,
+            "max_degree": request.max_degree,
+            "component_id": request.component_id,
+            "connected_to_node_id": request.connected_to_node_id,
+            "evidence_filter": request.evidence_filter,
+            "cluster_id": request.cluster_id,
+        }.items()
+        if value not in ("", None)
+    }
+
+
+def _active_lens_routes(request: GraphFakosRequest) -> dict[str, str]:
+    return {
+        "Overview": _route_href(
+            request.with_screen("explore"),
+            overrides={
+                **_clear_filter_overrides(request),
+                **_clear_advanced_filter_overrides(),
+                "query": None,
+                "focus_node_id": None,
+                "selected_node_ids": None,
+                "selected_edge_id": None,
+                "source_node_id": None,
+                "target_node_id": None,
+                "pivot_node_id": None,
+                "pivot_mode": None,
+            },
+        ),
+        "Clear query": _route_href(request, overrides={"query": None}),
+        "Clear filters": _route_href(
+            request,
+            overrides={
+                **_clear_filter_overrides(request),
+                **_clear_advanced_filter_overrides(),
+            },
+        ),
+        "Clear focus": _route_href(
+            request,
+            overrides={"focus_node_id": None, "pivot_node_id": None},
+        ),
+        "Clear selection": _route_href(
+            request,
+            overrides={"selected_node_ids": None, "selected_edge_id": None},
+        ),
+        "Reset camera": _route_href(
+            request,
+            overrides={"camera_x": None, "camera_y": None, "camera_zoom": None},
+        ),
+        "SVG fallback": _route_href(request, overrides={"render_engine": "svg"}),
+    }
+
+
+def _interaction_guide_panel(
+    graph: GraphFakosGraph,
+    visible_graph: GraphFakosGraph,
+    request: GraphFakosRequest,
+    focus: GraphFakosNode | None,
+    selected_edge: GraphFakosEdge | None,
+) -> str:
+    payload = _interaction_guide_payload(
+        graph,
+        visible_graph,
+        request,
+        focus,
+        selected_edge,
+    )
+    return (
+        "<section class='gf-interaction-guide' "
+        "aria-label='Graph interaction guide' data-gf-interaction-guide-panel='true'>"
+        "<div class='gf-guide-copy'>"
+        "<p class='gf-eyebrow'>Interaction guide</p>"
+        "<h3>Explore, select, and edit without losing the static fallback.</h3>"
+        "<p>Use these routes and shortcuts to move through the graph workbench. "
+        "Pointer and keyboard enhancements improve local preview, while links and forms keep exports usable.</p>"
+        "</div>"
+        + _interaction_guide_cards(payload["steps"])
+        + _json_script("data-gf-interaction-guide", payload)
+        + "</section>"
+    )
+
+
+def _interaction_guide_payload(
+    graph: GraphFakosGraph,
+    visible_graph: GraphFakosGraph,
+    request: GraphFakosRequest,
+    focus: GraphFakosNode | None,
+    selected_edge: GraphFakosEdge | None,
+) -> dict[str, object]:
+    focus_id = focus.id if focus is not None else request.focus_node_id
+    selected_edge_id = (
+        selected_edge.id if selected_edge is not None else request.selected_edge_id
+    )
+    steps = [
+        _interaction_step(
+            "search",
+            "Search or jump",
+            "/ or Ctrl+K",
+            "Focus the command search, then jump to a node or preserve the route as a shareable link.",
+            _route_href(request.with_screen("explore"), overrides={"query": None}),
+        ),
+        _interaction_step(
+            "camera",
+            "Move the graph",
+            "+ / - / fit",
+            "Pan, zoom, fit selected items, reset the camera, or use the static SVG route when JavaScript is off.",
+            _route_href(
+                request.with_screen("explore"),
+                overrides={"camera_x": None, "camera_y": None, "camera_zoom": None},
+            ),
+        ),
+        _interaction_step(
+            "select",
+            "Select graph items",
+            "Shift-click / box",
+            "Select nodes or edges for side-panel inspection, bulk routes, and case-packet pivots.",
+            _route_href(
+                request.with_screen("explore"),
+                overrides={
+                    "selected_node_ids": ",".join(request.selected_node_ids)
+                    if request.selected_node_ids
+                    else None,
+                    "selected_edge_id": selected_edge_id or None,
+                },
+            ),
+        ),
+        _interaction_step(
+            "local",
+            "Open local context",
+            "L",
+            "Switch from global view into a focused neighborhood while preserving filters and display controls.",
+            _route_href(
+                request.with_screen("neighborhood"),
+                overrides={
+                    "focus_node_id": focus_id or None,
+                    "max_depth": 1,
+                    "layout": "focus",
+                },
+            ),
+            disabled=not focus_id,
+        ),
+        _interaction_step(
+            "evidence",
+            "Review evidence",
+            "E",
+            "Filter to provenance-bearing graph items and inspect citations without changing provider data.",
+            _route_href(
+                request.with_screen("explore"),
+                overrides={
+                    "query": "has:provenance",
+                    "analytics_overlay": "provenance",
+                    "focus_node_id": focus_id or None,
+                },
+            ),
+        ),
+        _interaction_step(
+            "author",
+            "Capture or author",
+            "Forms",
+            "Use local preview forms to submit provider-neutral notes or graph actions; providers decide persistence.",
+            _route_href(
+                request.with_screen("explore"),
+                overrides={
+                    "focus_node_id": focus_id or None,
+                    "selected_edge_id": selected_edge_id or None,
+                },
+            ),
+        ),
+    ]
+    visible_steps = [step for step in steps if not step["disabled"]]
+    return {
+        "provider_id": graph.provider_id,
+        "screen": request.screen,
+        "focus_node_id": focus_id or "",
+        "selected_edge_id": selected_edge_id or "",
+        "visible_node_count": len(visible_graph.nodes),
+        "visible_edge_count": len(visible_graph.edges),
+        "step_count": len(visible_steps),
+        "steps": visible_steps,
+        "fallback": {
+            "static_svg": "Route links and GET forms remain usable without JavaScript.",
+            "local_preview": "JavaScript enhances pan, zoom, selection, pins, and in-place fragment refresh.",
+        },
+        "provider_boundary": (
+            "GraphFakos teaches viewer interactions and shapes local action payloads; "
+            "providers own persistence, graph rebuilds, and semantic truth."
+        ),
+    }
+
+
+def _interaction_step(
+    step_id: str,
+    label: str,
+    shortcut: str,
+    summary: str,
+    route: str,
+    *,
+    disabled: bool = False,
+) -> dict[str, object]:
+    return {
+        "id": step_id,
+        "label": label,
+        "shortcut": shortcut,
+        "summary": summary,
+        "route": route,
+        "disabled": disabled,
+    }
+
+
+def _interaction_guide_cards(steps: object) -> str:
+    if not isinstance(steps, list) or not steps:
+        return _empty("No interaction guide steps are available.")
+    html = "<div class='gf-guide-grid'>"
+    for step in steps:
+        if not isinstance(step, dict):
+            continue
+        label = str(step.get("label") or step.get("id") or "Step")
+        shortcut = str(step.get("shortcut") or "")
+        summary = str(step.get("summary") or "")
+        route = str(step.get("route") or "#")
+        html += (
+            "<a class='gf-guide-card' href='"
+            f"{escape(route)}'>"
+            f"<strong>{escape(label)}</strong>"
+            f"<span>{escape(shortcut)}</span>"
+            f"<p>{escape(summary)}</p>"
+            "</a>"
+        )
+    return f"{html}</div>"
+
+
+def _clear_filter_overrides(request: GraphFakosRequest) -> dict[str, object]:
+    return {key: None for key in request.filters}
+
+
+def _clear_advanced_filter_overrides() -> dict[str, object]:
+    return {
+        "min_degree": None,
+        "max_degree": None,
+        "component_id": None,
+        "connected_to_node_id": None,
+        "evidence_filter": None,
+        "cluster_id": None,
+    }
+
+
+def _command_palette(
+    graph: GraphFakosGraph,
+    visible_graph: GraphFakosGraph,
+    request: GraphFakosRequest,
+    focus: GraphFakosNode | None,
+    selected_edge: GraphFakosEdge | None,
+) -> str:
+    payload = _command_palette_payload(
+        graph,
+        visible_graph,
+        request,
+        focus,
+        selected_edge,
+    )
+    query_errors = _query_errors(request.query)
+    error_html = (
+        _panel_body("Query Validation", _list(query_errors))
+        if query_errors
+        else _summary_note("Query validation passed; current graph state is preserved.")
+    )
+    return _panel(
+        "Command Palette",
+        _summary_note(
+            "Search, jump, review evidence, open local graph lenses, or start provider-neutral authoring from one static-friendly command surface."
+        )
+        + "<section class='gf-command-palette' data-gf-command-palette-panel='true'>"
+        + "<label class='gf-command-search'>Quick action search"
+        "<input data-gf-command-search='true' data-gf-command-palette-search='true' "
+        "placeholder='Try evidence, local, author, export...'></label>"
+        f"{_command_palette_groups(payload['groups'])}"
+        "<p class='gf-command-status' data-gf-command-palette-status='true' aria-live='polite'></p>"
+        "</section>"
+        + error_html
+        + _json_script("data-gf-saved-queries", payload["saved_queries"])
+        + _json_script("data-gf-command-palette", payload),
+    )
+
+
+def _command_palette_payload(
+    graph: GraphFakosGraph,
+    visible_graph: GraphFakosGraph,
+    request: GraphFakosRequest,
+    focus: GraphFakosNode | None,
+    selected_edge: GraphFakosEdge | None,
+) -> dict[str, object]:
+    saved_queries = (
+        GraphFakosSavedQuery("hubs", "Hubs", "has:score", {"min_score": "0.8"}),
+        GraphFakosSavedQuery("evidence", "Evidence", "has:provenance"),
+        GraphFakosSavedQuery("warnings", "Warnings", "kind:warning"),
+    )
+    anchor = focus or _preferred_focus_node(visible_graph, request)
+    source_node, target_node = _navigation_path_pair(
+        graph, visible_graph, selected_edge
+    )
+    source_id = source_node.id if source_node is not None else ""
+    target_id = target_node.id if target_node is not None else ""
+    focus_id = anchor.id if anchor is not None else request.focus_node_id or ""
+    groups = [
+        _command_group(
+            "query",
+            "Saved Queries",
+            [
+                _command_action(
+                    saved_query.query_id,
+                    saved_query.label,
+                    f"Run {saved_query.query}",
+                    _route_href(
+                        request.with_screen("explore"),
+                        overrides={"query": saved_query.query, **saved_query.filters},
+                    ),
+                    "query",
+                    "Run",
+                )
+                for saved_query in saved_queries
+            ],
+        ),
+        _command_group(
+            "navigate",
+            "Navigate",
+            (
+                _command_action(
+                    "global",
+                    "Global graph",
+                    "Return to the full graph with the current display controls.",
+                    _route_href(
+                        request.with_screen("explore"),
+                        overrides={"focus_node_id": None, "selected_edge_id": None},
+                    ),
+                    "navigate",
+                    "Open",
+                ),
+                _command_action(
+                    "local",
+                    "Local neighborhood",
+                    "Inspect the best current focus node at depth 1.",
+                    _route_href(
+                        request.with_screen("neighborhood"),
+                        overrides={
+                            "focus_node_id": focus_id or None,
+                            "max_depth": 1,
+                            "layout": "focus",
+                        },
+                    ),
+                    "navigate",
+                    "Open",
+                    disabled=not focus_id,
+                ),
+                _command_action(
+                    "path",
+                    "Trace path",
+                    "Open the path lens for the selected edge or visible anchors.",
+                    _route_href(
+                        request.with_screen("path"),
+                        overrides={
+                            "source_node_id": source_id or None,
+                            "target_node_id": target_id or None,
+                            "layout": "focus",
+                        },
+                    ),
+                    "navigate",
+                    "Trace",
+                    disabled=not (source_id and target_id),
+                ),
+                _command_action(
+                    "timeline",
+                    "Timeline",
+                    "Review timestamped nodes with step-safe playback.",
+                    _route_href(
+                        request.with_screen("timeline"),
+                        overrides={"timeline_playback": "step", "layout": "timeline"},
+                    ),
+                    "navigate",
+                    "Open",
+                ),
+                _command_action(
+                    "status",
+                    "Provider status",
+                    "Inspect graph diagnostics, warnings, and provider capability notes.",
+                    _route_href(request.with_screen("provider_status")),
+                    "navigate",
+                    "Open",
+                ),
+            ),
+        ),
+        _command_group(
+            "review",
+            "Review",
+            (
+                _command_action(
+                    "evidence",
+                    "Evidence review",
+                    "Filter to provenance-bearing items and switch to provenance overlay.",
+                    _route_href(
+                        request.with_screen("explore"),
+                        overrides={
+                            "query": "has:provenance",
+                            "analytics_overlay": "provenance",
+                            "evidence_filter": "with_provenance",
+                        },
+                    ),
+                    "review",
+                    "Review",
+                ),
+                _command_action(
+                    "case-packet",
+                    "Build case packet",
+                    "Create a structural investigation packet for the current focus.",
+                    _route_href(
+                        request.with_screen("explore"),
+                        overrides={
+                            "pivot_node_id": focus_id or None,
+                            "pivot_mode": "neighbors",
+                        },
+                    ),
+                    "review",
+                    "Build",
+                    disabled=not focus_id,
+                ),
+                _command_action(
+                    "diff",
+                    "Diff review",
+                    "Compare current graph state with a baseline or overlay graph.",
+                    _route_href(request.with_screen("diff")),
+                    "review",
+                    "Open",
+                ),
+                _command_action(
+                    "context",
+                    "Context preview",
+                    "Preview graph context cards that a host could feed to an agent.",
+                    _route_href(request.with_screen("context_preview")),
+                    "review",
+                    "Open",
+                ),
+            ),
+        ),
+        _command_group(
+            "author",
+            "Author",
+            (
+                _command_action(
+                    "capture",
+                    "Capture knowledge",
+                    "Jump to the capture form with the current graph context attached.",
+                    _route_href(
+                        request.with_screen("explore"),
+                        overrides={"focus_node_id": focus_id or None},
+                    )
+                    + "#capture-knowledge",
+                    "author",
+                    "Capture",
+                    disabled="knowledge_capture" not in graph.capabilities,
+                ),
+                _command_action(
+                    "draft-action",
+                    "Draft graph action",
+                    "Jump to provider-neutral graph action controls.",
+                    _route_href(
+                        request.with_screen("explore"),
+                        overrides={
+                            "focus_node_id": focus_id or None,
+                            "selected_edge_id": selected_edge.id
+                            if selected_edge is not None
+                            else None,
+                        },
+                    )
+                    + "#graph-authoring",
+                    "author",
+                    "Draft",
+                    disabled="graph_action" not in graph.capabilities,
+                ),
+            ),
+        ),
+        _command_group(
+            "export",
+            "Export",
+            (
+                _command_action(
+                    "share-route",
+                    "Share route",
+                    "Copy or open the current exact route state.",
+                    _route_href(request),
+                    "export",
+                    "Open",
+                ),
+                _command_action(
+                    "presentation",
+                    "Presentation export view",
+                    "Switch to paper theme, SVG fallback, and lower visual clutter.",
+                    _route_href(
+                        request.with_screen("explore"),
+                        overrides={
+                            "theme": "paper",
+                            "render_engine": "svg",
+                            "edge_clutter": "reduced",
+                            "label_density": 0.82,
+                        },
+                    ),
+                    "export",
+                    "Apply",
+                ),
+            ),
+        ),
+    ]
+    action_count = sum(len(group["actions"]) for group in groups)
+    return {
+        "screen": request.screen,
+        "focus_node_id": focus_id,
+        "selected_edge_id": selected_edge.id if selected_edge is not None else "",
+        "visible_node_count": len(visible_graph.nodes),
+        "visible_edge_count": len(visible_graph.edges),
+        "group_count": len(groups),
+        "action_count": action_count,
+        "saved_queries": [item.to_dict() for item in saved_queries],
+        "groups": groups,
+        "provider_boundary": (
+            "Command palette entries change only GraphFakos route/view state or "
+            "jump to provider-neutral authoring forms; providers own persistence."
+        ),
+    }
+
+
+def _command_group(
+    group_id: str,
+    label: str,
+    actions: list[dict[str, object]] | tuple[dict[str, object], ...],
+) -> dict[str, object]:
+    return {
+        "id": group_id,
+        "label": label,
+        "actions": list(actions),
+    }
+
+
+def _command_action(
+    action_id: str,
+    label: str,
+    summary: str,
+    route: str,
+    group: str,
+    verb: str,
+    *,
+    disabled: bool = False,
+) -> dict[str, object]:
+    return {
+        "id": action_id,
+        "label": label,
+        "summary": summary,
+        "route": route,
+        "group": group,
+        "verb": verb,
+        "disabled": disabled,
+    }
+
+
+def _command_palette_groups(groups: object) -> str:
+    if not isinstance(groups, list) or not groups:
+        return _empty("No command palette actions are available.")
+    html = ""
+    for group in groups:
+        if not isinstance(group, dict):
+            continue
+        actions = group.get("actions")
+        if not isinstance(actions, list):
+            continue
+        html += (
+            "<section class='gf-command-group'>"
+            f"<h4>{escape(str(group.get('label') or group.get('id') or 'Commands'))}</h4>"
+        )
+        for action in actions:
+            if not isinstance(action, dict):
+                continue
+            disabled = bool(action.get("disabled"))
+            route = "#" if disabled else str(action.get("route") or "#")
+            verb = "Unavailable" if disabled else str(action.get("verb") or "Open")
+            html += (
+                "<div class='gf-route-row gf-command-row' "
+                f"data-command-group='{escape(str(action.get('group') or ''))}' "
+                f"data-command-id='{escape(str(action.get('id') or ''))}' "
+                f"data-disabled='{str(disabled).lower()}'>"
+                f"<div><strong>{escape(str(action.get('label') or action.get('id') or 'Command'))}</strong>"
+                f"<span class='gf-inline-note'>{escape(str(action.get('summary') or ''))}</span></div>"
+                f"<a class='gf-inline-link' href='{escape(route)}'>{escape(verb)}</a></div>"
+            )
+        html += "</section>"
+    return html
+
+
+def _query_errors(query: str) -> tuple[str, ...]:
+    try:
+        shlex.split(query)
+    except ValueError as exc:
+        return (f"query parse warning: {exc}",)
+    return ()
+
+
+def _search_results_panel(
+    graph: GraphFakosGraph,
+    request: GraphFakosRequest,
+    focus: GraphFakosNode | None,
+) -> str:
+    payload = _search_results_payload(graph, request, focus)
+    mode = str(payload["mode"]).replace("_", " ")
+    return _panel(
+        "Search Results",
+        _summary_note(
+            f"Ranked {mode} from the current visible graph, with route-backed jumps."
+        )
+        + "<section class='gf-search-results' data-gf-search-results-panel='true'>"
+        f"{_search_result_rows(payload['results'])}"
+        "</section>" + _json_script("data-gf-search-results", payload),
+    )
+
+
+def _search_results_payload(
+    graph: GraphFakosGraph,
+    request: GraphFakosRequest,
+    focus: GraphFakosNode | None,
+) -> dict[str, object]:
+    query_terms = tuple(_parse_query(request.query)["terms"])
+    focused_ids = {focus.id} if focus is not None else set()
+    degree_map = _node_degree_map(graph)
+    results = [
+        _search_result_payload(graph, request, node, focus, query_terms, degree_map)
+        for node in _ranked_nodes(graph, focused_ids)
+    ][:8]
+    return {
+        "query": request.query,
+        "mode": _search_result_mode(request),
+        "focus_id": focus.id if focus is not None else None,
+        "visible_node_count": len(graph.nodes),
+        "result_count": len(results),
+        "results": results,
+    }
+
+
+def _search_result_mode(request: GraphFakosRequest) -> str:
+    if request.query:
+        return "query_matches"
+    if request.filters or any(
+        (
+            request.min_degree is not None,
+            request.max_degree is not None,
+            request.connected_to_node_id,
+            request.component_id,
+            request.cluster_id,
+            request.evidence_filter,
+        )
+    ):
+        return "filtered_nodes"
+    return "top_visible_nodes"
+
+
+def _search_result_payload(
+    graph: GraphFakosGraph,
+    request: GraphFakosRequest,
+    node: GraphFakosNode,
+    focus: GraphFakosNode | None,
+    query_terms: tuple[str, ...],
+    degree_map: dict[str, int],
+) -> dict[str, object]:
+    degree = degree_map.get(node.id, 0)
+    evidence_route = _route_href(
+        request.with_screen("provenance"),
+        overrides={"focus_node_id": node.id, "selected_edge_id": None},
+    )
+    path_route = None
+    if focus is not None and focus.id != node.id:
+        path_edges = _shortest_path_edges(graph, focus.id, node.id)
+        if path_edges:
+            path_route = _route_href(
+                request.with_screen("path"),
+                overrides={
+                    "source_node_id": focus.id,
+                    "target_node_id": node.id,
+                    "layout": "focus",
+                    "selected_edge_id": None,
+                },
+            )
+    return {
+        "id": node.id,
+        "label": node.label,
+        "kind": node.kind,
+        "source": node.source,
+        "score": node.score,
+        "degree": degree,
+        "matched_terms": [
+            term for term in query_terms if _node_contains_text(node, term)
+        ],
+        "focus_route": _explore_href(request, focus_node_id=node.id),
+        "local_route": _route_href(
+            request.with_screen("neighborhood"),
+            overrides={
+                "focus_node_id": node.id,
+                "max_depth": 1,
+                "layout": "focus",
+                "selected_edge_id": None,
+            },
+        ),
+        "evidence_route": evidence_route,
+        "path_route": path_route,
+    }
+
+
+def _search_result_rows(items: object) -> str:
+    if not isinstance(items, list) or not items:
+        return _empty("No visible nodes match the current query or filters.")
+    rows: list[str] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        label = str(item.get("label") or item.get("id") or "node")
+        kind = str(item.get("kind") or "node")
+        degree = str(item.get("degree", 0))
+        score = item.get("score")
+        score_note = f" · score {score}" if score is not None else ""
+        rows.append(
+            "<div class='gf-route-row gf-search-result-row'>"
+            f"<div>{escape(label)}"
+            f"<span class='gf-inline-note'>{escape(kind)} · degree {escape(degree)}{escape(score_note)}</span></div>"
+            "<span class='gf-trail-actions'>"
+            f"<a class='gf-inline-link' href='{escape(str(item.get('focus_route') or '#'))}'>Focus</a>"
+            f"<a class='gf-inline-link' href='{escape(str(item.get('local_route') or '#'))}'>Local</a>"
+            f"<a class='gf-inline-link' href='{escape(str(item.get('evidence_route') or '#'))}'>Evidence</a>"
+            f"{_search_result_path_link(item)}"
+            "</span></div>"
+        )
+    return _html_list(rows)
+
+
+def _search_result_path_link(item: dict[str, object]) -> str:
+    route = item.get("path_route")
+    if not route:
+        return ""
+    return f"<a class='gf-inline-link' href='{escape(str(route))}'>Path</a>"
+
+
+def _expansion_planner_panel(
+    graph: GraphFakosGraph,
+    request: GraphFakosRequest,
+    focus: GraphFakosNode | None,
+) -> str:
+    if not graph.nodes:
+        return _panel(
+            "Expansion Planner",
+            _empty("No visible nodes are available for expansion planning."),
+        )
+    payload = _expansion_planner_payload(graph, request, focus)
+    node_options = tuple((node.id, node.label) for node in _ranked_nodes(graph, set()))
+    edge_kinds = tuple(sorted({edge.kind for edge in graph.edges if edge.kind}))
+    node_kinds = tuple(sorted({node.kind for node in graph.nodes if node.kind}))
+    return _panel(
+        "Expansion Planner",
+        _summary_note(
+            "Plan provider-owned neighbor expansion without making GraphFakos fetch or persist graph data."
+        )
+        + "<form method='get' action='/neighborhood' class='gf-panel-form' aria-label='Expansion planner controls'>"
+        f"{_select_pairs('focus_node_id', 'Expansion source', node_options, str(payload['source_id']))}"
+        f"{_select('max_depth', 'Depth', ('1', '2', '3'), str(payload['depth']))}"
+        f"{_select('edge_kind', 'Edge kind', edge_kinds, str(payload['edge_kind']))}"
+        f"{_select('node_kind', 'Node kind', node_kinds, str(payload['node_kind']))}"
+        f"{_state_hidden_inputs(request, exclude=('focus_node_id', 'max_depth', 'edge_kind', 'node_kind'))}"
+        "<button type='submit'>Preview Local Expansion</button>"
+        "</form>"
+        "<section class='gf-expansion-planner' data-gf-expansion-planner-panel='true'>"
+        f"{_expansion_suggestion_rows(payload['suggestions'])}"
+        "</section>" + _json_script("data-gf-expansion-plan", payload),
+    )
+
+
+def _expansion_planner_payload(
+    graph: GraphFakosGraph,
+    request: GraphFakosRequest,
+    focus: GraphFakosNode | None,
+) -> dict[str, object]:
+    source = _expansion_source_node(graph, focus)
+    edge_kind = request.filters.get("edge_kind", "")
+    node_kind = request.filters.get("node_kind", "")
+    depth = max(request.max_depth, 1)
+    expansion_request = GraphFakosExpansionRequest(
+        source_id=source.id,
+        depth=depth,
+        edge_kind=edge_kind,
+        node_kind=node_kind,
+    )
+    suggestions = [
+        _expansion_suggestion_payload(graph, request, node, edge_kind, node_kind)
+        for node in _ranked_nodes(graph, {source.id})
+    ][:6]
+    return {
+        "status": "planned",
+        "source_id": source.id,
+        "source_label": source.label,
+        "depth": depth,
+        "edge_kind": edge_kind,
+        "node_kind": node_kind,
+        "visible_node_count": len(graph.nodes),
+        "visible_edge_count": len(graph.edges),
+        "request": expansion_request.to_dict(),
+        "suggestions": suggestions,
+        "provider_boundary": (
+            "GraphFakos plans the expansion request; providers or hosts own fetching, "
+            "persisting, and rebuilding graph data."
+        ),
+    }
+
+
+def _expansion_source_node(
+    graph: GraphFakosGraph,
+    focus: GraphFakosNode | None,
+) -> GraphFakosNode:
+    node_ids = {node.id for node in graph.nodes}
+    if focus is not None and focus.id in node_ids:
+        return focus
+    return _ranked_nodes(graph, set())[0]
+
+
+def _expansion_suggestion_payload(
+    graph: GraphFakosGraph,
+    request: GraphFakosRequest,
+    node: GraphFakosNode,
+    edge_kind: str,
+    node_kind: str,
+) -> dict[str, object]:
+    degree = _node_degree_map(graph).get(node.id, 0)
+    incident_edge_kinds = sorted(
+        {
+            edge.kind
+            for edge in graph.edges
+            if edge.kind and (edge.source_id == node.id or edge.target_id == node.id)
+        }
+    )
+    return {
+        "id": node.id,
+        "label": node.label,
+        "kind": node.kind,
+        "degree": degree,
+        "incident_edge_kinds": incident_edge_kinds,
+        "request": GraphFakosExpansionRequest(
+            source_id=node.id,
+            depth=1,
+            edge_kind=edge_kind,
+            node_kind=node_kind,
+        ).to_dict(),
+        "local_route": _route_href(
+            request.with_screen("neighborhood"),
+            overrides={"focus_node_id": node.id, "max_depth": 1, "layout": "focus"},
+        ),
+        "deeper_route": _route_href(
+            request.with_screen("neighborhood"),
+            overrides={"focus_node_id": node.id, "max_depth": 2, "layout": "focus"},
+        ),
+        "case_route": _route_href(
+            request.with_screen("explore"),
+            overrides={"pivot_node_id": node.id, "pivot_mode": "neighbors"},
+        ),
+    }
+
+
+def _expansion_suggestion_rows(items: object) -> str:
+    if not isinstance(items, list) or not items:
+        return _empty("No expansion candidates are visible.")
+    rows: list[str] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        label = str(item.get("label") or item.get("id") or "node")
+        kind = str(item.get("kind") or "node")
+        degree = str(item.get("degree", 0))
+        rows.append(
+            "<div class='gf-route-row gf-expansion-row'>"
+            f"<div>{escape(label)}"
+            f"<span class='gf-inline-note'>{escape(kind)} · degree {escape(degree)}</span></div>"
+            "<span class='gf-trail-actions'>"
+            f"<a class='gf-inline-link' href='{escape(str(item.get('local_route') or '#'))}'>Local d1</a>"
+            f"<a class='gf-inline-link' href='{escape(str(item.get('deeper_route') or '#'))}'>Local d2</a>"
+            f"<a class='gf-inline-link' href='{escape(str(item.get('case_route') or '#'))}'>Case</a>"
+            "</span></div>"
+        )
+    return _html_list(rows)
+
+
+def _graph_data_table_panel(
+    graph: GraphFakosGraph,
+    request: GraphFakosRequest,
+) -> str:
+    payload = _graph_data_table_payload(graph, request)
+    return _panel(
+        "Graph Data Table",
+        _summary_note(
+            "Visible graph rows keep navigation, selection, and structural metrics usable beside the canvas."
+        )
+        + _badges(
+            (
+                (f"{payload['visible_node_count']} visible node(s)", "accent"),
+                (f"{payload['visible_edge_count']} visible edge(s)", "blue"),
+                (f"{payload['row_count']} row(s)", "neutral"),
+            )
+        )
+        + _graph_data_rows(payload["rows"])
+        + _json_script("data-gf-graph-data-table", payload),
+    )
+
+
+def _graph_data_table_payload(
+    graph: GraphFakosGraph,
+    request: GraphFakosRequest,
+) -> dict[str, object]:
+    degree_map = _node_degree_map(graph)
+    component_ids = _node_component_ids(graph)
+    selected_ids = set(request.selected_node_ids)
+    rows = [
+        _graph_data_row_payload(node, request, degree_map, component_ids, selected_ids)
+        for node in sorted(
+            graph.nodes,
+            key=lambda item: (
+                item.id not in selected_ids,
+                item.id != request.focus_node_id,
+                -degree_map.get(item.id, 0),
+                -(item.score if item.score is not None else 0),
+                item.label.casefold(),
+            ),
+        )[:16]
+    ]
+    return {
+        "visible_node_count": len(graph.nodes),
+        "visible_edge_count": len(graph.edges),
+        "row_count": len(rows),
+        "selected_node_ids": list(request.selected_node_ids),
+        "focus_node_id": request.focus_node_id,
+        "rows": rows,
+        "provider_boundary": (
+            "GraphFakos lists visible graph structure and route actions; "
+            "providers remain responsible for durable storage and semantic truth."
+        ),
+    }
+
+
+def _graph_data_row_payload(
+    node: GraphFakosNode,
+    request: GraphFakosRequest,
+    degree_map: dict[str, int],
+    component_ids: dict[str, str],
+    selected_ids: set[str],
+) -> dict[str, object]:
+    next_selected = tuple(dict.fromkeys((*request.selected_node_ids, node.id)))
+    return {
+        "id": node.id,
+        "label": node.label,
+        "kind": node.kind,
+        "source": node.source,
+        "degree": degree_map.get(node.id, 0),
+        "component_id": component_ids.get(node.id, ""),
+        "score": node.score,
+        "confidence": node.confidence,
+        "tags": list(node.tags),
+        "provenance_count": len(node.provenance_ids),
+        "citation_count": len(node.citation_ids),
+        "selected": node.id in selected_ids,
+        "focused": node.id == request.focus_node_id,
+        "routes": {
+            "focus": _explore_href(request, focus_node_id=node.id),
+            "local": _route_href(
+                request.with_screen("neighborhood"),
+                overrides={"focus_node_id": node.id, "max_depth": 1},
+            ),
+            "case": _route_href(
+                request.with_screen("explore"),
+                overrides={"pivot_node_id": node.id, "pivot_mode": "neighbors"},
+            ),
+            "select": _route_href(
+                request.with_screen("explore"),
+                overrides={"selected_node_ids": ",".join(next_selected)},
+            ),
+        },
+    }
+
+
+def _graph_data_rows(rows: object) -> str:
+    if not isinstance(rows, list) or not rows:
+        return _empty("No visible graph rows.")
+    html = "<div class='gf-data-table' data-gf-graph-data-table-panel='true'>"
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        routes = row.get("routes")
+        if not isinstance(routes, dict):
+            routes = {}
+        markers = []
+        if row.get("focused"):
+            markers.append(("focused", "accent"))
+        if row.get("selected"):
+            markers.append(("selected", "blue"))
+        html += (
+            "<article class='gf-card gf-data-row'>"
+            f"<h4>{escape(str(row.get('label') or row.get('id') or 'node'))}</h4>"
+            + _badges(
+                (
+                    (str(row.get("kind") or "node"), "neutral"),
+                    (f"degree {row.get('degree', 0)}", "accent"),
+                    (str(row.get("component_id") or "component"), "blue"),
+                    *markers,
+                )
+            )
+            + _key_values(
+                {
+                    "id": row.get("id"),
+                    "source": row.get("source"),
+                    "score": row.get("score"),
+                    "confidence": row.get("confidence"),
+                    "evidence": (
+                        f"{row.get('provenance_count', 0)} provenance / "
+                        f"{row.get('citation_count', 0)} citation"
+                    ),
+                    "tags": ", ".join(str(tag) for tag in row.get("tags", [])[:4])
+                    if isinstance(row.get("tags"), list)
+                    else "",
+                }
+            )
+            + "<div class='gf-trail-actions'>"
+            f"<a class='gf-inline-link' href='{escape(str(routes.get('focus') or '#'))}'>Focus</a>"
+            f"<a class='gf-inline-link' href='{escape(str(routes.get('local') or '#'))}'>Local</a>"
+            f"<a class='gf-inline-link' href='{escape(str(routes.get('case') or '#'))}'>Case</a>"
+            f"<a class='gf-inline-link' href='{escape(str(routes.get('select') or '#'))}'>Select</a>"
+            "</div></article>"
+        )
+    return f"{html}</div>"
+
+
+def _relationship_data_table_panel(
+    graph: GraphFakosGraph,
+    request: GraphFakosRequest,
+) -> str:
+    payload = _relationship_data_table_payload(graph, request)
+    return _panel(
+        "Relationship Data Table",
+        _summary_note(
+            "Visible edge rows make relationships inspectable, filterable, and traceable without JavaScript."
+        )
+        + _badges(
+            (
+                (f"{payload['visible_edge_count']} visible edge(s)", "accent"),
+                (f"{payload['row_count']} row(s)", "neutral"),
+            )
+        )
+        + _relationship_data_rows(payload["rows"])
+        + _json_script("data-gf-relationship-data-table", payload),
+    )
+
+
+def _relationship_data_table_payload(
+    graph: GraphFakosGraph,
+    request: GraphFakosRequest,
+) -> dict[str, object]:
+    node_map = graph.node_map()
+    rows = [
+        _relationship_data_row_payload(edge, request, node_map)
+        for edge in sorted(
+            graph.edges,
+            key=lambda item: (
+                item.id != request.selected_edge_id,
+                item.kind.casefold(),
+                -(item.confidence if item.confidence is not None else 0),
+                item.id.casefold(),
+            ),
+        )[:18]
+    ]
+    return {
+        "visible_node_count": len(graph.nodes),
+        "visible_edge_count": len(graph.edges),
+        "row_count": len(rows),
+        "selected_edge_id": request.selected_edge_id,
+        "rows": rows,
+        "provider_boundary": (
+            "GraphFakos lists visible relationship structure and routes; "
+            "providers own durable relationship truth and mutation."
+        ),
+    }
+
+
+def _relationship_data_row_payload(
+    edge: GraphFakosEdge,
+    request: GraphFakosRequest,
+    node_map: dict[str, GraphFakosNode],
+) -> dict[str, object]:
+    source = node_map.get(edge.source_id)
+    target = node_map.get(edge.target_id)
+    return {
+        "id": edge.id,
+        "label": edge.label or edge.kind,
+        "kind": edge.kind,
+        "source_id": edge.source_id,
+        "source_label": source.label if source is not None else edge.source_id,
+        "target_id": edge.target_id,
+        "target_label": target.label if target is not None else edge.target_id,
+        "weight": edge.weight,
+        "confidence": edge.confidence,
+        "direction": edge.direction,
+        "provenance_count": len(edge.provenance_ids),
+        "citation_count": len(edge.citation_ids),
+        "selected": edge.id == request.selected_edge_id,
+        "routes": {
+            "inspect": _explore_href(
+                request,
+                selected_edge_id=edge.id,
+                focus_node_id=request.focus_node_id,
+            ),
+            "source": _explore_href(request, focus_node_id=edge.source_id),
+            "target": _explore_href(request, focus_node_id=edge.target_id),
+            "path": _route_href(
+                request.with_screen("path"),
+                overrides={
+                    "source_node_id": edge.source_id,
+                    "target_node_id": edge.target_id,
+                    "selected_edge_id": edge.id,
+                    "layout": "focus",
+                },
+            ),
+            "kind": _route_href(
+                request.with_screen("explore"),
+                overrides={"edge_kind": edge.kind, "selected_edge_id": edge.id},
+            ),
+        },
+    }
+
+
+def _relationship_data_rows(rows: object) -> str:
+    if not isinstance(rows, list) or not rows:
+        return _empty("No visible relationship rows.")
+    html = (
+        "<div class='gf-relationship-table' "
+        "data-gf-relationship-data-table-panel='true'>"
+    )
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        routes = row.get("routes")
+        if not isinstance(routes, dict):
+            routes = {}
+        markers = (("selected", "blue"),) if row.get("selected") else ()
+        html += (
+            "<article class='gf-card gf-relationship-row'>"
+            f"<h4>{escape(str(row.get('source_label') or row.get('source_id') or 'source'))}"
+            " -> "
+            f"{escape(str(row.get('target_label') or row.get('target_id') or 'target'))}</h4>"
+            + _badges(
+                (
+                    (str(row.get("kind") or "edge"), "accent"),
+                    (str(row.get("direction") or "directed"), "neutral"),
+                    *markers,
+                )
+            )
+            + _key_values(
+                {
+                    "id": row.get("id"),
+                    "label": row.get("label"),
+                    "confidence": row.get("confidence"),
+                    "weight": row.get("weight"),
+                    "evidence": (
+                        f"{row.get('provenance_count', 0)} provenance / "
+                        f"{row.get('citation_count', 0)} citation"
+                    ),
+                }
+            )
+            + "<div class='gf-trail-actions'>"
+            f"<a class='gf-inline-link' href='{escape(str(routes.get('inspect') or '#'))}'>Inspect</a>"
+            f"<a class='gf-inline-link' href='{escape(str(routes.get('source') or '#'))}'>Source</a>"
+            f"<a class='gf-inline-link' href='{escape(str(routes.get('target') or '#'))}'>Target</a>"
+            f"<a class='gf-inline-link' href='{escape(str(routes.get('path') or '#'))}'>Path</a>"
+            f"<a class='gf-inline-link' href='{escape(str(routes.get('kind') or '#'))}'>Kind</a>"
+            "</div></article>"
+        )
+    return f"{html}</div>"
+
+
+def _evidence_coverage_map_panel(
+    graph: GraphFakosGraph,
+    request: GraphFakosRequest,
+) -> str:
+    payload = _evidence_coverage_map_payload(graph, request)
+    return _panel(
+        "Evidence Coverage Map",
+        _summary_note(
+            "Visible provenance and citation coverage stays structural; GraphFakos does not decide truth."
+        )
+        + _badges(
+            (
+                (
+                    f"{payload['node_coverage']['with_any']} node(s) with evidence",
+                    "accent",
+                ),
+                (
+                    f"{payload['edge_coverage']['with_any']} edge(s) with evidence",
+                    "blue",
+                ),
+                (f"{payload['gap_count']} visible gap(s)", "neutral"),
+            )
+        )
+        + _evidence_coverage_rows(payload["coverage_rows"])
+        + _json_script("data-gf-evidence-coverage-map", payload),
+    )
+
+
+def _evidence_coverage_map_payload(
+    graph: GraphFakosGraph,
+    request: GraphFakosRequest,
+) -> dict[str, object]:
+    node_coverage = _evidence_coverage_counts(graph.nodes)
+    edge_coverage = _evidence_coverage_counts(graph.edges)
+    rows = [
+        _evidence_coverage_row(
+            "nodes-with-provenance",
+            "Nodes with provenance",
+            node_coverage["with_provenance"],
+            len(graph.nodes),
+            _route_href(
+                request.with_screen("explore"),
+                overrides={"evidence_filter": "with_provenance"},
+            ),
+            "Declared provenance references on visible nodes.",
+        ),
+        _evidence_coverage_row(
+            "nodes-missing-provenance",
+            "Nodes missing provenance",
+            node_coverage["missing_provenance"],
+            len(graph.nodes),
+            _route_href(
+                request.with_screen("explore"),
+                overrides={"evidence_filter": "missing_provenance"},
+            ),
+            "Visible nodes without declared provenance references.",
+        ),
+        _evidence_coverage_row(
+            "nodes-with-citation",
+            "Nodes with citations",
+            node_coverage["with_citation"],
+            len(graph.nodes),
+            _route_href(
+                request.with_screen("explore"),
+                overrides={"evidence_filter": "with_citation"},
+            ),
+            "Declared citation references on visible nodes.",
+        ),
+        _evidence_coverage_row(
+            "nodes-missing-citation",
+            "Nodes missing citations",
+            node_coverage["missing_citation"],
+            len(graph.nodes),
+            _route_href(
+                request.with_screen("explore"),
+                overrides={"evidence_filter": "missing_citation"},
+            ),
+            "Visible nodes without declared citation references.",
+        ),
+        _evidence_coverage_row(
+            "edges-with-evidence",
+            "Edges with evidence",
+            edge_coverage["with_any"],
+            len(graph.edges),
+            _route_href(
+                request.with_screen("explore"),
+                overrides={
+                    "query": "has:provenance",
+                    "analytics_overlay": "provenance",
+                },
+            ),
+            "Visible relationships with provenance or citation references.",
+        ),
+        _evidence_coverage_row(
+            "edges-missing-evidence",
+            "Edges missing evidence",
+            edge_coverage["missing_any"],
+            len(graph.edges),
+            _route_href(request.with_screen("provenance")),
+            "Visible relationships without provenance or citation references.",
+        ),
+    ]
+    return {
+        "visible_node_count": len(graph.nodes),
+        "visible_edge_count": len(graph.edges),
+        "node_coverage": node_coverage,
+        "edge_coverage": edge_coverage,
+        "gap_count": node_coverage["missing_any"] + edge_coverage["missing_any"],
+        "coverage_rows": rows,
+        "provider_boundary": (
+            "GraphFakos reports declared evidence coverage only; providers own "
+            "source quality, claim truth, and evidence policy."
+        ),
+    }
+
+
+def _evidence_coverage_counts(items: object) -> dict[str, int]:
+    rows = [item for item in items if hasattr(item, "provenance_ids")]
+    with_provenance = sum(1 for item in rows if item.provenance_ids)
+    with_citation = sum(1 for item in rows if item.citation_ids)
+    with_any = sum(1 for item in rows if item.provenance_ids or item.citation_ids)
+    total = len(rows)
+    return {
+        "total": total,
+        "with_provenance": with_provenance,
+        "with_citation": with_citation,
+        "with_any": with_any,
+        "missing_provenance": total - with_provenance,
+        "missing_citation": total - with_citation,
+        "missing_any": total - with_any,
+    }
+
+
+def _evidence_coverage_row(
+    row_id: str,
+    label: str,
+    count: int,
+    total: int,
+    route: str,
+    summary: str,
+) -> dict[str, object]:
+    ratio = count / total if total else 0
+    return {
+        "id": row_id,
+        "label": label,
+        "count": count,
+        "total": total,
+        "ratio": round(ratio, 3),
+        "percent": round(ratio * 100),
+        "route": route,
+        "summary": summary,
+    }
+
+
+def _evidence_coverage_rows(rows: object) -> str:
+    if not isinstance(rows, list) or not rows:
+        return _empty("No evidence coverage rows are visible.")
+    html = "<div class='gf-evidence-coverage' data-gf-evidence-coverage-panel='true'>"
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        percent = int(row.get("percent") or 0)
+        html += (
+            "<article class='gf-evidence-coverage-row'>"
+            "<div>"
+            f"<h4>{escape(str(row.get('label') or row.get('id') or 'Coverage'))}</h4>"
+            f"<p>{escape(str(row.get('summary') or ''))}</p>"
+            "</div>"
+            "<div class='gf-evidence-meter' "
+            f"aria-label='{escape(str(row.get('label') or 'Coverage'))}: {percent} percent'>"
+            f"<span style='width: {percent}%'></span>"
+            "</div>"
+            "<div class='gf-trail-actions'>"
+            f"<strong>{escape(str(row.get('count', 0)))} / {escape(str(row.get('total', 0)))}</strong>"
+            f"<a class='gf-inline-link' href='{escape(str(row.get('route') or '#'))}'>Review</a>"
+            "</div>"
+            "</article>"
+        )
+    return f"{html}</div>"
+
+
+def _facet_explorer_panel(
+    graph: GraphFakosGraph,
+    request: GraphFakosRequest,
+) -> str:
+    payload = _facet_explorer_payload(graph, request)
+    return _panel(
+        "Facet Explorer",
+        _summary_note(
+            "Route-backed facets expose structural and provider-declared fields without changing graph truth."
+        )
+        + _facet_explorer_sections(payload["facets"])
+        + _json_script("data-gf-facet-explorer", payload),
+    )
+
+
+def _facet_explorer_payload(
+    graph: GraphFakosGraph,
+    request: GraphFakosRequest,
+) -> dict[str, object]:
+    facets = [
+        _facet_section(
+            "node_kind",
+            "Node kinds",
+            _node_value_counts((node.kind for node in graph.nodes if node.kind)),
+            request,
+            active_value=request.filters.get("node_kind", ""),
+        ),
+        _facet_section(
+            "source",
+            "Sources",
+            _node_value_counts((node.source for node in graph.nodes if node.source)),
+            request,
+            active_value=request.filters.get("source", ""),
+        ),
+        _facet_section(
+            "tag",
+            "Tags",
+            _node_value_counts(
+                (tag for node in graph.nodes for tag in node.tags if tag)
+            ),
+            request,
+            active_value=request.filters.get("tag", ""),
+        ),
+        _facet_section(
+            "component_id",
+            "Components",
+            _node_value_counts(_node_component_ids(graph).values()),
+            request,
+            active_value=request.component_id,
+        ),
+        _evidence_facet_section(graph, request),
+        _degree_facet_section(graph, request),
+    ]
+    visible_facets = [facet for facet in facets if facet["items"]]
+    return {
+        "visible_node_count": len(graph.nodes),
+        "visible_edge_count": len(graph.edges),
+        "facets": visible_facets,
+        "provider_boundary": (
+            "GraphFakos counts visible structural fields and declared metadata; "
+            "providers own field meaning and persistence."
+        ),
+    }
+
+
+def _facet_section(
+    facet_id: str,
+    label: str,
+    counts: dict[str, int],
+    request: GraphFakosRequest,
+    *,
+    active_value: str,
+) -> dict[str, object]:
+    return {
+        "id": facet_id,
+        "label": label,
+        "items": [
+            {
+                "value": value,
+                "label": value,
+                "count": count,
+                "active": value == active_value,
+                "route": _route_href(
+                    request.with_screen("explore"), overrides={facet_id: value}
+                ),
+            }
+            for value, count in _sorted_counts(counts)[:8]
+        ],
+    }
+
+
+def _evidence_facet_section(
+    graph: GraphFakosGraph,
+    request: GraphFakosRequest,
+) -> dict[str, object]:
+    counts = {
+        "with_provenance": sum(1 for node in graph.nodes if node.provenance_ids),
+        "with_citation": sum(1 for node in graph.nodes if node.citation_ids),
+        "missing_provenance": sum(1 for node in graph.nodes if not node.provenance_ids),
+        "missing_citation": sum(1 for node in graph.nodes if not node.citation_ids),
+    }
+    return {
+        "id": "evidence_filter",
+        "label": "Evidence",
+        "items": [
+            {
+                "value": value,
+                "label": value.replace("_", " "),
+                "count": count,
+                "active": value == request.evidence_filter,
+                "route": _route_href(
+                    request.with_screen("explore"),
+                    overrides={"evidence_filter": value},
+                ),
+            }
+            for value, count in counts.items()
+            if count
+        ],
+    }
+
+
+def _degree_facet_section(
+    graph: GraphFakosGraph,
+    request: GraphFakosRequest,
+) -> dict[str, object]:
+    degree_map = _node_degree_map(graph)
+    buckets = {
+        "isolated": sum(1 for degree in degree_map.values() if degree == 0),
+        "degree 1-2": sum(1 for degree in degree_map.values() if 1 <= degree <= 2),
+        "degree 3+": sum(1 for degree in degree_map.values() if degree >= 3),
+    }
+    routes = {
+        "isolated": {"min_degree": 0, "max_degree": 0},
+        "degree 1-2": {"min_degree": 1, "max_degree": 2},
+        "degree 3+": {"min_degree": 3, "max_degree": None},
+    }
+    active = _active_degree_bucket(request)
+    return {
+        "id": "degree",
+        "label": "Degree",
+        "items": [
+            {
+                "value": value,
+                "label": value,
+                "count": count,
+                "active": value == active,
+                "route": _route_href(
+                    request.with_screen("explore"), overrides=routes[value]
+                ),
+            }
+            for value, count in buckets.items()
+            if count
+        ],
+    }
+
+
+def _active_degree_bucket(request: GraphFakosRequest) -> str:
+    if request.min_degree == 0 and request.max_degree == 0:
+        return "isolated"
+    if request.min_degree == 1 and request.max_degree == 2:
+        return "degree 1-2"
+    if request.min_degree == 3 and request.max_degree is None:
+        return "degree 3+"
+    return ""
+
+
+def _node_value_counts(values: object) -> dict[str, int]:
+    counts: dict[str, int] = defaultdict(int)
+    if not isinstance(values, str):
+        for value in values:
+            text = str(value).strip()
+            if text:
+                counts[text] += 1
+    return dict(counts)
+
+
+def _sorted_counts(counts: dict[str, int]) -> list[tuple[str, int]]:
+    return sorted(counts.items(), key=lambda item: (-item[1], item[0].casefold()))
+
+
+def _facet_explorer_sections(facets: object) -> str:
+    if not isinstance(facets, list) or not facets:
+        return _empty("No facet values are visible.")
+    html = "<div class='gf-facet-explorer' data-gf-facet-explorer-panel='true'>"
+    for facet in facets:
+        if not isinstance(facet, dict):
+            continue
+        items = facet.get("items")
+        if not isinstance(items, list) or not items:
+            continue
+        html += (
+            "<section class='gf-facet-group'>"
+            f"<h4>{escape(str(facet.get('label') or facet.get('id') or 'Facet'))}</h4>"
+        )
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            active = " aria-current='true'" if item.get("active") else ""
+            html += (
+                f"<a class='gf-facet-pill' href='{escape(str(item.get('route') or '#'))}'{active}>"
+                f"<span>{escape(str(item.get('label') or item.get('value') or 'value'))}</span>"
+                f"<strong>{escape(str(item.get('count', 0)))}</strong></a>"
+            )
+        html += "</section>"
+    return f"{html}</div>"
+
+
+def _analytics_panel(graph: GraphFakosGraph, request: GraphFakosRequest) -> str:
+    analytics = analyze_graph(graph)
+    body = _badges(
+        (
+            (f"overlay:{request.analytics_overlay}", "blue"),
+            (f"{analytics.component_count} component(s)", "neutral"),
+            (f"max degree {analytics.max_degree}", "accent"),
+        )
+    ) + _key_values(
+        {
+            "average degree": round(analytics.average_degree, 2),
+            "density": round(analytics.density, 4),
+            "hub nodes": len(analytics.hub_node_ids),
+            "orphan nodes": len(analytics.orphan_node_ids),
+        }
+    )
+    if analytics.hub_node_ids:
+        body += _panel_body("Hub Nodes", _list(list(analytics.hub_node_ids[:8])))
+    if analytics.orphan_node_ids:
+        body += _panel_body("Orphans", _list(list(analytics.orphan_node_ids[:8])))
+    return _panel("Analytics Overlay", body)
+
+
+def _readability_coach_panel(graph: GraphFakosGraph, request: GraphFakosRequest) -> str:
+    payload = _readability_coach_payload(graph, request)
+    suggestions = payload["suggestions"]
+    return _panel(
+        "Readability Coach",
+        _summary_note(
+            "Structural display checks suggest route-backed tuning without changing provider data."
+        )
+        + _badges(
+            (
+                (str(payload["status"]).replace("_", " "), "accent"),
+                (f"{payload['visible_node_count']} node(s)", "neutral"),
+                (f"{payload['visible_edge_count']} edge(s)", "neutral"),
+            )
+        )
+        + _readability_suggestion_rows(suggestions)
+        + _json_script("data-gf-readability-coach", payload),
+    )
+
+
+def _readability_coach_payload(
+    graph: GraphFakosGraph,
+    request: GraphFakosRequest,
+) -> dict[str, object]:
+    analytics = analyze_graph(graph)
+    hidden_nodes = int(graph.stats.get("hidden_nodes") or 0)
+    hidden_edges = int(graph.stats.get("hidden_edges") or 0)
+    edge_pressure = len(graph.edges) / max(len(graph.nodes), 1)
+    metrics = {
+        "average_degree": round(analytics.average_degree, 2),
+        "density": round(analytics.density, 4),
+        "edge_pressure": round(edge_pressure, 2),
+        "hidden_nodes": hidden_nodes,
+        "hidden_edges": hidden_edges,
+        "label_density": request.label_density,
+        "edge_opacity": request.edge_opacity,
+        "edge_clutter": request.edge_clutter,
+        "render_engine": request.render_engine,
+        "render_limit": request.render_limit,
+    }
+    suggestions = _readability_suggestions(
+        request,
+        visible_node_count=len(graph.nodes),
+        visible_edge_count=len(graph.edges),
+        edge_pressure=edge_pressure,
+        average_degree=analytics.average_degree,
+        hidden_nodes=hidden_nodes,
+        hidden_edges=hidden_edges,
+    )
+    return {
+        "status": "needs_tuning" if suggestions else "comfortable",
+        "visible_node_count": len(graph.nodes),
+        "visible_edge_count": len(graph.edges),
+        "metrics": metrics,
+        "suggestions": suggestions,
+    }
+
+
+def _readability_suggestions(
+    request: GraphFakosRequest,
+    *,
+    visible_node_count: int,
+    visible_edge_count: int,
+    edge_pressure: float,
+    average_degree: float,
+    hidden_nodes: int,
+    hidden_edges: int,
+) -> list[dict[str, object]]:
+    suggestions: list[dict[str, object]] = []
+    if hidden_nodes or hidden_edges:
+        larger_limit = request.render_limit + max(25, request.render_limit // 2)
+        suggestions.append(
+            _readability_suggestion(
+                "increase-render-budget",
+                "Show more graph",
+                f"{hidden_nodes} node(s) and {hidden_edges} edge(s) are outside the current render budget.",
+                _route_href(request, overrides={"render_limit": larger_limit}),
+            )
+        )
+    if edge_pressure > 1.4 and request.edge_clutter != "reduced":
+        suggestions.append(
+            _readability_suggestion(
+                "reduce-edge-clutter",
+                "Reduce edge clutter",
+                "The visible graph has more edges than nodes; soften the edge layer first.",
+                _route_href(
+                    request,
+                    overrides={
+                        "edge_clutter": "reduced",
+                        "edge_opacity": min(request.edge_opacity, 0.55),
+                    },
+                ),
+            )
+        )
+    if request.label_density > 0.65 and (visible_node_count > 12 or average_degree > 2):
+        suggestions.append(
+            _readability_suggestion(
+                "lower-label-density",
+                "Lower label density",
+                "Dense views scan better when only the highest-signal labels stay visible.",
+                _route_href(request, overrides={"label_density": 0.45}),
+            )
+        )
+    if request.edge_opacity > 0.7 and visible_edge_count > visible_node_count:
+        suggestions.append(
+            _readability_suggestion(
+                "soften-edges",
+                "Soften edges",
+                "High edge opacity can overpower node groups in connected views.",
+                _route_href(request, overrides={"edge_opacity": 0.5}),
+            )
+        )
+    if visible_node_count > 30 and request.render_engine != "canvas":
+        suggestions.append(
+            _readability_suggestion(
+                "try-canvas",
+                "Try canvas renderer",
+                "Canvas can make denser local previews smoother while SVG remains the fallback.",
+                _route_href(request, overrides={"render_engine": "canvas"}),
+            )
+        )
+    return suggestions
+
+
+def _readability_suggestion(
+    suggestion_id: str,
+    title: str,
+    reason: str,
+    route: str,
+) -> dict[str, object]:
+    return {
+        "id": suggestion_id,
+        "title": title,
+        "reason": reason,
+        "route": route,
+    }
+
+
+def _readability_suggestion_rows(items: object) -> str:
+    if not isinstance(items, list) or not items:
+        return _empty(
+            "Current display settings are within comfortable structural limits."
+        )
+    rows: list[str] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        title = str(item.get("title") or item.get("id") or "Suggestion")
+        reason = str(item.get("reason") or "")
+        route = str(item.get("route") or "#")
+        rows.append(
+            "<div class='gf-route-row gf-readability-row'>"
+            f"<div>{escape(title)}<span class='gf-inline-note'>{escape(reason)}</span></div>"
+            f"<a class='gf-inline-link' href='{escape(route)}'>Apply</a></div>"
+        )
+    return _html_list(rows)
+
+
+def _display_recipes_panel(
+    graph: GraphFakosGraph,
+    request: GraphFakosRequest,
+    focus: GraphFakosNode | None,
+) -> str:
+    payload = _display_recipes_payload(graph, request, focus)
+    return _panel(
+        "Display Recipes",
+        _summary_note(
+            "Quick view recipes tune layout, filters, and display controls without changing provider data."
+        )
+        + _display_recipe_cards(payload["recipes"])
+        + _json_script("data-gf-display-recipes", payload),
+    )
+
+
+def _display_recipes_payload(
+    graph: GraphFakosGraph,
+    request: GraphFakosRequest,
+    focus: GraphFakosNode | None,
+) -> dict[str, object]:
+    focus_id = focus.id if focus is not None else request.focus_node_id
+    if not focus_id:
+        preferred = _preferred_focus_node(graph, request)
+        focus_id = preferred.id if preferred is not None else ""
+    recipes = [
+        _display_recipe(
+            request,
+            "display-readable",
+            "Readable review",
+            "Balanced labels and softened edges for small and medium graphs.",
+            {
+                "layout": "force",
+                "edge_clutter": "reduced",
+                "edge_opacity": 0.65,
+                "label_density": 0.65,
+                "node_scale": 1.08,
+                "render_engine": "svg",
+            },
+        ),
+        _display_recipe(
+            request,
+            "display-dense",
+            "Dense scan",
+            "Fewer labels, softer links, and a larger render budget for busy graphs.",
+            {
+                "layout": "grouped",
+                "edge_clutter": "reduced",
+                "edge_opacity": 0.42,
+                "label_density": 0.35,
+                "render_engine": "canvas",
+                "render_limit": max(request.render_limit, 240),
+            },
+        ),
+        _display_recipe(
+            request.with_screen("neighborhood"),
+            "display-local",
+            "Local focus",
+            "Open the selected node as a one-hop local graph.",
+            {
+                "focus_node_id": focus_id,
+                "layout": "focus",
+                "max_depth": 1,
+                "show_neighbor_links": True,
+                "edge_clutter": "normal",
+            },
+        ),
+        _display_recipe(
+            request,
+            "display-evidence",
+            "Evidence review",
+            "Prioritize provenance-bearing nodes and evidence overlays.",
+            {
+                "query": "has:provenance",
+                "analytics_overlay": "provenance",
+                "evidence_filter": "with_provenance",
+                "edge_opacity": 0.7,
+                "label_density": 0.75,
+            },
+        ),
+        _display_recipe(
+            request.with_screen("timeline"),
+            "display-timeline",
+            "Timeline review",
+            "Switch to timestamped review with reduced motion-safe stepping.",
+            {
+                "layout": "timeline",
+                "timeline_playback": "step",
+                "edge_clutter": "reduced",
+                "label_density": 0.8,
+            },
+        ),
+        _display_recipe(
+            request,
+            "display-export",
+            "Presentation export",
+            "Paper theme, SVG fallback, and readable labels for portable snapshots.",
+            {
+                "theme": "paper",
+                "render_engine": "svg",
+                "edge_clutter": "reduced",
+                "edge_opacity": 0.72,
+                "label_density": 0.82,
+                "camera_x": 0,
+                "camera_y": 0,
+                "camera_zoom": 1,
+            },
+        ),
+    ]
+    return {
+        "active_recipe_id": request.preset_id,
+        "visible_node_count": len(graph.nodes),
+        "visible_edge_count": len(graph.edges),
+        "recipes": recipes,
+        "provider_boundary": (
+            "Display recipes only change GraphFakos viewer state; providers own "
+            "durable storage, semantic truth, and graph updates."
+        ),
+    }
+
+
+def _display_recipe(
+    request: GraphFakosRequest,
+    recipe_id: str,
+    label: str,
+    summary: str,
+    overrides: dict[str, object],
+) -> dict[str, object]:
+    route_overrides = {"preset_id": recipe_id, **overrides}
+    return {
+        "id": recipe_id,
+        "label": label,
+        "summary": summary,
+        "overrides": route_overrides,
+        "route": _route_href(request, overrides=route_overrides),
+        "active": request.preset_id == recipe_id,
+    }
+
+
+def _display_recipe_cards(recipes: object) -> str:
+    if not isinstance(recipes, list) or not recipes:
+        return _empty("No display recipes are available.")
+    html = "<div class='gf-display-recipes' data-gf-display-recipes-panel='true'>"
+    for recipe in recipes:
+        if not isinstance(recipe, dict):
+            continue
+        active = "true" if recipe.get("active") else "false"
+        html += (
+            "<a class='gf-recipe-card' "
+            f"data-active='{active}' href='{escape(str(recipe.get('route') or '#'))}'>"
+            f"<strong>{escape(str(recipe.get('label') or recipe.get('id') or 'Recipe'))}</strong>"
+            f"<span>{escape(str(recipe.get('summary') or ''))}</span>"
+            "</a>"
+        )
+    return f"{html}</div>"
+
+
+def _export_replay_panel(graph: GraphFakosGraph, request: GraphFakosRequest) -> str:
+    state = GraphFakosSavedView.from_request(
+        request,
+        view_id=request.saved_view_id or "route",
+        label="Current route view",
+    )
+    bundle_preview = {
+        "schema_version": "graphfakos.replay.v1",
+        "bundle_id": f"{graph.graph_id}:{request.screen}",
+        "viewer_state": state.state.to_dict(),
+        "graph_id": graph.graph_id,
+    }
+    return _panel(
+        "Export and Replay",
+        _summary_note(
+            "Static exports stay view-only; replay bundles carry exact graph state for review."
+        )
+        + _key_values(
+            {
+                "share route": _route_href(request),
+                "bundle schema": bundle_preview["schema_version"],
+                "saved view": state.view_id,
+                "nodes": len(graph.nodes),
+                "edges": len(graph.edges),
+            }
+        )
+        + _json_script("data-gf-replay-bundle-preview", bundle_preview),
     )
 
 
@@ -1031,6 +3725,7 @@ def _neighborhood_toolbar(
         "placeholder='Depth'>"
         f"{_select('edge_kind', 'Edge kind', _facet_values(graph, 'edge_kind'), request.filters.get('edge_kind', ''))}"
         f"{_select('layout', 'Layout', ('force', 'circle', 'grouped', 'focus', 'radial', 'hierarchical'), request.layout)}"
+        f"{_select('show_neighbor_links', 'Neighbor links', ('true', 'false'), str(request.show_neighbor_links).lower())}"
         "<button type='submit'>Expand</button>"
         "</form></section>"
     )
@@ -1051,6 +3746,7 @@ def _path_toolbar(
         f"{_select_pairs('target_node_id', 'Target node', node_options, target_id)}"
         f"{_select('edge_kind', 'Edge kind', _facet_values(graph, 'edge_kind'), request.filters.get('edge_kind', ''))}"
         f"{_select('layout', 'Layout', ('force', 'circle', 'grouped', 'focus', 'radial', 'hierarchical'), request.layout)}"
+        f"{_select('edge_clutter', 'Edge clutter', ('normal', 'reduced'), request.edge_clutter)}"
         "<button type='submit'>Find Path</button>"
         "</form></section>"
     )
@@ -1078,6 +3774,764 @@ def _select_pairs(
         current = " selected" if value == selected else ""
         html += f"<option value='{escape(value)}'{current}>{escape(text)}</option>"
     return f"{html}</select>"
+
+
+def _state_hidden_inputs(
+    request: GraphFakosRequest,
+    *,
+    exclude: tuple[str, ...] = (),
+) -> str:
+    excluded = {
+        "screen",
+        "filters",
+        "include_provenance",
+        "include_provider_payload",
+        *exclude,
+    }
+    fields = []
+    for key, value in request.to_dict().items():
+        if key in excluded:
+            continue
+        route_key = "preset" if key == "preset_id" else key
+        if isinstance(value, bool):
+            encoded = "true" if value else "false"
+        elif _route_value_is_empty(value):
+            continue
+        elif isinstance(value, dict):
+            if not value:
+                continue
+            encoded = json.dumps(value, sort_keys=True, separators=(",", ":"))
+        elif isinstance(value, (list, tuple)):
+            if not value:
+                continue
+            encoded = ",".join(str(item) for item in value)
+        else:
+            encoded = str(value)
+        fields.append(
+            f"<input type='hidden' name='{escape(route_key)}' value='{escape(encoded)}'>"
+        )
+    for filter_key, filter_value in sorted(request.filters.items()):
+        if filter_key in excluded or not filter_value:
+            continue
+        fields.append(
+            f"<input type='hidden' name='{escape(filter_key)}' value='{escape(filter_value)}'>"
+        )
+    return "".join(fields)
+
+
+def _advanced_filter_panel(graph: GraphFakosGraph, request: GraphFakosRequest) -> str:
+    node_options = tuple((node.id, node.label) for node in graph.nodes)
+    return _panel(
+        "Advanced Filters",
+        "<form method='get' action='/explore' class='gf-panel-form' aria-label='Advanced graph filters'>"
+        f"<input name='min_degree' value='{'' if request.min_degree is None else request.min_degree}' placeholder='Min degree'>"
+        f"<input name='max_degree' value='{'' if request.max_degree is None else request.max_degree}' placeholder='Max degree'>"
+        f"{_select_pairs('connected_to_node_id', 'Connected to', node_options, request.connected_to_node_id)}"
+        f"{_select('evidence_filter', 'Evidence', ('with_provenance', 'with_citation', 'missing_provenance', 'missing_citation', 'warnings'), request.evidence_filter)}"
+        f"{_state_hidden_inputs(request, exclude=('min_degree', 'max_degree', 'connected_to_node_id', 'evidence_filter'))}"
+        "<button type='submit'>Apply Advanced Filters</button>"
+        "</form>"
+        + _summary_note(
+            "Degree, neighbor, and evidence filters stay structural and provider-neutral."
+        ),
+    )
+
+
+def _component_explorer_panel(
+    graph: GraphFakosGraph,
+    request: GraphFakosRequest,
+) -> str:
+    components = _component_groups(graph)
+    component_cards = _component_card_payloads(graph, request, components)
+    rows = []
+    for component_id, node_ids in components.items():
+        selected = " selected" if request.component_id == component_id else ""
+        rows.append(
+            f"<option value='{escape(component_id)}'{selected}>"
+            f"{escape(component_id)} ({len(node_ids)} nodes)</option>"
+        )
+    return _panel(
+        "Component Explorer",
+        "<form method='get' action='/explore' class='gf-panel-form' aria-label='Component explorer'>"
+        "<select name='component_id' aria-label='Component'>"
+        "<option value=''>All components</option>"
+        f"{''.join(rows)}</select>"
+        f"<input name='cluster_id' value='{escape(request.cluster_id)}' placeholder='Provider cluster id'>"
+        f"{_state_hidden_inputs(request, exclude=('component_id', 'cluster_id'))}"
+        "<button type='submit'>Open Component</button>"
+        "</form>"
+        + _panel_body(
+            "Structural Components",
+            _component_cards(component_cards),
+        )
+        + _json_script(
+            "data-gf-component-map",
+            {"components": component_cards, "selected": request.component_id},
+        ),
+    )
+
+
+def _component_card_payloads(
+    graph: GraphFakosGraph,
+    request: GraphFakosRequest,
+    components: dict[str, tuple[str, ...]],
+) -> list[dict[str, object]]:
+    node_map = graph.node_map()
+    degree_map = _node_degree_map(graph)
+    cards: list[dict[str, object]] = []
+    for component_id, node_ids in components.items():
+        nodes = tuple(node_map[node_id] for node_id in node_ids if node_id in node_map)
+        if not nodes:
+            continue
+        node_id_set = {node.id for node in nodes}
+        edges = tuple(
+            edge
+            for edge in graph.edges
+            if edge.source_id in node_id_set and edge.target_id in node_id_set
+        )
+        hub = sorted(
+            nodes,
+            key=lambda node: (
+                -degree_map.get(node.id, 0),
+                -(node.score if node.score is not None else 0),
+                node.label.casefold(),
+            ),
+        )[0]
+        kinds: dict[str, int] = defaultdict(int)
+        for node in nodes:
+            if node.kind:
+                kinds[node.kind] += 1
+        cards.append(
+            {
+                "component_id": component_id,
+                "node_count": len(nodes),
+                "edge_count": len(edges),
+                "hub_node_id": hub.id,
+                "hub_label": hub.label,
+                "hub_degree": degree_map.get(hub.id, 0),
+                "kinds": dict(
+                    sorted(
+                        kinds.items(),
+                        key=lambda item: (-item[1], item[0].casefold()),
+                    )
+                ),
+                "route": _route_href(
+                    request.with_screen("explore"),
+                    overrides={"component_id": component_id, "focus_node_id": hub.id},
+                ),
+                "hub_route": _explore_href(request, focus_node_id=hub.id),
+                "case_packet_route": _route_href(
+                    request.with_screen("explore"),
+                    overrides={"pivot_node_id": hub.id, "pivot_mode": "neighbors"},
+                ),
+            }
+        )
+    return sorted(
+        cards,
+        key=lambda item: (
+            -int(item["node_count"]),
+            str(item["component_id"]),
+        ),
+    )
+
+
+def _component_cards(cards: list[dict[str, object]]) -> str:
+    if not cards:
+        return _empty("No structural components.")
+    html = "<div class='gf-component-grid' data-gf-component-cards='true'>"
+    for card in cards:
+        kinds = card.get("kinds")
+        kind_badges: list[tuple[str, str]] = []
+        if isinstance(kinds, dict):
+            kind_badges = [
+                (f"{kind}:{count}", "neutral")
+                for kind, count in sorted(kinds.items())[:4]
+            ]
+        html += (
+            "<article class='gf-card gf-component-card'>"
+            f"<h4>{escape(str(card['component_id']))}</h4>"
+            + _badges(
+                [
+                    (f"{card['node_count']} nodes", "accent"),
+                    (f"{card['edge_count']} edges", "blue"),
+                    (f"hub degree {card['hub_degree']}", "neutral"),
+                ]
+            )
+            + _badges(kind_badges)
+            + f"<p>Hub: {escape(str(card['hub_label']))}</p>"
+            + "<div class='gf-route-row'>"
+            + f"<div>Open component</div><a class='gf-inline-link' href='{escape(str(card['route']))}'>Open</a></div>"
+            + "<div class='gf-route-row'>"
+            + f"<div>Focus hub</div><a class='gf-inline-link' href='{escape(str(card['hub_route']))}'>Open</a></div>"
+            + "<div class='gf-route-row'>"
+            + f"<div>Build case packet</div><a class='gf-inline-link' href='{escape(str(card['case_packet_route']))}'>Open</a></div>"
+            + "</article>"
+        )
+    return f"{html}</div>"
+
+
+def _selection_workbench_panel(
+    graph: GraphFakosGraph,
+    request: GraphFakosRequest,
+) -> str:
+    selected_ids = request.selected_node_ids or (
+        (request.focus_node_id,) if request.focus_node_id else ()
+    )
+    node_map = graph.node_map()
+    selected_labels = [
+        node_map[node_id].label if node_id in node_map else node_id
+        for node_id in selected_ids
+    ]
+    node_options = tuple((node.id, node.label) for node in graph.nodes)
+    selection_sets = _selection_set_payload(graph, request, selected_ids)
+    return _panel(
+        "Multi-Select Workbench",
+        _summary_note(
+            f"{len(selected_ids)} selected node(s). Shift-click in the enhanced viewer toggles multi-select."
+        )
+        + "<form method='get' action='/explore' class='gf-panel-form' aria-label='Multi-select controls'>"
+        f"<input name='selected_node_ids' value='{escape(','.join(selected_ids))}' placeholder='node:a,node:b'>"
+        f"{_select_pairs('focus_node_id', 'Focus node', node_options, request.focus_node_id or '')}"
+        f"{_state_hidden_inputs(request, exclude=('selected_node_ids', 'focus_node_id'))}"
+        "<button type='submit'>Review Selection</button>"
+        "</form>"
+        + _panel_body("Selected Subgraph", _list(selected_labels))
+        + _selection_set_cards(selection_sets["sets"])
+        + _json_script("data-gf-selection-sets", selection_sets),
+    )
+
+
+def _selection_set_payload(
+    graph: GraphFakosGraph,
+    request: GraphFakosRequest,
+    selected_ids: tuple[str, ...],
+) -> dict[str, object]:
+    degree_map = _node_degree_map(graph)
+    component_ids = _node_component_ids(graph)
+    focus_component = component_ids.get(request.focus_node_id or "", "")
+    focus_component_ids = tuple(
+        node.id
+        for node in graph.nodes
+        if focus_component and component_ids.get(node.id) == focus_component
+    )
+    hubs = tuple(
+        node.id
+        for node in sorted(
+            graph.nodes,
+            key=lambda item: (-degree_map.get(item.id, 0), item.label.casefold()),
+        )
+        if degree_map.get(node.id, 0) >= 3
+    )
+    evidence_nodes = tuple(
+        node.id for node in graph.nodes if node.provenance_ids or node.citation_ids
+    )
+    sets = [
+        _selection_set(
+            request,
+            "visible",
+            "Select visible",
+            "Carry every currently visible node into graph actions or case review.",
+            tuple(node.id for node in graph.nodes),
+        ),
+        _selection_set(
+            request,
+            "hubs",
+            "Select hubs",
+            "Select structurally central visible nodes.",
+            hubs,
+        ),
+        _selection_set(
+            request,
+            "evidence",
+            "Select evidence",
+            "Select visible nodes with provenance or citation links.",
+            evidence_nodes,
+        ),
+        _selection_set(
+            request,
+            "focus-component",
+            "Select focus component",
+            "Select all visible nodes in the focused structural component.",
+            focus_component_ids,
+        ),
+        _selection_set(
+            request,
+            "clear",
+            "Clear selection",
+            "Reset node and edge selection while preserving the current lens.",
+            (),
+            clear=True,
+        ),
+    ]
+    return {
+        "selected_node_ids": list(selected_ids),
+        "visible_node_count": len(graph.nodes),
+        "visible_edge_count": len(graph.edges),
+        "sets": sets,
+        "provider_boundary": (
+            "Selection sets are GraphFakos viewer state only; providers decide "
+            "whether submitted actions persist or rebuild graph data."
+        ),
+    }
+
+
+def _selection_set(
+    request: GraphFakosRequest,
+    set_id: str,
+    label: str,
+    summary: str,
+    node_ids: tuple[str, ...],
+    *,
+    clear: bool = False,
+) -> dict[str, object]:
+    overrides: dict[str, object] = {
+        "selected_node_ids": None if clear else ",".join(node_ids),
+        "selected_edge_id": None if clear else request.selected_edge_id,
+    }
+    case_overrides: dict[str, object] = {
+        "selected_node_ids": None if clear else ",".join(node_ids),
+        "pivot_node_id": node_ids[0] if node_ids else None,
+        "pivot_mode": "neighbors" if node_ids else None,
+    }
+    return {
+        "id": set_id,
+        "label": label,
+        "summary": summary,
+        "node_ids": list(node_ids),
+        "count": len(node_ids),
+        "route": _route_href(request.with_screen("explore"), overrides=overrides),
+        "case_route": _route_href(
+            request.with_screen("explore"), overrides=case_overrides
+        ),
+    }
+
+
+def _selection_set_cards(sets: object) -> str:
+    if not isinstance(sets, list) or not sets:
+        return _empty("No selection sets are available.")
+    html = "<div class='gf-selection-sets' data-gf-selection-sets-panel='true'>"
+    for item in sets:
+        if not isinstance(item, dict):
+            continue
+        html += (
+            "<article class='gf-selection-set-card'>"
+            f"<h4>{escape(str(item.get('label') or item.get('id') or 'Selection set'))}</h4>"
+            + _badges(((f"{item.get('count', 0)} node(s)", "accent"),))
+            + f"<p>{escape(str(item.get('summary') or ''))}</p>"
+            + "<div class='gf-trail-actions'>"
+            f"<a class='gf-inline-link' href='{escape(str(item.get('route') or '#'))}'>Apply</a>"
+            f"<a class='gf-inline-link' href='{escape(str(item.get('case_route') or '#'))}'>Case</a>"
+            "</div></article>"
+        )
+    return f"{html}</div>"
+
+
+def _style_rules_panel(graph: GraphFakosGraph, request: GraphFakosRequest) -> str:
+    style_payload = {
+        "color_by": request.style_color_by,
+        "size_by": request.style_size_by,
+        "edge_width_by": request.style_edge_width_by,
+        "kinds": list(_graph_facets(graph).get("node_kind", ())),
+    }
+    return _panel(
+        "Attribute Styling",
+        "<form method='get' action='/explore' class='gf-panel-form' aria-label='Attribute style controls'>"
+        f"{_select('style_color_by', 'Color by', ('kind', 'source', 'score', 'component'), request.style_color_by)}"
+        f"{_select('style_size_by', 'Size by', ('score', 'degree', 'confidence', 'kind'), request.style_size_by)}"
+        f"{_select('style_edge_width_by', 'Edge width by', ('kind', 'weight', 'confidence'), request.style_edge_width_by)}"
+        f"{_state_hidden_inputs(request, exclude=_STYLE_STATE_EXCLUDES)}"
+        "<button type='submit'>Apply Styling</button>"
+        "</form>"
+        + _badges(
+            (
+                (f"color:{request.style_color_by}", "accent"),
+                (f"size:{request.style_size_by}", "blue"),
+                (f"edge:{request.style_edge_width_by}", "neutral"),
+            )
+        )
+        + _json_script("data-gf-style-rules", style_payload),
+    )
+
+
+def _timeline_animation_panel(
+    graph: GraphFakosGraph, request: GraphFakosRequest
+) -> str:
+    frames = _timeline_frames(graph)
+    return _panel(
+        "Timeline/Diff Animation",
+        "<form method='get' action='/explore' class='gf-panel-form' aria-label='Timeline animation controls'>"
+        f"{_select('timeline_frame', 'Timeline frame', frames, request.timeline_frame)}"
+        f"{_select('timeline_playback', 'Playback', ('stopped', 'playing', 'step'), request.timeline_playback)}"
+        f"{_state_hidden_inputs(request, exclude=('timeline_frame', 'timeline_playback'))}"
+        "<button type='submit'>Scrub Timeline</button>"
+        "</form>"
+        + _summary_note(
+            "Animation is optional; static export renders the selected frame and exposes replay metadata."
+        )
+        + _json_script("data-gf-diff-frames", {"frames": list(frames)}),
+    )
+
+
+def _investigation_pivot_panel(
+    graph: GraphFakosGraph,
+    request: GraphFakosRequest,
+    focus: GraphFakosNode | None,
+) -> str:
+    pivot_id = request.pivot_node_id or (focus.id if focus is not None else "")
+    pivot_mode = request.pivot_mode or "neighbors"
+    node_options = tuple((node.id, node.label) for node in graph.nodes)
+    case_packet = _case_packet_payload(graph, request, pivot_id, pivot_mode)
+    return _panel(
+        "Investigation Pivot",
+        "<form method='get' action='/explore' class='gf-panel-form' aria-label='Investigation pivot controls'>"
+        f"{_select_pairs('pivot_node_id', 'Pivot node', node_options, pivot_id)}"
+        f"{_select('pivot_mode', 'Pivot mode', ('neighbors', 'paths', 'timeline', 'evidence_bundle'), pivot_mode)}"
+        f"{_state_hidden_inputs(request, exclude=('pivot_node_id', 'pivot_mode'))}"
+        "<button type='submit'>Build Case Packet</button>"
+        "</form>"
+        + _case_packet_view(case_packet)
+        + _summary_note(
+            "GraphFakos packages structural pivots only; providers own semantic truth and enrichment."
+        )
+        + _json_script("data-gf-investigation-case", case_packet),
+    )
+
+
+def _case_packet_payload(
+    graph: GraphFakosGraph,
+    request: GraphFakosRequest,
+    pivot_id: str,
+    pivot_mode: str,
+) -> dict[str, object]:
+    route = _route_href(
+        request,
+        overrides={"pivot_node_id": pivot_id, "pivot_mode": pivot_mode},
+    )
+    pivot = graph.node_map().get(pivot_id)
+    if pivot is None:
+        return {
+            "pivot_node_id": pivot_id,
+            "pivot_mode": pivot_mode,
+            "route": route,
+            "status": "missing",
+        }
+
+    degree_map = _node_degree_map(graph)
+    component_ids = _node_component_ids(graph)
+    component_id = component_ids.get(pivot.id, "")
+    incident_edges = tuple(
+        edge
+        for edge in graph.edges
+        if edge.source_id == pivot.id or edge.target_id == pivot.id
+    )
+    neighbors = _case_packet_neighbors(graph, request, pivot.id, degree_map)
+    path_targets = _case_packet_path_targets(graph, request, pivot.id)
+    timeline_events = [
+        {"field": field, "value": value}
+        for field, value in sorted(pivot.timestamps.items())
+    ]
+    component_nodes = [
+        {"id": node.id, "label": node.label, "kind": node.kind}
+        for node in graph.nodes
+        if component_ids.get(node.id, "") == component_id
+    ][:6]
+    evidence_ids = sorted(
+        {
+            *pivot.provenance_ids,
+            *(item for edge in incident_edges for item in edge.provenance_ids),
+        }
+    )
+    citation_ids = sorted(
+        {
+            *pivot.citation_ids,
+            *(item for edge in incident_edges for item in edge.citation_ids),
+        }
+    )
+    return {
+        "pivot_node_id": pivot.id,
+        "pivot_label": pivot.label,
+        "pivot_kind": pivot.kind,
+        "pivot_mode": pivot_mode,
+        "route": route,
+        "status": "ready",
+        "metrics": {
+            "degree": degree_map.get(pivot.id, 0),
+            "component": component_id,
+            "neighbors": len(neighbors),
+            "incident_edges": len(incident_edges),
+            "provenance_refs": len(evidence_ids),
+            "citation_refs": len(citation_ids),
+            "timeline_events": len(timeline_events),
+        },
+        "neighbors": neighbors,
+        "path_targets": path_targets,
+        "evidence_bundle": {
+            "provenance_ids": evidence_ids,
+            "citation_ids": citation_ids,
+        },
+        "timeline_events": timeline_events,
+        "component_sample": component_nodes,
+    }
+
+
+def _case_packet_neighbors(
+    graph: GraphFakosGraph,
+    request: GraphFakosRequest,
+    pivot_id: str,
+    degree_map: dict[str, int],
+) -> list[dict[str, object]]:
+    node_map = graph.node_map()
+    rows: list[dict[str, object]] = []
+    for edge, neighbor_id in _adjacency_map(graph).get(pivot_id, ()):
+        neighbor = node_map.get(neighbor_id)
+        if neighbor is None:
+            continue
+        rows.append(
+            {
+                "id": neighbor.id,
+                "label": neighbor.label,
+                "kind": neighbor.kind,
+                "edge_kind": edge.kind,
+                "degree": degree_map.get(neighbor.id, 0),
+                "route": _explore_href(request, focus_node_id=neighbor.id),
+            }
+        )
+    return sorted(
+        rows,
+        key=lambda item: (
+            -int(item["degree"]),
+            str(item["label"]).casefold(),
+            str(item["id"]),
+        ),
+    )[:6]
+
+
+def _case_packet_path_targets(
+    graph: GraphFakosGraph,
+    request: GraphFakosRequest,
+    pivot_id: str,
+) -> list[dict[str, object]]:
+    targets: list[dict[str, object]] = []
+    for node in _ranked_nodes(graph, {pivot_id}):
+        if node.id == pivot_id:
+            continue
+        path_edges = _shortest_path_edges(graph, pivot_id, node.id)
+        if not path_edges:
+            continue
+        targets.append(
+            {
+                "id": node.id,
+                "label": node.label,
+                "kind": node.kind,
+                "hop_count": len(path_edges),
+                "route": _route_href(
+                    request.with_screen("path"),
+                    overrides={
+                        "source_node_id": pivot_id,
+                        "target_node_id": node.id,
+                        "layout": "focus",
+                        "selected_edge_id": None,
+                    },
+                ),
+            }
+        )
+        if len(targets) >= 3:
+            break
+    return targets
+
+
+def _case_packet_view(case_packet: dict[str, object]) -> str:
+    if case_packet.get("status") == "missing":
+        return _empty("Select a pivot node to build a structural case packet.")
+    metrics = case_packet.get("metrics")
+    neighbors = case_packet.get("neighbors")
+    path_targets = case_packet.get("path_targets")
+    evidence = case_packet.get("evidence_bundle")
+    timeline_events = case_packet.get("timeline_events")
+    component_sample = case_packet.get("component_sample")
+    return (
+        "<section class='gf-case-packet' data-gf-case-packet='true'>"
+        "<h4>Case Packet</h4>"
+        f"{_badges([(str(case_packet.get('pivot_kind', 'node')), 'accent'), (str(case_packet.get('pivot_mode', 'neighbors')), 'blue')])}"
+        f"{_key_values(metrics if isinstance(metrics, dict) else {})}"
+        "<h5>Nearest Neighbors</h5>"
+        f"{_case_packet_link_list(neighbors)}"
+        "<h5>Shortest Path Pivots</h5>"
+        f"{_case_packet_link_list(path_targets, metric_key='hop_count', metric_label='hop')}"
+        "<h5>Evidence Bundle</h5>"
+        f"{_case_packet_evidence(evidence)}"
+        "<h5>Timeline Markers</h5>"
+        f"{_case_packet_key_list(timeline_events, 'field', 'value')}"
+        "<h5>Component Sample</h5>"
+        f"{_case_packet_key_list(component_sample, 'kind', 'label')}"
+        "</section>"
+    )
+
+
+def _case_packet_link_list(
+    items: object,
+    *,
+    metric_key: str = "edge_kind",
+    metric_label: str = "",
+) -> str:
+    if not isinstance(items, list) or not items:
+        return _empty("No structural items are available.")
+    rows: list[str] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        label = str(item.get("label") or item.get("id") or "item")
+        route = str(item.get("route") or "#")
+        metric = item.get(metric_key)
+        metric_text = f"{metric_label} {metric}" if metric_label else str(metric or "")
+        rows.append(
+            "<div class='gf-route-row'>"
+            f"<div>{escape(label)}<span class='gf-inline-note'>{escape(metric_text)}</span></div>"
+            f"<a class='gf-inline-link' href='{escape(route)}'>Open</a></div>"
+        )
+    return _html_list(rows)
+
+
+def _case_packet_evidence(evidence: object) -> str:
+    if not isinstance(evidence, dict):
+        return _empty("No evidence bundle.")
+    provenance = evidence.get("provenance_ids")
+    citations = evidence.get("citation_ids")
+    return _key_values(
+        {
+            "provenance": ", ".join(provenance) if isinstance(provenance, list) else "",
+            "citations": ", ".join(citations) if isinstance(citations, list) else "",
+        }
+    )
+
+
+def _case_packet_key_list(
+    items: object,
+    key_field: str,
+    value_field: str,
+) -> str:
+    if not isinstance(items, list) or not items:
+        return _empty("No structural items are available.")
+    rows: list[str] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        key = str(item.get(key_field) or "")
+        value = str(item.get(value_field) or "")
+        rows.append(f"{key}: {value}" if key else value)
+    return _list(rows)
+
+
+def _context_menu_panel(
+    request: GraphFakosRequest,
+    node: GraphFakosNode | None,
+    edge: GraphFakosEdge | None,
+) -> str:
+    node_id = node.id if node is not None else ""
+    edge_id = edge.id if edge is not None else ""
+    node_target = node_id or "none"
+    edge_target = edge_id or "none"
+    node_actions = _static_node_action_rows(request, node)
+    edge_actions = _static_edge_action_rows(request, edge)
+    return _panel(
+        "Context Menus",
+        "<details class='gf-context-menu' open><summary>Node Actions</summary>"
+        f"{_html_list(node_actions) if node_actions else _list([f'Target: {node_target}'])}"
+        "</details>"
+        "<details class='gf-context-menu'><summary>Edge Actions</summary>"
+        f"{_html_list(edge_actions) if edge_actions else _list([f'Target: {edge_target}'])}"
+        "</details>",
+    )
+
+
+def _static_node_action_rows(
+    request: GraphFakosRequest,
+    node: GraphFakosNode | None,
+) -> list[str]:
+    if node is None:
+        return []
+    return [
+        _route_action_row("Focus node", _explore_href(request, focus_node_id=node.id)),
+        _route_action_row(
+            "Expand neighborhood",
+            _route_href(
+                request.with_screen("neighborhood"),
+                overrides={"focus_node_id": node.id, "max_depth": 1, "layout": "focus"},
+            ),
+        ),
+        _route_action_row(
+            "Evidence",
+            _route_href(
+                request.with_screen("provenance"),
+                overrides={"focus_node_id": node.id},
+            ),
+        ),
+        _route_action_row(
+            "Trace path",
+            _route_href(
+                request.with_screen("path"),
+                overrides={
+                    "source_node_id": node.id,
+                    "target_node_id": request.target_node_id,
+                    "layout": "focus",
+                    "selected_edge_id": None,
+                },
+            ),
+        ),
+        _route_action_row(
+            "Build case packet",
+            _route_href(
+                request.with_screen("explore"),
+                overrides={"pivot_node_id": node.id, "pivot_mode": "neighbors"},
+            ),
+        ),
+        f"<span class='gf-inline-note'>Target: {escape(node.id)}</span>",
+    ]
+
+
+def _static_edge_action_rows(
+    request: GraphFakosRequest,
+    edge: GraphFakosEdge | None,
+) -> list[str]:
+    if edge is None:
+        return []
+    return [
+        _route_action_row(
+            "Inspect edge",
+            _explore_href(
+                request,
+                selected_edge_id=edge.id,
+                focus_node_id=request.focus_node_id,
+            ),
+        ),
+        _route_action_row(
+            "Trace path",
+            _route_href(
+                request.with_screen("path"),
+                overrides={
+                    "source_node_id": edge.source_id,
+                    "target_node_id": edge.target_id,
+                    "selected_edge_id": edge.id,
+                    "layout": "focus",
+                },
+            ),
+        ),
+        _route_action_row(
+            "Filter edge kind",
+            _route_href(
+                request.with_screen("explore"),
+                overrides={"edge_kind": edge.kind, "selected_edge_id": edge.id},
+            ),
+        ),
+        f"<span class='gf-inline-note'>Target: {escape(edge.id)}</span>",
+    ]
+
+
+def _route_action_row(label: str, route: str) -> str:
+    return (
+        f"<div class='gf-route-row'><div>{escape(label)}</div>"
+        f"<a class='gf-inline-link' href='{escape(route)}'>Open</a></div>"
+    )
 
 
 def _graph_facets(graph: GraphFakosGraph) -> dict[str, tuple[str, ...]]:
@@ -1118,6 +4572,9 @@ def _filtered_graph(
                 request.focus_node_id,
                 request.source_node_id,
                 request.target_node_id,
+                request.connected_to_node_id,
+                request.pivot_node_id,
+                *request.selected_node_ids,
             )
             if item_id
         },
@@ -1132,11 +4589,24 @@ def _filtered_nodes(
     parsed_query = _parse_query(request.query)
     filters = request.filters
     min_score = _min_score(filters.get("min_score", ""))
+    orphan_node_ids = set(diagnose_graph(graph).orphan_node_ids)
+    degree_map = _node_degree_map(graph)
+    connected_ids = _connected_node_ids(graph, request.connected_to_node_id)
+    component_ids = _node_component_ids(graph)
     return tuple(
         node
         for node in graph.nodes
         if _node_matches_query(node, parsed_query)
         and _node_matches_filters(node, filters, min_score)
+        and (request.show_orphans or node.id not in orphan_node_ids)
+        and _node_matches_advanced_filters(
+            node,
+            graph,
+            request,
+            degree_map,
+            connected_ids,
+            component_ids,
+        )
     )
 
 
@@ -1209,6 +4679,55 @@ def _node_matches_filters(
     return min_score is None or (node.score is not None and node.score >= min_score)
 
 
+def _node_matches_advanced_filters(
+    node: GraphFakosNode,
+    graph: GraphFakosGraph,
+    request: GraphFakosRequest,
+    degree_map: dict[str, int],
+    connected_ids: set[str],
+    component_ids: dict[str, str],
+) -> bool:
+    degree = degree_map.get(node.id, 0)
+    if request.min_degree is not None and degree < request.min_degree:
+        return False
+    if request.max_degree is not None and degree > request.max_degree:
+        return False
+    if connected_ids and node.id not in connected_ids:
+        return False
+    if request.component_id and component_ids.get(node.id) != request.component_id:
+        return False
+    if request.evidence_filter and not _node_matches_evidence_filter(
+        node, graph, request.evidence_filter
+    ):
+        return False
+    return not request.cluster_id or _node_cluster_id(node) == request.cluster_id
+
+
+def _node_matches_evidence_filter(
+    node: GraphFakosNode,
+    graph: GraphFakosGraph,
+    evidence_filter: str,
+) -> bool:
+    provenance_ids = {item.id for item in graph.provenance}
+    citation_ids = {item.id for item in graph.citations}
+    if evidence_filter == "with_provenance":
+        return bool(node.provenance_ids)
+    if evidence_filter == "with_citation":
+        return bool(node.citation_ids)
+    if evidence_filter == "missing_provenance":
+        return not node.provenance_ids or any(
+            item_id not in provenance_ids for item_id in node.provenance_ids
+        )
+    if evidence_filter == "missing_citation":
+        return not node.citation_ids or any(
+            item_id not in citation_ids for item_id in node.citation_ids
+        )
+    if evidence_filter == "warnings":
+        text = " ".join(graph.warnings).casefold()
+        return node.id.casefold() in text or node.label.casefold() in text
+    return True
+
+
 def _filter_edges_by_request(
     edges: tuple[GraphFakosEdge, ...],
     request: GraphFakosRequest,
@@ -1221,6 +4740,12 @@ def _filter_edges_by_request(
     query_edge_kinds = parsed_query["edge"]
     if query_edge_kinds:
         filtered = tuple(edge for edge in filtered if edge.kind in query_edge_kinds)
+    if not request.show_neighbor_links and request.focus_node_id:
+        filtered = tuple(
+            edge
+            for edge in filtered
+            if request.focus_node_id in {edge.source_id, edge.target_id}
+        )
     return filtered
 
 
@@ -1571,6 +5096,234 @@ def _graph_navigator(
     return _panel("Navigator", body)
 
 
+def _navigation_map_panel(
+    graph: GraphFakosGraph,
+    visible_graph: GraphFakosGraph,
+    request: GraphFakosRequest,
+    focus: GraphFakosNode | None,
+    selected_edge: GraphFakosEdge | None,
+) -> str:
+    payload = _navigation_map_payload(
+        graph,
+        visible_graph,
+        request,
+        focus,
+        selected_edge,
+    )
+    return _panel(
+        "Navigation Map",
+        _summary_note(
+            "Route-backed workbench lanes make screen changes, pivots, and review flows discoverable without JavaScript."
+        )
+        + _badges(
+            (
+                (f"{payload['lane_count']} lane(s)", "accent"),
+                (f"{payload['visible_node_count']} visible node(s)", "neutral"),
+                (f"{payload['visible_edge_count']} visible edge(s)", "neutral"),
+            )
+        )
+        + _navigation_map_rows(payload["lanes"])
+        + _json_script("data-gf-navigation-map", payload),
+    )
+
+
+def _navigation_map_payload(
+    graph: GraphFakosGraph,
+    visible_graph: GraphFakosGraph,
+    request: GraphFakosRequest,
+    focus: GraphFakosNode | None,
+    selected_edge: GraphFakosEdge | None,
+) -> dict[str, object]:
+    preferred_focus = focus or _preferred_focus_node(visible_graph, request)
+    if preferred_focus is None:
+        preferred_focus = _preferred_focus_node(graph, request)
+    source, target = _navigation_path_pair(graph, visible_graph, selected_edge)
+    focus_id = preferred_focus.id if preferred_focus is not None else ""
+    lanes = [
+        _navigation_lane(
+            "global",
+            "Global map",
+            "Reset to the full visible graph and clear focused-node pressure.",
+            "Explore",
+            _route_href(
+                request.with_screen("explore"),
+                overrides={"focus_node_id": None, "layout": "force"},
+            ),
+            "g",
+        ),
+        _navigation_lane(
+            "local",
+            "Local graph",
+            "Inspect the immediate neighborhood around the best current focus node.",
+            "Open local",
+            _route_href(
+                request.with_screen("neighborhood"),
+                overrides={
+                    "focus_node_id": focus_id or None,
+                    "max_depth": 1,
+                    "layout": "focus",
+                },
+            ),
+            "l",
+            disabled=not focus_id,
+        ),
+        _navigation_lane(
+            "path",
+            "Trace path",
+            "Move from a relationship or ranked pair into the path-tracing screen.",
+            "Trace",
+            _route_href(
+                request.with_screen("path"),
+                overrides={
+                    "source_node_id": source.id if source is not None else None,
+                    "target_node_id": target.id if target is not None else None,
+                    "selected_edge_id": selected_edge.id
+                    if selected_edge is not None
+                    else None,
+                    "layout": "focus",
+                },
+            ),
+            "p",
+            disabled=source is None or target is None,
+        ),
+        _navigation_lane(
+            "evidence",
+            "Evidence review",
+            "Filter to evidence-bearing graph items and switch the overlay to provenance.",
+            "Review evidence",
+            _route_href(
+                request.with_screen("explore"),
+                overrides={
+                    "query": "has:provenance",
+                    "analytics_overlay": "provenance",
+                    "focus_node_id": focus_id or None,
+                },
+            ),
+            "e",
+        ),
+        _navigation_lane(
+            "timeline",
+            "Timeline",
+            "Review timestamped graph context with route-backed frame controls.",
+            "Open timeline",
+            _route_href(
+                request.with_screen("timeline"),
+                overrides={"timeline_playback": "step"},
+            ),
+            "t",
+        ),
+        _navigation_lane(
+            "diff",
+            "Diff review",
+            "Compare graph snapshots and open change-focused review cards.",
+            "Open diff",
+            _route_href(request.with_screen("diff")),
+            "d",
+        ),
+        _navigation_lane(
+            "status",
+            "Provider status",
+            "Check provider capabilities, graph health, and adapter diagnostics.",
+            "Open status",
+            _route_href(request.with_screen("provider_status")),
+            "s",
+        ),
+        _navigation_lane(
+            "case",
+            "Case packet",
+            "Assemble a structural investigation packet around the current focus.",
+            "Build case",
+            _route_href(
+                request.with_screen("explore"),
+                overrides={
+                    "pivot_node_id": focus_id or None,
+                    "pivot_mode": "neighbors",
+                },
+            ),
+            "c",
+            disabled=not focus_id,
+        ),
+    ]
+    visible_lanes = [lane for lane in lanes if not lane["disabled"]]
+    return {
+        "screen": request.screen,
+        "focus_node_id": focus_id,
+        "selected_edge_id": selected_edge.id if selected_edge is not None else "",
+        "visible_node_count": len(visible_graph.nodes),
+        "visible_edge_count": len(visible_graph.edges),
+        "lane_count": len(visible_lanes),
+        "lanes": visible_lanes,
+        "provider_boundary": (
+            "GraphFakos exposes route-backed navigation lanes; providers own "
+            "data loading, durable workflow state, and semantic meaning."
+        ),
+    }
+
+
+def _navigation_path_pair(
+    graph: GraphFakosGraph,
+    visible_graph: GraphFakosGraph,
+    selected_edge: GraphFakosEdge | None,
+) -> tuple[GraphFakosNode | None, GraphFakosNode | None]:
+    node_map = graph.node_map()
+    if selected_edge is not None:
+        source = node_map.get(selected_edge.source_id)
+        target = node_map.get(selected_edge.target_id)
+        if source is not None and target is not None:
+            return source, target
+    source_graph = visible_graph if visible_graph.nodes else graph
+    if len(source_graph.nodes) < 2:
+        return None, None
+    ranked = _ranked_nodes(source_graph, set())
+    if len(ranked) < 2:
+        return source_graph.nodes[0], source_graph.nodes[-1]
+    return ranked[0], ranked[1]
+
+
+def _navigation_lane(
+    lane_id: str,
+    label: str,
+    summary: str,
+    action_label: str,
+    route: str,
+    shortcut: str,
+    *,
+    disabled: bool = False,
+) -> dict[str, object]:
+    return {
+        "id": lane_id,
+        "label": label,
+        "summary": summary,
+        "action_label": action_label,
+        "route": route,
+        "shortcut_hint": shortcut,
+        "disabled": disabled,
+    }
+
+
+def _navigation_map_rows(lanes: object) -> str:
+    if not isinstance(lanes, list) or not lanes:
+        return _empty("No navigation lanes are available for this graph.")
+    html = "<div class='gf-navigation-map' data-gf-navigation-map-panel='true'>"
+    for lane in lanes:
+        if not isinstance(lane, dict):
+            continue
+        label = str(lane.get("label") or lane.get("id") or "Lane")
+        summary = str(lane.get("summary") or "")
+        shortcut = str(lane.get("shortcut_hint") or "")
+        route = str(lane.get("route") or "#")
+        action = str(lane.get("action_label") or "Open")
+        html += (
+            "<article class='gf-card gf-navigation-lane'>"
+            f"<h4>{escape(label)}</h4>"
+            + _badges(((f"key {shortcut}", "blue"),))
+            + f"<p>{escape(summary)}</p>"
+            + f"<a class='gf-inline-link' href='{escape(route)}'>{escape(action)}</a>"
+            "</article>"
+        )
+    return f"{html}</div>"
+
+
 def _lens_routes(
     graph: GraphFakosGraph,
     request: GraphFakosRequest,
@@ -1678,37 +5431,409 @@ def _navigator_row(
     )
 
 
+def _relationship_trail_panel(
+    graph: GraphFakosGraph,
+    request: GraphFakosRequest,
+    focus: GraphFakosNode | None,
+) -> str:
+    if focus is None:
+        return ""
+    payload = _relationship_trail_payload(graph, request, focus)
+    return _panel(
+        "Relationship Trail",
+        _summary_note(
+            "Follow structural hops from the selected node into local views or shortest-path traces."
+        )
+        + "<section class='gf-relationship-trail' data-gf-relationship-trail='true'>"
+        "<h4>Nearest Hops</h4>"
+        f"{_relationship_trail_rows(payload['neighbors'])}"
+        "<h4>Path Targets</h4>"
+        f"{_relationship_trail_rows(payload['path_targets'], path_mode=True)}"
+        "</section>" + _json_script("data-gf-relationship-trail", payload),
+    )
+
+
+def _relationship_trail_payload(
+    graph: GraphFakosGraph,
+    request: GraphFakosRequest,
+    focus: GraphFakosNode,
+) -> dict[str, object]:
+    degree_map = _node_degree_map(graph)
+    node_map = graph.node_map()
+    neighbors: list[dict[str, object]] = []
+    for edge, neighbor_id in _adjacency_map(graph).get(focus.id, ()):
+        neighbor = node_map.get(neighbor_id)
+        if neighbor is None:
+            continue
+        neighbors.append(
+            {
+                "id": neighbor.id,
+                "label": neighbor.label,
+                "kind": neighbor.kind,
+                "edge_id": edge.id,
+                "edge_kind": edge.kind,
+                "degree": degree_map.get(neighbor.id, 0),
+                "focus_route": _explore_href(request, focus_node_id=neighbor.id),
+                "local_route": _route_href(
+                    request.with_screen("neighborhood"),
+                    overrides={
+                        "focus_node_id": neighbor.id,
+                        "max_depth": 1,
+                        "layout": "focus",
+                        "selected_edge_id": None,
+                    },
+                ),
+                "path_route": _route_href(
+                    request.with_screen("path"),
+                    overrides={
+                        "source_node_id": focus.id,
+                        "target_node_id": neighbor.id,
+                        "layout": "focus",
+                        "selected_edge_id": None,
+                    },
+                ),
+            }
+        )
+    neighbors = sorted(
+        neighbors,
+        key=lambda item: (
+            -int(item["degree"]),
+            str(item["edge_kind"]).casefold(),
+            str(item["label"]).casefold(),
+        ),
+    )[:5]
+    path_targets: list[dict[str, object]] = []
+    for node in _ranked_nodes(graph, {focus.id}):
+        if node.id == focus.id:
+            continue
+        path_edges = _shortest_path_edges(graph, focus.id, node.id)
+        if not path_edges:
+            continue
+        path_targets.append(
+            {
+                "id": node.id,
+                "label": node.label,
+                "kind": node.kind,
+                "hop_count": len(path_edges),
+                "path_route": _route_href(
+                    request.with_screen("path"),
+                    overrides={
+                        "source_node_id": focus.id,
+                        "target_node_id": node.id,
+                        "layout": "focus",
+                        "selected_edge_id": None,
+                    },
+                ),
+            }
+        )
+        if len(path_targets) >= 4:
+            break
+    return {
+        "focus_id": focus.id,
+        "focus_label": focus.label,
+        "neighbors": neighbors,
+        "path_targets": path_targets,
+    }
+
+
+def _relationship_trail_rows(items: object, *, path_mode: bool = False) -> str:
+    if not isinstance(items, list) or not items:
+        return _empty("No structural trail items are available.")
+    rows: list[str] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        label = str(item.get("label") or item.get("id") or "item")
+        kind = str(item.get("kind") or "node")
+        if path_mode:
+            metric = f"{item.get('hop_count', 0)} hop(s)"
+            route = str(item.get("path_route") or "#")
+            rows.append(
+                "<div class='gf-route-row'>"
+                f"<div>{escape(label)}<span class='gf-inline-note'>{escape(kind)} · {escape(metric)}</span></div>"
+                f"<a class='gf-inline-link' href='{escape(route)}'>Trace</a></div>"
+            )
+            continue
+        edge_kind = str(item.get("edge_kind") or "edge")
+        rows.append(
+            "<div class='gf-route-row gf-trail-row'>"
+            f"<div>{escape(label)}<span class='gf-inline-note'>{escape(kind)} · {escape(edge_kind)} · degree {escape(str(item.get('degree', 0)))}</span></div>"
+            "<span class='gf-trail-actions'>"
+            f"<a class='gf-inline-link' href='{escape(str(item.get('focus_route') or '#'))}'>Focus</a>"
+            f"<a class='gf-inline-link' href='{escape(str(item.get('local_route') or '#'))}'>Local</a>"
+            f"<a class='gf-inline-link' href='{escape(str(item.get('path_route') or '#'))}'>Path</a>"
+            "</span></div>"
+        )
+    return _html_list(rows)
+
+
 def _knowledge_capture_panel(
+    graph: GraphFakosGraph,
     request: GraphFakosRequest,
     focus: GraphFakosNode | None,
 ) -> str:
     focus_id = focus.id if focus is not None else ""
     focus_label = focus.label if focus is not None else "the graph"
+    supported = _graph_supports(graph, "knowledge_capture")
+    support_tone = "accent" if supported else "neutral"
+    support_label = "Capture supported" if supported else "Capture unsupported"
+    submit_attrs = "" if supported else " disabled aria-disabled='true'"
+    status_text = (
+        ""
+        if supported
+        else "Current provider does not advertise workbench knowledge capture."
+    )
+    status_state = "" if supported else "error"
+    node_options = tuple((node.id, node.label) for node in graph.nodes)
+    link_kinds = tuple(
+        dict.fromkeys(
+            (
+                "mentions",
+                "relates",
+                "supports",
+                "questions",
+                *tuple(edge.kind for edge in graph.edges if edge.kind),
+            )
+        )
+    )
     kinds = ("note", "memory", "document", "code", "task", "question", "warning")
     options = "".join(
         f"<option value='{escape(kind)}'>{escape(kind.title())}</option>"
         for kind in kinds
     )
     return (
-        "<section class='gf-panel gf-capture-panel'>"
+        "<section class='gf-panel gf-capture-panel' id='capture-knowledge'>"
         "<div class='gf-panel-heading'><h3>Capture Knowledge</h3>"
-        "<span class='gf-mini-label'>Preview server</span></div>"
+        f"{_badge(support_label, support_tone)}</div>"
         + _summary_note(
             "Add a note, code observation, or question for the host provider or worker to persist and rebuild into the graph."
         )
         + "<form class='gf-capture-form' method='post' action='/api/knowledge' "
-        "data-gf-knowledge-form='true'>"
+        f"data-gf-knowledge-form='true' data-gf-capability-supported='{str(supported).lower()}'>"
+        f"{_capture_template_bar()}"
         f"<label>Text<textarea name='text' rows='5' required "
         f"placeholder='Write an observation about {escape(focus_label)}'></textarea></label>"
         f"<label>Kind<select name='kind'>{options}</select></label>"
         "<label>Tags<input name='tags' placeholder='ui, graph, code'></label>"
         "<label>Source<input name='source' value='workbench'></label>"
-        f"<input type='hidden' name='link_node_id' value='{escape(focus_id)}'>"
-        "<input type='hidden' name='link_edge_kind' value='mentions'>"
+        f"<label>Attach to{_select_pairs('link_node_id', 'Attach note to node', node_options, focus_id)}</label>"
+        f"<label>Relationship{_select('link_edge_kind', 'Relationship kind', link_kinds, 'mentions')}</label>"
         f"<input type='hidden' name='screen' value='{escape(request.screen)}'>"
-        "<button type='submit'>Add to graph</button>"
-        "<p class='gf-capture-status' data-gf-knowledge-status='true'></p>"
+        f"{_viewer_context_hidden_input(request)}"
+        f"{_viewer_context_preview(graph, request)}"
+        f"<button type='submit'{submit_attrs}>Add to graph</button>"
+        f"<p class='gf-capture-status' data-gf-knowledge-status='true' data-state='{status_state}'>{escape(status_text)}</p>"
         "</form></section>"
+    )
+
+
+def _capture_template_bar() -> str:
+    buttons = "".join(
+        "<button type='button' "
+        f"data-gf-capture-template='{escape(template_id)}' "
+        f"data-kind='{escape(kind)}' "
+        f"data-tags='{escape(tags)}' "
+        "data-source='workbench' "
+        f"data-placeholder='{escape(placeholder, quote=True)}'>"
+        f"{escape(label)}</button>"
+        for template_id, label, kind, tags, placeholder in _CAPTURE_TEMPLATES
+    )
+    return (
+        "<div class='gf-capture-templates' data-gf-capture-templates='true' "
+        "aria-label='Knowledge capture templates'>"
+        "<span>Quick presets</span>"
+        f"{buttons}"
+        "</div>"
+    )
+
+
+def _graph_action_panel(
+    graph: GraphFakosGraph,
+    request: GraphFakosRequest,
+    focus: GraphFakosNode | None,
+) -> str:
+    action_type, target_id, source_id, target_node_id = _graph_action_defaults(
+        graph,
+        request,
+        focus,
+    )
+    supported = _graph_supports(graph, "graph_action")
+    support_tone = "accent" if supported else "neutral"
+    support_label = "Actions supported" if supported else "Actions unsupported"
+    submit_attrs = "" if supported else " disabled aria-disabled='true'"
+    status_text = (
+        ""
+        if supported
+        else "Current provider does not advertise graph authoring actions."
+    )
+    status_state = "" if supported else "error"
+    action = _draft_graph_action(action_type, target_id, source_id, target_node_id)
+    status = _draft_action_status(action)
+    node_options = tuple((node.id, node.label) for node in graph.nodes)
+    return (
+        "<section class='gf-panel gf-action-panel' id='graph-authoring'>"
+        "<div class='gf-panel-heading'><h3>Graph Authoring</h3>"
+        f"{_badge(support_label, support_tone)}</div>"
+        + _summary_note(
+            "Draft node, edge, merge, and alias requests are provider-neutral; the host owns persistence."
+        )
+        + "<form class='gf-capture-form' method='post' action='/api/action' "
+        f"data-gf-action-form='true' data-gf-capability-supported='{str(supported).lower()}'>"
+        f"<input type='hidden' name='action_id' value='{escape(action.action_id)}'>"
+        f"<label>Action<select name='action_type'>{_graph_action_options(action_type)}</select></label>"
+        f"<label>Target{_select_pairs('target_id', 'Action target node', node_options, target_id)}</label>"
+        f"<label>Source node{_select_pairs('source_id', 'Draft edge source', node_options, source_id)}</label>"
+        f"<label>Target node{_select_pairs('target_node_id', 'Draft edge target', node_options, target_node_id)}</label>"
+        "<label>Label<input name='label' placeholder='New node or edge label'></label>"
+        "<label>Tags<input name='tags' placeholder='editor, review'></label>"
+        "<label>Body<textarea name='body' rows='3' placeholder='Why should the provider apply this?'></textarea></label>"
+        f"{_viewer_context_hidden_input(request)}"
+        f"{_viewer_context_preview(graph, request)}"
+        f"<button type='submit'{submit_attrs}>Queue action</button>"
+        f"<p class='gf-capture-status' data-gf-action-status-text='true' data-state='{status_state}'>{escape(status_text)}</p>"
+        "</form>"
+        f"{_json_script('data-gf-action-template', action.to_dict())}"
+        f"{_json_script('data-gf-action-status', status.to_dict())}"
+        "</section>"
+    )
+
+
+def _graph_supports(graph: GraphFakosGraph, capability: str) -> bool:
+    return capability in set(graph.capabilities)
+
+
+def _graph_action_defaults(
+    graph: GraphFakosGraph,
+    request: GraphFakosRequest,
+    focus: GraphFakosNode | None,
+) -> tuple[str, str, str, str]:
+    node_ids = {node.id for node in graph.nodes}
+    selected = tuple(
+        node_id for node_id in request.selected_node_ids if node_id in node_ids
+    )
+    selected_edge = next(
+        (edge for edge in graph.edges if edge.id == request.selected_edge_id),
+        None,
+    )
+    if selected_edge is not None:
+        source_id = (
+            selected_edge.source_id if selected_edge.source_id in node_ids else ""
+        )
+        target_node_id = (
+            selected_edge.target_id if selected_edge.target_id in node_ids else ""
+        )
+        target_id = focus.id if focus is not None else source_id or target_node_id
+        return "draft_edge", target_id, source_id, target_node_id
+    target_id = focus.id if focus is not None else (selected[0] if selected else "")
+    source_id = selected[0] if selected else target_id
+    target_node_id = selected[1] if len(selected) > 1 else ""
+    action_type = "draft_edge" if source_id and target_node_id else "draft_node"
+    return action_type, target_id, source_id, target_node_id
+
+
+def _viewer_context_payload(request: GraphFakosRequest) -> dict[str, object]:
+    return {
+        "screen": request.screen,
+        "query": request.query,
+        "focus_node_id": request.focus_node_id or "",
+        "selected_node_ids": list(request.selected_node_ids),
+        "selected_edge_id": request.selected_edge_id or "",
+        "camera": {
+            "x": request.camera_x if request.camera_x is not None else 0.0,
+            "y": request.camera_y if request.camera_y is not None else 0.0,
+            "zoom": request.camera_zoom if request.camera_zoom is not None else 1.0,
+        },
+        "layout": request.layout,
+        "render_engine": request.render_engine,
+        "theme": request.theme,
+        "saved_view_id": request.saved_view_id,
+        "filters": dict(request.filters),
+    }
+
+
+def _viewer_context_hidden_input(request: GraphFakosRequest) -> str:
+    payload = _viewer_context_payload(request)
+    value = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return f"<input type='hidden' name='viewer_context' value='{escape(value, quote=True)}'>"
+
+
+def _viewer_context_preview(graph: GraphFakosGraph, request: GraphFakosRequest) -> str:
+    node_map = graph.node_map()
+    edge_map = graph.edge_map()
+    selected_labels = [
+        node_map[node_id].label if node_id in node_map else node_id
+        for node_id in request.selected_node_ids
+    ]
+    selected_edge = edge_map.get(request.selected_edge_id or "")
+    selection = ", ".join(selected_labels)
+    if selected_edge is not None:
+        selection = selected_edge.label or selected_edge.kind
+    if not selection:
+        selection = request.focus_node_id or "visible graph"
+    camera = (
+        f"x={request.camera_x or 0:.1f}, "
+        f"y={request.camera_y or 0:.1f}, "
+        f"zoom={request.camera_zoom or 1:.2f}"
+    )
+    filters = ", ".join(
+        f"{key}={value}" for key, value in sorted(request.filters.items()) if value
+    )
+    rows = (
+        (
+            "Screen",
+            request.screen
+            if not request.query
+            else f"{request.screen}: {request.query}",
+        ),
+        ("Selection", selection),
+        ("Camera", camera),
+        ("View", f"{request.layout} / {request.render_engine} / {request.theme}"),
+        ("Filters", filters or "none"),
+    )
+    items = "".join(
+        "<li>"
+        f"<span>{escape(label)}</span>"
+        f"<strong data-gf-viewer-context-row='{escape(label.lower())}'>{escape(value)}</strong>"
+        "</li>"
+        for label, value in rows
+    )
+    return (
+        "<aside class='gf-viewer-context-preview' "
+        "data-gf-viewer-context-preview='true' aria-label='Submission context'>"
+        "<b>Submission Context</b>"
+        f"<ul>{items}</ul>"
+        "</aside>"
+    )
+
+
+def _draft_graph_action(
+    action_type: str,
+    target_id: str,
+    source_id: str,
+    target_node_id: str,
+) -> GraphFakosGraphAction:
+    return GraphFakosGraphAction(
+        action_id="draft:route",
+        action_type=action_type,
+        label="Draft graph edge" if action_type == "draft_edge" else "Draft graph note",
+        target_id=target_id,
+        source_id=source_id,
+        target_node_id=target_node_id,
+    )
+
+
+def _draft_action_status(action: GraphFakosGraphAction) -> GraphFakosActionStatus:
+    return GraphFakosActionStatus(
+        action_id=action.action_id,
+        status="draft",
+        message="GraphFakos can submit this provider-neutral action to a host provider.",
+    )
+
+
+def _graph_action_options(selected: str) -> str:
+    return "".join(
+        f"<option value='{escape(value)}'{(' selected' if value == selected else '')}>{escape(label)}</option>"
+        for value, label in _GRAPH_ACTION_TYPES
     )
 
 
@@ -1809,6 +5934,11 @@ def _graph_canvas(
     height = 460
     positions = _layout_positions(graph, request, width, height, selected_id)
     degree_map = _node_degree_map(graph)
+    component_ids = _node_component_ids(graph)
+    selected_node_ids = set(request.selected_node_ids)
+    if selected_id:
+        selected_node_ids.add(selected_id)
+    live_selection = _live_selection_status(graph, selected_node_ids, selected_edge_id)
     hidden_nodes = int(graph.stats.get("hidden_nodes", 0) or 0)
     hidden_edges = int(graph.stats.get("hidden_edges", 0) or 0)
     edge_lines = ""
@@ -1819,32 +5949,106 @@ def _graph_canvas(
         x2, y2 = positions[edge.target_id]
         selected = "true" if edge.id == selected_edge_id else "false"
         path_edge = "true" if request.screen == "path" else "false"
+        edge_width = _edge_width(edge, request)
+        edge_opacity = _clamped(request.edge_opacity, 0.15, 1.0)
+        edge_inspect_route = _explore_href(
+            request,
+            selected_edge_id=edge.id,
+            focus_node_id=selected_id,
+        )
+        edge_path_route = _route_href(
+            request.with_screen("path"),
+            overrides={
+                "source_node_id": edge.source_id,
+                "target_node_id": edge.target_id,
+                "selected_edge_id": edge.id,
+                "layout": "focus",
+            },
+        )
+        edge_kind_route = _route_href(
+            request.with_screen("explore"),
+            overrides={"edge_kind": edge.kind, "selected_edge_id": edge.id},
+        )
+        edge_label = edge.label or edge.kind
         edge_lines += (
-            f"<a href='{_explore_href(request, selected_edge_id=edge.id, focus_node_id=selected_id)}'>"
+            f"<a href='{edge_inspect_route}' class='gf-graph-item-link' "
+            f"aria-label='Inspect edge {escape(edge_label)}. Press Shift+F10 for actions.' "
+            "data-gf-graph-item='edge'>"
             f"<line class='gf-edge' data-edge-id='{escape(edge.id)}' "
             f"data-source-id='{escape(edge.source_id)}' data-target-id='{escape(edge.target_id)}' "
             f"data-kind='{escape(edge.kind)}' data-selected='{selected}' "
-            f"data-path='{path_edge}' x1='{x1:.1f}' y1='{y1:.1f}' "
-            f"x2='{x2:.1f}' y2='{y2:.1f}' marker-end='url(#gf-arrow)'>"
-            f"<title>{escape(edge.label or edge.kind)}</title></line>"
+            f"data-label='{escape(edge_label)}' "
+            f"data-inspect-route='{escape(edge_inspect_route)}' "
+            f"data-path-route='{escape(edge_path_route)}' "
+            f"data-kind-route='{escape(edge_kind_route)}' "
+            f"data-path='{path_edge}' data-clutter='{escape(request.edge_clutter)}' "
+            f"data-edge-width='{edge_width:.2f}' data-edge-opacity='{edge_opacity:.2f}' "
+            f"x1='{x1:.1f}' y1='{y1:.1f}' "
+            f"x2='{x2:.1f}' y2='{y2:.1f}' stroke-width='{edge_width:.2f}' "
+            f"opacity='{edge_opacity:.2f}' marker-end='url(#gf-arrow)'>"
+            f"<title>{escape(edge_label)}</title></line>"
             "</a>"
         )
     node_marks = ""
     for index, node in enumerate(graph.nodes):
         x, y = positions[node.id]
-        selected = "true" if node.id == selected_id else "false"
-        pinned = "true" if node.visual.pinned else "false"
+        selected = "true" if node.id in selected_node_ids else "false"
+        pinned = (
+            "true"
+            if node.visual.pinned or node.id in request.pinned_positions
+            else "false"
+        )
         degree = degree_map.get(node.id, 0)
+        label = (
+            f"<text y='{_node_label_y(index):.1f}' text-anchor='middle'>{escape(_node_label(node))}</text>"
+            if _should_show_label(node, index, degree, request)
+            else ""
+        )
+        node_focus_route = _explore_href(request, focus_node_id=node.id)
+        node_local_route = _route_href(
+            request.with_screen("neighborhood"),
+            overrides={"focus_node_id": node.id, "max_depth": 1, "layout": "focus"},
+        )
+        node_evidence_route = _route_href(
+            request.with_screen("provenance"),
+            overrides={"focus_node_id": node.id},
+        )
+        node_path_route = _route_href(
+            request.with_screen("path"),
+            overrides={
+                "source_node_id": selected_id or node.id,
+                "target_node_id": node.id if selected_id != node.id else None,
+                "selected_edge_id": None,
+                "layout": "focus",
+            },
+        )
+        node_pivot_route = _route_href(
+            request.with_screen("explore"),
+            overrides={"pivot_node_id": node.id, "pivot_mode": "neighbors"},
+        )
         node_marks += (
-            f"<a href='{_explore_href(request, focus_node_id=node.id)}'>"
+            f"<a href='{node_focus_route}' class='gf-graph-item-link' "
+            f"aria-label='Focus node {escape(node.label)}. Press Shift+F10 for actions.' "
+            "data-gf-graph-item='node'>"
             f"<g class='gf-node' data-kind='{escape(node.kind)}' data-selected='{selected}' "
             f"data-node-id='{escape(node.id)}' data-node-ref='{escape(node.id)}' "
+            f"data-label='{escape(node.label)}' "
+            f"data-focus-route='{escape(node_focus_route)}' "
+            f"data-local-route='{escape(node_local_route)}' "
+            f"data-evidence-route='{escape(node_evidence_route)}' "
+            f"data-path-route='{escape(node_path_route)}' "
+            f"data-pivot-route='{escape(node_pivot_route)}' "
             f"data-provenance-ids='{escape(' '.join(node.provenance_ids))}' "
             f"data-citation-ids='{escape(' '.join(node.citation_ids))}' "
-            f"data-pinned='{pinned}' data-degree='{degree}' data-x='{x:.1f}' data-y='{y:.1f}' "
+            f"data-component-id='{escape(component_ids.get(node.id, ''))}' "
+            f"data-style-color='{escape(_style_value(node, request.style_color_by, component_ids))}' "
+            f"data-style-size='{escape(_style_value(node, request.style_size_by, component_ids, degree=degree))}' "
+            f"data-pinned='{pinned}' data-provider-pinned='{str(node.visual.pinned).lower()}' "
+            f"data-degree='{degree}' data-x='{x:.1f}' data-y='{y:.1f}' "
+            f"data-layout-x='{x:.1f}' data-layout-y='{y:.1f}' "
             f"transform='translate({x:.1f} {y:.1f})'>"
-            f"{_node_shape(node)}"
-            f"<text y='{_node_label_y(index):.1f}' text-anchor='middle'>{escape(_node_label(node))}</text>"
+            f"{_node_shape(node, request, degree)}"
+            f"{label}"
             f"<title>{escape(node.summary or node.label)}</title></g></a>"
         )
     camera_x = request.camera_x if request.camera_x is not None else 0
@@ -1856,20 +6060,60 @@ def _graph_canvas(
         f"{_canvas_toolbar(request)}</div>"
         f"{_graph_search_panel(graph, request)}"
         f"<p class='gf-note'>Layout {escape(request.layout)}. Rendering {len(graph.nodes)} node(s) "
-        f"and {len(graph.edges)} edge(s).</p>"
+        f"and {len(graph.edges)} edge(s). Fit zooms to the current selection or visible graph; "
+        "drag empty canvas to pan; drag a node to pin it; "
+        "Shift-drag empty canvas to box-select nodes; right-click or press Shift+F10 on "
+        "nodes or edges for actions.</p>"
+        "<p class='gf-shortcut-hint'>Keyboard: +/- zoom, arrows or WASD pan, 0 resets camera, "
+        "F fullscreen, Delete clears selection, Esc closes menus.</p>"
+        f"<p class='gf-live-selection' data-gf-live-selection='true' aria-live='polite' "
+        f"data-selected-count='{len(selected_node_ids)}' "
+        f"data-edge-selected='{str(bool(selected_edge_id)).lower()}'>{escape(live_selection)}</p>"
+        f"{_renderer_notice(request)}"
         f"{_render_budget_panel(request, hidden_nodes, hidden_edges)}"
         f"<div class='gf-canvas-grid'><div class='gf-canvas-shell' tabindex='0' "
         f"data-camera-x='{camera_x:.2f}' data-camera-y='{camera_y:.2f}' "
         f"data-camera-zoom='{camera_zoom:.2f}'>"
+        f"{_canvas_renderer(graph, request)}"
         f"<svg class='gf-canvas' viewBox='0 0 {width} {height}' "
         "role='img' aria-label='GraphFakos graph canvas'>"
         "<defs><marker id='gf-arrow' markerWidth='8' markerHeight='8' refX='7' "
         "refY='4' orient='auto'><path d='M0,0 L8,4 L0,8 z'></path></marker></defs>"
         f"<g class='gf-viewport' transform='translate({camera_x:.2f} {camera_y:.2f}) scale({camera_zoom:.2f})'>"
         f"{edge_lines}{node_marks}</g></svg></div>"
-        f"{_graph_minimap(graph, positions, width, height, selected_id)}</div>"
+        f"{_graph_minimap(graph, request, positions, width, height, selected_id, (camera_x, camera_y, camera_zoom))}</div>"
         f"{_group_controls(graph, request)}"
-        f"{_graph_canvas_legend(graph)}</section>"
+        f"{_graph_canvas_legend(graph, request)}</section>"
+    )
+
+
+def _live_selection_status(
+    graph: GraphFakosGraph,
+    selected_node_ids: set[str],
+    selected_edge_id: str | None,
+) -> str:
+    node_map = graph.node_map()
+    edge_map = graph.edge_map()
+    node_labels = [
+        node_map[node_id].label if node_id in node_map else node_id
+        for node_id in sorted(selected_node_ids)
+        if node_id
+    ]
+    parts: list[str] = []
+    if len(node_labels) == 1:
+        parts.append(f"Selected 1 node: {node_labels[0]}.")
+    elif len(node_labels) > 1:
+        suffix = ", ..." if len(node_labels) > 3 else "."
+        parts.append(
+            f"Selected {len(node_labels)} nodes: {', '.join(node_labels[:3])}{suffix}"
+        )
+    if selected_edge_id:
+        edge = edge_map.get(selected_edge_id)
+        edge_label = edge.label or edge.kind if edge is not None else selected_edge_id
+        parts.append(f"Selected edge: {edge_label}.")
+    return (
+        " ".join(parts)
+        or "No selected graph items. Shift-click nodes or Shift-drag canvas to select several."
     )
 
 
@@ -1882,13 +6126,17 @@ def _canvas_toolbar(request: GraphFakosRequest) -> str:
             "camera_zoom": request.camera_zoom,
         },
     )
+    clear_pins_route = _route_href(request, overrides={"pinned_positions": None})
     return (
         "<div class='gf-canvas-tools' aria-label='Graph camera controls'>"
         "<button type='button' data-gf-camera='zoom-in' title='Zoom in' aria-label='Zoom in'>+</button>"
         "<button type='button' data-gf-camera='zoom-out' title='Zoom out' aria-label='Zoom out'>-</button>"
-        "<button type='button' data-gf-camera='fit' title='Fit graph' aria-label='Fit graph'>Fit</button>"
+        "<button type='button' data-gf-camera='fit' title='Fit selected or visible graph' "
+        "aria-label='Fit selected or visible graph'>Fit</button>"
         "<button type='button' data-gf-camera='reset' title='Reset camera' aria-label='Reset camera'>Reset</button>"
         "<button type='button' data-gf-camera='fullscreen' title='Fullscreen' aria-label='Fullscreen'>Full</button>"
+        "<button type='button' data-gf-pin='reset' title='Reset pinned node positions' aria-label='Reset pinned node positions'>Reset Pins</button>"
+        f"<a class='gf-tool-link' href='{escape(clear_pins_route)}'>Clear pins</a>"
         f"<a class='gf-tool-link' data-gf-save-view='true' href='{escape(saved_route)}'>Saved view</a>"
         "</div>"
     )
@@ -1900,16 +6148,119 @@ def _graph_search_panel(graph: GraphFakosGraph, request: GraphFakosRequest) -> s
         for node in _ranked_nodes(graph, set())
     )
     return (
-        "<form class='gf-command-bar' method='get' action='/explore' aria-label='Graph search palette'>"
+        "<form class='gf-command-bar' method='get' action='/explore' "
+        "aria-label='Graph search palette' data-gf-search-form='true'>"
         "<input list='gf-node-search-options' name='focus_node_id' class='gf-search-input' "
+        "data-gf-command-search='true' aria-keyshortcuts='/ Control+K Meta+K' "
         "placeholder='Jump to node, edge, or path target'>"
         f"<datalist id='gf-node-search-options'>{options}</datalist>"
-        f"<input type='hidden' name='query' value='{escape(request.query)}'>"
-        f"<input type='hidden' name='layout' value='{escape(request.layout)}'>"
-        f"<input type='hidden' name='render_limit' value='{request.render_limit}'>"
+        f"{_state_hidden_inputs(request, exclude=('focus_node_id',))}"
         "<button type='submit'>Jump</button>"
+        "<span class='gf-command-shortcut'>/ or Ctrl+K</span>"
         "</form>"
     )
+
+
+def _renderer_notice(request: GraphFakosRequest) -> str:
+    if request.render_engine == "svg":
+        return ""
+    if request.render_engine == "canvas":
+        return (
+            "<p class='gf-note gf-renderer-notice'>"
+            "Canvas renderer is enabled for progressive drawing; the SVG graph remains "
+            "available as the static fallback and accessibility surface."
+            "</p>"
+        )
+    return (
+        "<p class='gf-note gf-renderer-notice'>"
+        f"Requested renderer {escape(request.render_engine)} is recorded for host workbenches; "
+        "this portable export degrades to the static SVG renderer."
+        "</p>"
+    )
+
+
+def _canvas_renderer(graph: GraphFakosGraph, request: GraphFakosRequest) -> str:
+    if request.render_engine != "canvas":
+        return ""
+    payload = {
+        "graph_id": graph.graph_id,
+        "nodes": [
+            {
+                "id": node.id,
+                "label": node.label,
+                "kind": node.kind,
+                "score": node.score,
+            }
+            for node in graph.nodes
+        ],
+        "edges": [
+            {
+                "id": edge.id,
+                "source_id": edge.source_id,
+                "target_id": edge.target_id,
+                "kind": edge.kind,
+                "weight": edge.weight,
+            }
+            for edge in graph.edges
+        ],
+    }
+    return (
+        "<canvas class='gf-canvas-renderer' data-gf-canvas='true' "
+        "width='920' height='460' aria-label='Canvas graph renderer'></canvas>"
+        f"{_json_script('data-gf-canvas-payload', payload)}"
+    )
+
+
+def _edge_width(edge: GraphFakosEdge, request: GraphFakosRequest) -> float:
+    base = 1.4
+    if request.style_edge_width_by == "weight" and edge.weight is not None:
+        base = 1.0 + edge.weight * 2.0
+    elif request.style_edge_width_by == "confidence" and edge.confidence is not None:
+        base = 1.0 + edge.confidence * 2.0
+    elif request.style_edge_width_by == "kind":
+        base = 1.2 + (abs(hash(edge.kind)) % 4) * 0.35
+    return _clamped(base * request.edge_scale, 0.5, 7.0)
+
+
+def _should_show_label(
+    node: GraphFakosNode,
+    index: int,
+    degree: int,
+    request: GraphFakosRequest,
+) -> bool:
+    density = _clamped(request.label_density, 0.0, 1.0)
+    if density >= 0.95:
+        return True
+    if node.id == request.focus_node_id or node.id in request.selected_node_ids:
+        return True
+    if degree >= 3:
+        return density >= 0.25
+    cadence = max(1, int(round(1 / max(density, 0.12))))
+    return index % cadence == 0
+
+
+def _style_value(
+    node: GraphFakosNode,
+    style_field: str,
+    component_ids: dict[str, str],
+    *,
+    degree: int = 0,
+) -> str:
+    if style_field == "source":
+        return node.source
+    if style_field == "score":
+        return "scored" if node.score is not None else "unscored"
+    if style_field == "confidence":
+        return "confident" if node.confidence is not None else "unknown"
+    if style_field == "component":
+        return component_ids.get(node.id, "")
+    if style_field == "degree":
+        return str(degree)
+    return node.kind
+
+
+def _clamped(value: float, minimum: float, maximum: float) -> float:
+    return min(max(value, minimum), maximum)
 
 
 def _render_budget_panel(
@@ -1930,8 +6281,12 @@ def _render_budget_panel(
     )
 
 
-def _node_shape(node: GraphFakosNode) -> str:
-    radius = _node_radius(node)
+def _node_shape(
+    node: GraphFakosNode,
+    request: GraphFakosRequest,
+    degree: int,
+) -> str:
+    radius = _node_radius(node, request, degree)
     shape = (node.visual.shape or "").casefold()
     if shape == "square" or node.kind == "provider":
         size = radius * 1.7
@@ -1954,26 +6309,73 @@ def _node_shape(node: GraphFakosNode) -> str:
 
 def _graph_minimap(
     graph: GraphFakosGraph,
+    request: GraphFakosRequest,
     positions: dict[str, tuple[float, float]],
     width: int,
     height: int,
     selected_id: str | None,
+    camera: tuple[float, float, float],
 ) -> str:
-    nodes = ""
-    for node in graph.nodes:
-        if node.id not in positions:
-            continue
-        x, y = positions[node.id]
-        selected = "true" if node.id == selected_id else "false"
-        nodes += (
-            f"<circle cx='{x / width * 180:.1f}' cy='{y / height * 90:.1f}' "
-            f"r='4' data-selected='{selected}'></circle>"
-        )
+    nodes = "".join(
+        _minimap_node(node, request, positions[node.id], width, height, selected_id)
+        for node in graph.nodes
+        if node.id in positions
+    )
     return (
         "<aside class='gf-minimap' aria-label='Graph minimap'>"
         "<div class='gf-minimap-heading'>Minimap</div>"
-        "<svg viewBox='0 0 180 90' role='img' aria-label='Visible graph minimap'>"
-        f"{nodes}</svg></aside>"
+        f"<svg viewBox='0 0 {_MINIMAP_WIDTH} {_MINIMAP_HEIGHT}' role='img' "
+        "aria-label='Visible graph minimap'>"
+        f"{_minimap_viewport(width, height, camera)}{nodes}</svg></aside>"
+    )
+
+
+def _minimap_viewport(
+    width: int,
+    height: int,
+    camera: tuple[float, float, float],
+) -> str:
+    camera_x, camera_y, camera_zoom = camera
+    zoom = max(camera_zoom, 0.01)
+    min_x = _clamped(-camera_x / zoom, 0, width)
+    min_y = _clamped(-camera_y / zoom, 0, height)
+    max_x = _clamped((width - camera_x) / zoom, 0, width)
+    max_y = _clamped((height - camera_y) / zoom, 0, height)
+    rect_x = min(min_x, max_x) / width * _MINIMAP_WIDTH
+    rect_y = min(min_y, max_y) / height * _MINIMAP_HEIGHT
+    rect_width = abs(max_x - min_x) / width * _MINIMAP_WIDTH
+    rect_height = abs(max_y - min_y) / height * _MINIMAP_HEIGHT
+    return (
+        "<rect class='gf-minimap-viewport' data-gf-minimap-viewport='true' "
+        f"data-camera-x='{camera_x:.2f}' data-camera-y='{camera_y:.2f}' "
+        f"data-camera-zoom='{camera_zoom:.2f}' "
+        f"x='{rect_x:.1f}' y='{rect_y:.1f}' "
+        f"width='{rect_width:.1f}' height='{rect_height:.1f}'></rect>"
+    )
+
+
+def _minimap_node(
+    node: GraphFakosNode,
+    request: GraphFakosRequest,
+    position: tuple[float, float],
+    width: int,
+    height: int,
+    selected_id: str | None,
+) -> str:
+    x, y = position
+    selected = "true" if node.id == selected_id else "false"
+    scaled_x = x / width * _MINIMAP_WIDTH
+    scaled_y = y / height * _MINIMAP_HEIGHT
+    focus_route = _explore_href(request, focus_node_id=node.id)
+    return (
+        f"<a href='{escape(focus_route)}' class='gf-minimap-node-link' "
+        f"aria-label='Focus minimap node {escape(node.label)}' "
+        f"data-gf-minimap-node='true' data-minimap-node-id='{escape(node.id)}' "
+        f"data-node-ref='{escape(node.id)}' data-focus-route='{escape(focus_route)}'>"
+        f"<circle cx='{scaled_x:.1f}' cy='{scaled_y:.1f}' "
+        f"r='{_MINIMAP_NODE_RADIUS}' data-selected='{selected}' "
+        f"data-node-ref='{escape(node.id)}' data-minimap-node-id='{escape(node.id)}'>"
+        f"<title>{escape(node.label)}</title></circle></a>"
     )
 
 
@@ -2010,10 +6412,22 @@ def _explore_href(
     )
 
 
-def _node_radius(node: GraphFakosNode) -> int:
-    if node.score is None:
-        return 18
-    return max(16, min(28, int(16 + node.score * 10)))
+def _node_radius(
+    node: GraphFakosNode,
+    request: GraphFakosRequest | None = None,
+    degree: int = 0,
+) -> int:
+    scale = request.node_scale if request is not None else 1.0
+    base = 18 if node.score is None else max(16, min(28, int(16 + node.score * 10)))
+    if request is not None and request.style_size_by == "degree":
+        base = max(base, 16 + min(degree, 8) * 2)
+    if (
+        request is not None
+        and request.style_size_by == "confidence"
+        and node.confidence
+    ):
+        base = max(base, int(16 + node.confidence * 10))
+    return max(10, min(44, int(base * _clamped(scale, 0.45, 2.2))))
 
 
 def _node_label(node: GraphFakosNode) -> str:
@@ -2183,18 +6597,171 @@ def _node_badges(
     return badges
 
 
-def _graph_canvas_legend(graph: GraphFakosGraph) -> str:
+def _graph_canvas_legend(
+    graph: GraphFakosGraph,
+    request: GraphFakosRequest | None = None,
+) -> str:
+    payload = _graph_canvas_legend_payload(graph, request)
+    return (
+        "<aside class='gf-canvas-legend' data-gf-canvas-legend-panel='true' "
+        "aria-label='Canvas visual legend'>"
+        "<div class='gf-canvas-legend-heading'>"
+        "<strong>Visual Legend</strong>"
+        "<span>Shapes, styles, and evidence markers</span>"
+        "</div>"
+        + _graph_canvas_legend_section(
+            "Node kinds",
+            payload["node_kinds"],
+            "kind",
+        )
+        + _graph_canvas_legend_section(
+            "Edge kinds",
+            payload["edge_kinds"],
+            "edge",
+        )
+        + _graph_canvas_marker_rows(payload["markers"])
+        + _badges(
+            (
+                (f"color:{payload['style_rules']['color_by']}", "accent"),
+                (f"size:{payload['style_rules']['size_by']}", "blue"),
+                (f"edge:{payload['style_rules']['edge_width_by']}", "neutral"),
+            )
+        )
+        + _json_script("data-gf-canvas-legend", payload)
+        + "</aside>"
+    )
+
+
+def _graph_canvas_legend_payload(
+    graph: GraphFakosGraph,
+    request: GraphFakosRequest | None,
+) -> dict[str, object]:
     degree_map = _node_degree_map(graph)
     pinned_count = sum(1 for node in graph.nodes if node.visual.pinned)
     hub_count = sum(1 for node in graph.nodes if degree_map.get(node.id, 0) >= 3)
-    kind_count = len(_graph_facets(graph).get("node_kind", ()))
-    return (
-        "<div class='gf-canvas-legend'>"
-        f"{_badge(f'{pinned_count} pinned', 'blue')}"
-        f"{_badge(f'{hub_count} hubs', 'neutral')}"
-        f"{_badge(f'{kind_count} kinds', 'accent')}"
-        "</div>"
+    selected_count = len(request.selected_node_ids) if request is not None else 0
+    selected_edge_id = request.selected_edge_id if request is not None else ""
+    node_kind_counts = _node_value_counts(node.kind for node in graph.nodes)
+    edge_kind_counts = _node_value_counts(edge.kind for edge in graph.edges)
+    evidence_node_count = sum(
+        1 for node in graph.nodes if node.provenance_ids or node.citation_ids
     )
+    evidence_edge_count = sum(
+        1 for edge in graph.edges if edge.provenance_ids or edge.citation_ids
+    )
+    return {
+        "visible_node_count": len(graph.nodes),
+        "visible_edge_count": len(graph.edges),
+        "node_kinds": [
+            _legend_item(kind, count, _legend_route(request, "node_kind", kind))
+            for kind, count in _sorted_counts(node_kind_counts)
+        ],
+        "edge_kinds": [
+            _legend_item(kind, count, _legend_route(request, "edge_kind", kind))
+            for kind, count in _sorted_counts(edge_kind_counts)
+        ],
+        "markers": [
+            {
+                "id": "selected",
+                "label": "Selected",
+                "count": selected_count + (1 if selected_edge_id else 0),
+                "meaning": "Blue stroke and glow identify selected nodes or edges.",
+            },
+            {
+                "id": "pinned",
+                "label": "Pinned",
+                "count": pinned_count,
+                "meaning": "Dashed node outlines indicate pinned or saved positions.",
+            },
+            {
+                "id": "hub",
+                "label": "Hub",
+                "count": hub_count,
+                "meaning": "High-degree graph items are useful navigation anchors.",
+            },
+            {
+                "id": "evidence",
+                "label": "Evidence",
+                "count": evidence_node_count + evidence_edge_count,
+                "meaning": "Evidence counts reflect provenance or citation links only.",
+            },
+        ],
+        "style_rules": {
+            "color_by": request.style_color_by if request is not None else "kind",
+            "size_by": request.style_size_by if request is not None else "score",
+            "edge_width_by": request.style_edge_width_by
+            if request is not None
+            else "kind",
+        },
+        "provider_boundary": (
+            "GraphFakos explains visible structural styling; providers own "
+            "semantic meaning and any provider-specific style metadata."
+        ),
+    }
+
+
+def _legend_item(value: str, count: int, route: str) -> dict[str, object]:
+    return {
+        "value": value,
+        "count": count,
+        "route": route,
+    }
+
+
+def _legend_route(
+    request: GraphFakosRequest | None,
+    field: str,
+    value: str,
+) -> str:
+    if request is None:
+        return "#"
+    return _route_href(request.with_screen("explore"), overrides={field: value})
+
+
+def _graph_canvas_legend_section(
+    label: str,
+    items: object,
+    prefix: str,
+) -> str:
+    if not isinstance(items, list) or not items:
+        return ""
+    rows = ""
+    for item in items[:6]:
+        if not isinstance(item, dict):
+            continue
+        value = str(item.get("value") or "")
+        count = str(item.get("count") or 0)
+        route = str(item.get("route") or "#")
+        rows += (
+            f"<a class='gf-legend-pill' data-legend-{escape(prefix)}='{escape(value)}' "
+            f"href='{escape(route)}'>"
+            f"<span>{escape(value)}</span><strong>{escape(count)}</strong></a>"
+        )
+    return (
+        "<section class='gf-canvas-legend-group'>"
+        f"<h4>{escape(label)}</h4>"
+        f"<div>{rows}</div>"
+        "</section>"
+    )
+
+
+def _graph_canvas_marker_rows(markers: object) -> str:
+    if not isinstance(markers, list) or not markers:
+        return ""
+    rows = ""
+    for marker in markers:
+        if not isinstance(marker, dict):
+            continue
+        rows += (
+            "<div class='gf-legend-marker'>"
+            f"<span data-marker='{escape(str(marker.get('id') or 'marker'))}'></span>"
+            "<div>"
+            f"<strong>{escape(str(marker.get('label') or 'Marker'))} "
+            f"({escape(str(marker.get('count', 0)))})</strong>"
+            f"<p>{escape(str(marker.get('meaning') or ''))}</p>"
+            "</div></div>"
+        )
+    return f"<section class='gf-canvas-legend-markers'>{rows}</section>"
 
 
 def _edge_list(edges: tuple[GraphFakosEdge, ...]) -> str:
@@ -2320,6 +6887,63 @@ def _adjacency_map(
     return {key: tuple(value) for key, value in adjacency.items()}
 
 
+def _connected_node_ids(graph: GraphFakosGraph, node_id: str) -> set[str]:
+    if not node_id:
+        return set()
+    connected = {node_id}
+    for edge, neighbor_id in _adjacency_map(graph).get(node_id, ()):
+        connected.add(edge.source_id)
+        connected.add(edge.target_id)
+        connected.add(neighbor_id)
+    return connected
+
+
+def _component_groups(graph: GraphFakosGraph) -> dict[str, tuple[str, ...]]:
+    adjacency = _adjacency_map(graph)
+    remaining = {node.id for node in graph.nodes}
+    components: dict[str, tuple[str, ...]] = {}
+    index = 1
+    while remaining:
+        start = sorted(remaining)[0]
+        queue = deque([start])
+        seen = {start}
+        while queue:
+            current = queue.popleft()
+            for _edge, neighbor_id in adjacency.get(current, ()):
+                if neighbor_id not in seen:
+                    seen.add(neighbor_id)
+                    queue.append(neighbor_id)
+        remaining -= seen
+        components[f"component:{index}"] = tuple(sorted(seen))
+        index += 1
+    return components
+
+
+def _node_component_ids(graph: GraphFakosGraph) -> dict[str, str]:
+    return {
+        node_id: component_id
+        for component_id, node_ids in _component_groups(graph).items()
+        for node_id in node_ids
+    }
+
+
+def _node_cluster_id(node: GraphFakosNode) -> str:
+    value = node.provider_payload.get("cluster_id") or node.visual.group
+    return value if isinstance(value, str) else ""
+
+
+def _timeline_frames(graph: GraphFakosGraph) -> tuple[str, ...]:
+    frames = sorted(
+        {
+            timestamp
+            for node in graph.nodes
+            for timestamp in node.timestamps.values()
+            if timestamp
+        }
+    )
+    return tuple(frames[:12])
+
+
 def _node_degree_map(graph: GraphFakosGraph) -> dict[str, int]:
     degrees = {node.id: 0 for node in graph.nodes}
     for edge in graph.edges:
@@ -2410,32 +7034,32 @@ def _layout_positions(
     focus_node_id: str | None,
 ) -> dict[str, tuple[float, float]]:
     if request.layout == "timeline":
-        return _timeline_positions(graph, width, height)
-    if request.layout == "circle":
-        return _ring_positions(graph, width, height)
-    if request.layout == "grouped":
-        return _grouped_positions(graph, width, height)
-    if request.layout == "focus":
-        return _focus_positions(graph, width, height, focus_node_id)
-    if request.layout == "radial":
-        return _radial_positions(graph, width, height, focus_node_id)
-    if request.layout == "hierarchical":
-        return _hierarchical_positions(graph, width, height, focus_node_id)
-    return _force_positions(graph, width, height, focus_node_id)
+        positions = _timeline_positions(graph, width, height)
+    elif request.layout == "circle":
+        positions = _ring_positions(graph, width, height)
+    elif request.layout == "grouped":
+        positions = _grouped_positions(graph, width, height)
+    elif request.layout == "focus":
+        positions = _focus_positions(graph, width, height, focus_node_id)
+    elif request.layout == "radial":
+        positions = _radial_positions(graph, width, height, focus_node_id)
+    elif request.layout == "hierarchical":
+        positions = _hierarchical_positions(graph, width, height, focus_node_id)
+    else:
+        positions = _force_positions(graph, request, width, height, focus_node_id)
+    return _apply_pinned_positions(graph, request, positions, width, height)
 
 
 def _force_positions(
     graph: GraphFakosGraph,
+    request: GraphFakosRequest,
     width: int,
     height: int,
     focus_node_id: str | None,
 ) -> dict[str, tuple[float, float]]:
     if not graph.nodes:
         return {}
-    anchor = (
-        focus_node_id
-        or (_preferred_focus_node(graph, GraphFakosRequest()) or graph.nodes[0]).id
-    )
+    anchor = _force_anchor_id(graph, focus_node_id)
     adjacency = _adjacency_map(graph)
     degree_map = _node_degree_map(graph)
     center = (width / 2, height / 2)
@@ -2458,8 +7082,9 @@ def _force_positions(
         for node in _ranked_nodes(graph, {anchor, *inner_ring})
         if node.id not in {anchor, *inner_ring}
     ]
-    inner_radius = min(width, height) * 0.2
-    outer_radius = min(width, height) * 0.36
+    distance_scale = _clamped(request.link_distance, 0.45, 2.2)
+    inner_radius = min(width, height) * 0.2 * distance_scale
+    outer_radius = min(width, height) * 0.36 * distance_scale
     for index, node_id in enumerate(inner_ring):
         angle = (2 * pi * index / max(len(inner_ring), 1)) - (pi / 2)
         positions[node_id] = (
@@ -2474,7 +7099,158 @@ def _force_positions(
         )
     for node in graph.nodes:
         positions.setdefault(node.id, center)
-    return positions
+    return _relax_force_positions(graph, request, positions, anchor, width, height)
+
+
+def _force_anchor_id(graph: GraphFakosGraph, focus_node_id: str | None) -> str:
+    node_ids = {node.id for node in graph.nodes}
+    if focus_node_id and focus_node_id in node_ids:
+        return focus_node_id
+    focus = _preferred_focus_node(graph, GraphFakosRequest())
+    return (focus or graph.nodes[0]).id
+
+
+def _relax_force_positions(
+    graph: GraphFakosGraph,
+    request: GraphFakosRequest,
+    positions: dict[str, tuple[float, float]],
+    anchor: str,
+    width: int,
+    height: int,
+) -> dict[str, tuple[float, float]]:
+    node_ids = [node.id for node in _ranked_nodes(graph, set())]
+    if len(node_ids) <= 2:
+        return _bounded_positions(graph, positions, anchor, width, height)
+    margin = 46.0
+    area = max((width - margin * 2) * (height - margin * 2), 1.0)
+    ideal_distance = (
+        sqrt(area / len(node_ids)) * 0.82 * _clamped(request.link_distance, 0.45, 2.2)
+    )
+    fixed_ids = {
+        node.id
+        for node in graph.nodes
+        if node.id == anchor
+        or (
+            node.visual.pinned
+            and node.visual.x is not None
+            and node.visual.y is not None
+        )
+    }
+    positions = _bounded_positions(graph, positions, anchor, width, height)
+    for step in range(72):
+        temperature = max(2.5, ideal_distance * (1 - step / 72) * 0.34)
+        shifts = {node_id: [0.0, 0.0] for node_id in node_ids}
+        for left_index, left_id in enumerate(node_ids):
+            left_x, left_y = positions[left_id]
+            for right_id in node_ids[left_index + 1 :]:
+                right_x, right_y = positions[right_id]
+                dx = left_x - right_x
+                dy = left_y - right_y
+                distance = sqrt(dx * dx + dy * dy) or 0.01
+                force = (
+                    (ideal_distance * ideal_distance)
+                    / distance
+                    * _clamped(request.repel_force, 0.1, 4.0)
+                )
+                offset_x = dx / distance * force
+                offset_y = dy / distance * force
+                shifts[left_id][0] += offset_x
+                shifts[left_id][1] += offset_y
+                shifts[right_id][0] -= offset_x
+                shifts[right_id][1] -= offset_y
+        for edge in graph.edges:
+            if edge.source_id not in positions or edge.target_id not in positions:
+                continue
+            source_x, source_y = positions[edge.source_id]
+            target_x, target_y = positions[edge.target_id]
+            dx = source_x - target_x
+            dy = source_y - target_y
+            distance = sqrt(dx * dx + dy * dy) or 0.01
+            force = (distance * distance) / max(ideal_distance, 1.0)
+            offset_x = dx / distance * force * 0.62
+            offset_y = dy / distance * force * 0.62
+            shifts[edge.source_id][0] -= offset_x
+            shifts[edge.source_id][1] -= offset_y
+            shifts[edge.target_id][0] += offset_x
+            shifts[edge.target_id][1] += offset_y
+        for node_id in node_ids:
+            if node_id in fixed_ids:
+                continue
+            x, y = positions[node_id]
+            shift_x, shift_y = shifts[node_id]
+            length = sqrt(shift_x * shift_x + shift_y * shift_y) or 1.0
+            move = min(length, temperature)
+            next_x = x + shift_x / length * move
+            next_y = y + shift_y / length * move
+            center_pull = (
+                request.center_force if step > 36 else request.center_force / 2
+            )
+            next_x += (width / 2 - next_x) * center_pull
+            next_y += (height / 2 - next_y) * center_pull
+            positions[node_id] = _bounded_point(next_x, next_y, width, height, margin)
+    return _bounded_positions(graph, positions, anchor, width, height)
+
+
+def _apply_pinned_positions(
+    graph: GraphFakosGraph,
+    request: GraphFakosRequest,
+    positions: dict[str, tuple[float, float]],
+    width: int,
+    height: int,
+) -> dict[str, tuple[float, float]]:
+    if not request.pinned_positions:
+        return positions
+    pinned = dict(positions)
+    for node in graph.nodes:
+        if node.id not in request.pinned_positions:
+            continue
+        x, y = request.pinned_positions[node.id]
+        pinned[node.id] = _bounded_point(x, y, width, height, 46.0)
+    return pinned
+
+
+def _bounded_positions(
+    graph: GraphFakosGraph,
+    positions: dict[str, tuple[float, float]],
+    anchor: str,
+    width: int,
+    height: int,
+) -> dict[str, tuple[float, float]]:
+    bounded: dict[str, tuple[float, float]] = {}
+    margin = 46.0
+    for node in graph.nodes:
+        if node.id == anchor:
+            bounded[node.id] = (width / 2, height / 2)
+            continue
+        if (
+            node.visual.pinned
+            and node.visual.x is not None
+            and node.visual.y is not None
+        ):
+            bounded[node.id] = _bounded_point(
+                node.visual.x,
+                node.visual.y,
+                width,
+                height,
+                margin,
+            )
+            continue
+        x, y = positions.get(node.id, (width / 2, height / 2))
+        bounded[node.id] = _bounded_point(x, y, width, height, margin)
+    return bounded
+
+
+def _bounded_point(
+    x: float,
+    y: float,
+    width: int,
+    height: int,
+    margin: float,
+) -> tuple[float, float]:
+    return (
+        min(max(x, margin), width - margin),
+        min(max(y, margin), height - margin),
+    )
 
 
 def _ring_positions(
@@ -2901,6 +7677,31 @@ body.gf-page {
     "Segoe UI", sans-serif;
   line-height: 1.45;
 }
+body.gf-page[data-theme="ink"] {
+  --gf-bg: #111612;
+  --gf-ink: #eef4ec;
+  --gf-muted: #b5c1b7;
+  --gf-line: #334039;
+  --gf-panel: #171f1a;
+  --gf-soft: #202a24;
+  --gf-accent: #7ad4ba;
+  --gf-accent-soft: #17382f;
+  --gf-blue: #9ec4ff;
+  --gf-blue-soft: #172b46;
+  color-scheme: dark;
+}
+body.gf-page[data-theme="paper"] {
+  --gf-bg: #fbf3df;
+  --gf-ink: #30251b;
+  --gf-muted: #7d6d5e;
+  --gf-line: #eadbc1;
+  --gf-panel: #fffaf0;
+  --gf-soft: #f5ead3;
+  --gf-accent: #9a5f2c;
+  --gf-accent-soft: #f1ddbf;
+  --gf-blue: #596f95;
+  --gf-blue-soft: #dee5f1;
+}
 .gf-shell {
   min-height: 100vh;
   display: grid;
@@ -2908,7 +7709,7 @@ body.gf-page {
 }
 .gf-nav {
   border-right: 1px solid var(--gf-line);
-  background: #fbfcfa;
+  background: var(--gf-panel);
   padding: 20px 14px;
 }
 .gf-nav h1 {
@@ -2999,7 +7800,7 @@ body.gf-page {
   border: 1px solid var(--gf-line);
   border-radius: 8px;
   padding: 10px;
-  background: #fff;
+  background: var(--gf-panel);
   color: var(--gf-ink);
 }
 .gf-preset-card span {
@@ -3054,6 +7855,29 @@ body.gf-page {
   font: inherit;
   font-weight: 700;
 }
+.gf-panel-form {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.gf-panel-form input,
+.gf-panel-form select {
+  border: 1px solid var(--gf-line);
+  border-radius: 8px;
+  color: var(--gf-ink);
+  font: inherit;
+  min-width: 0;
+  padding: 9px 10px;
+}
+.gf-panel-form button {
+  border: 1px solid var(--gf-accent);
+  border-radius: 8px;
+  background: var(--gf-accent);
+  color: white;
+  font: inherit;
+  font-weight: 700;
+  padding: 9px 10px;
+}
 .gf-panel-heading {
   display: flex;
   align-items: center;
@@ -3063,7 +7887,8 @@ body.gf-page {
 }
 .gf-command-bar {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) auto;
+  grid-template-columns: minmax(220px, 1fr) auto auto;
+  align-items: center;
   gap: 8px;
   margin-bottom: 12px;
 }
@@ -3078,7 +7903,7 @@ body.gf-page {
 .gf-canvas-tools button {
   border: 1px solid var(--gf-line);
   border-radius: 8px;
-  background: #fff;
+  background: var(--gf-panel);
   color: var(--gf-ink);
   font: inherit;
   font-weight: 700;
@@ -3089,6 +7914,15 @@ body.gf-page {
   border-color: var(--gf-accent);
   background: var(--gf-accent);
   color: #fff;
+}
+.gf-command-shortcut {
+  border: 1px solid var(--gf-line);
+  border-radius: 999px;
+  color: var(--gf-muted);
+  font-size: 12px;
+  font-weight: 800;
+  padding: 6px 9px;
+  white-space: nowrap;
 }
 .gf-canvas-tools {
   display: flex;
@@ -3104,7 +7938,7 @@ body.gf-page {
   border: 1px solid var(--gf-line);
   border-radius: 8px;
   padding: 5px 9px;
-  background: #fff;
+  background: var(--gf-panel);
   font-size: 13px;
   font-weight: 700;
 }
@@ -3114,14 +7948,137 @@ body.gf-page {
   gap: 6px;
   margin: 0 0 12px;
 }
+.gf-active-lens {
+  align-items: flex-start;
+  background: linear-gradient(135deg, rgba(36, 108, 92, 0.09), rgba(52, 92, 140, 0.08));
+  border: 1px solid var(--gf-line);
+  border-radius: 18px;
+  box-shadow: 0 12px 28px rgba(20, 35, 30, 0.08);
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+  margin: 12px 0;
+  padding: 14px;
+}
+.gf-active-lens-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
 .gf-route-chip {
   background: var(--gf-soft);
   color: var(--gf-ink);
+}
+.gf-interaction-guide {
+  background:
+    radial-gradient(circle at 12% 18%, color-mix(in srgb, var(--gf-blue-soft) 74%, transparent), transparent 34%),
+    linear-gradient(135deg, white, color-mix(in srgb, var(--gf-soft) 82%, white));
+  border: 1px solid color-mix(in srgb, var(--gf-blue) 22%, var(--gf-line));
+  border-radius: 22px;
+  box-shadow: var(--gf-shadow);
+  display: grid;
+  gap: 14px;
+  margin: 12px 0 16px;
+  padding: 18px;
+}
+.gf-guide-copy h3,
+.gf-guide-copy p {
+  margin: 0;
+}
+.gf-guide-copy h3 {
+  font-size: 20px;
+  letter-spacing: -.02em;
+}
+.gf-guide-copy p {
+  color: var(--gf-muted);
+  line-height: 1.55;
+  margin-top: 6px;
+}
+.gf-guide-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+.gf-guide-card {
+  background: rgba(255, 255, 255, .78);
+  border: 1px solid var(--gf-line);
+  border-radius: 14px;
+  color: var(--gf-ink);
+  display: grid;
+  gap: 5px;
+  padding: 10px;
+  text-decoration: none;
+}
+.gf-guide-card span {
+  color: var(--gf-blue);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+.gf-guide-card p {
+  color: var(--gf-muted);
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 0;
 }
 .gf-route-row {
   display: flex;
   justify-content: space-between;
   gap: 10px;
+}
+.gf-command-palette {
+  display: grid;
+  gap: 12px;
+}
+.gf-command-search {
+  color: var(--gf-muted);
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.gf-command-search input {
+  border: 1px solid var(--gf-line);
+  border-radius: 10px;
+  color: var(--gf-ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+  padding: 10px 11px;
+  text-transform: none;
+}
+.gf-command-group {
+  display: grid;
+  gap: 8px;
+}
+.gf-command-group h4 {
+  font-size: 13px;
+  letter-spacing: .04em;
+  margin: 0;
+  text-transform: uppercase;
+}
+.gf-command-row {
+  align-items: center;
+  border: 1px solid var(--gf-line);
+  border-radius: 12px;
+  padding: 9px 10px;
+}
+.gf-command-row[data-disabled="true"] {
+  opacity: .56;
+}
+.gf-trail-row {
+  align-items: center;
+}
+.gf-trail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
 }
 .gf-inline-note {
   color: var(--gf-muted);
@@ -3129,12 +8086,233 @@ body.gf-page {
   font-size: 12px;
   margin-top: 2px;
 }
+.gf-facet-explorer {
+  display: grid;
+  gap: 10px;
+}
+.gf-facet-group {
+  background: color-mix(in srgb, var(--gf-soft) 70%, white);
+  border: 1px solid var(--gf-line);
+  border-radius: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px;
+}
+.gf-facet-group h4 {
+  flex: 1 0 100%;
+  margin: 0 0 2px;
+}
+.gf-facet-pill {
+  align-items: center;
+  background: white;
+  border: 1px solid var(--gf-line);
+  border-radius: 999px;
+  color: var(--gf-ink);
+  display: inline-flex;
+  gap: 7px;
+  padding: 5px 8px;
+  text-decoration: none;
+}
+.gf-facet-pill[aria-current="true"] {
+  background: var(--gf-accent-soft);
+  border-color: color-mix(in srgb, var(--gf-accent) 35%, var(--gf-line));
+}
+.gf-facet-pill strong {
+  color: var(--gf-muted);
+  font-size: 12px;
+}
+.gf-navigation-map {
+  display: grid;
+  gap: 8px;
+}
+.gf-navigation-lane {
+  background: color-mix(in srgb, var(--gf-blue-soft) 46%, white);
+  border-left: 4px solid color-mix(in srgb, var(--gf-blue) 45%, var(--gf-line));
+  display: grid;
+  gap: 7px;
+}
+.gf-navigation-lane h4,
+.gf-navigation-lane p {
+  margin: 0;
+}
+.gf-navigation-lane p {
+  color: var(--gf-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.gf-display-recipes {
+  display: grid;
+  gap: 8px;
+}
+.gf-recipe-card {
+  background: color-mix(in srgb, var(--gf-soft) 76%, white);
+  border: 1px solid var(--gf-line);
+  border-radius: 14px;
+  color: var(--gf-ink);
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+  text-decoration: none;
+}
+.gf-recipe-card[data-active="true"] {
+  background: var(--gf-accent-soft);
+  border-color: color-mix(in srgb, var(--gf-accent) 35%, var(--gf-line));
+}
+.gf-recipe-card span {
+  color: var(--gf-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.gf-selection-sets {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+.gf-selection-set-card {
+  background: color-mix(in srgb, var(--gf-blue-soft) 54%, white);
+  border: 1px solid color-mix(in srgb, var(--gf-blue) 18%, var(--gf-line));
+  border-radius: 14px;
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+}
+.gf-selection-set-card h4,
+.gf-selection-set-card p {
+  margin: 0;
+}
+.gf-relationship-table {
+  display: grid;
+  gap: 8px;
+}
+.gf-relationship-row {
+  border-left: 4px solid color-mix(in srgb, var(--gf-blue) 42%, var(--gf-line));
+}
+.gf-relationship-row h4 {
+  font-size: 14px;
+  line-height: 1.35;
+}
+.gf-evidence-coverage {
+  display: grid;
+  gap: 8px;
+}
+.gf-evidence-coverage-row {
+  background: color-mix(in srgb, var(--gf-soft) 76%, white);
+  border: 1px solid var(--gf-line);
+  border-radius: 14px;
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+}
+.gf-evidence-coverage-row h4,
+.gf-evidence-coverage-row p {
+  margin: 0;
+}
+.gf-evidence-coverage-row p {
+  color: var(--gf-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.gf-evidence-meter {
+  background: white;
+  border: 1px solid var(--gf-line);
+  border-radius: 999px;
+  height: 9px;
+  overflow: hidden;
+}
+.gf-evidence-meter span {
+  background: linear-gradient(90deg, var(--gf-accent), var(--gf-blue));
+  display: block;
+  height: 100%;
+}
 .gf-capture-panel {
   border-color: #c8d8d0;
+}
+.gf-action-panel,
+.gf-workspace-controls,
+.gf-local-controls,
+.gf-physics-controls {
+  border-color: color-mix(in srgb, var(--gf-accent) 24%, var(--gf-line));
+}
+.gf-workbook {
+  background: color-mix(in srgb, var(--gf-soft) 76%, white);
+  border: 1px solid var(--gf-line);
+  border-radius: 12px;
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+}
+.gf-workbook-row,
+.gf-workbook-slot {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.gf-workbook input {
+  border: 1px solid var(--gf-line);
+  border-radius: 8px;
+  color: var(--gf-ink);
+  flex: 1 1 160px;
+  font: inherit;
+  min-height: 34px;
+  padding: 7px 9px;
+}
+.gf-workbook button,
+.gf-workbook a {
+  border: 1px solid color-mix(in srgb, var(--gf-accent) 30%, var(--gf-line));
+  border-radius: 999px;
+  color: var(--gf-ink);
+  font-size: 12px;
+  font-weight: 800;
+  padding: 6px 10px;
+  text-decoration: none;
+}
+.gf-workbook button {
+  background: white;
+  cursor: pointer;
+  font-family: inherit;
+}
+.gf-workbook-list {
+  display: grid;
+  gap: 6px;
+}
+.gf-workbook-slot {
+  justify-content: space-between;
+}
+.gf-workbook-slot span {
+  color: var(--gf-muted);
+  font-size: 12px;
 }
 .gf-capture-form {
   display: grid;
   gap: 10px;
+}
+.gf-capture-templates {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+.gf-capture-templates span {
+  color: var(--gf-muted);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  margin-right: 2px;
+  text-transform: uppercase;
+}
+.gf-capture-form .gf-capture-templates button {
+  background: color-mix(in srgb, var(--gf-accent) 9%, white);
+  border: 1px solid color-mix(in srgb, var(--gf-accent) 28%, var(--gf-line));
+  border-radius: 999px;
+  color: var(--gf-ink);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  min-height: 30px;
+  padding: 6px 10px;
 }
 .gf-capture-form label {
   color: var(--gf-muted);
@@ -3155,6 +8333,41 @@ body.gf-page {
 }
 .gf-capture-form textarea {
   resize: vertical;
+}
+.gf-viewer-context-preview {
+  background: color-mix(in srgb, var(--gf-soft) 72%, white);
+  border: 1px solid var(--gf-line);
+  border-radius: 10px;
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+}
+.gf-viewer-context-preview b {
+  color: var(--gf-ink);
+  font-size: 13px;
+}
+.gf-viewer-context-preview ul {
+  display: grid;
+  gap: 6px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.gf-viewer-context-preview li {
+  align-items: baseline;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+.gf-viewer-context-preview span {
+  color: var(--gf-muted);
+  font-size: 12px;
+}
+.gf-viewer-context-preview strong {
+  color: var(--gf-ink);
+  font-size: 12px;
+  font-weight: 700;
+  text-align: right;
 }
 .gf-capture-form button {
   border: 1px solid var(--gf-accent);
@@ -3178,6 +8391,69 @@ body.gf-page {
 .gf-capture-status[data-state="saved"] {
   color: var(--gf-accent);
 }
+.gf-context-menu {
+  border: 1px solid var(--gf-line);
+  border-radius: 10px;
+  margin-bottom: 10px;
+  padding: 8px 10px;
+}
+.gf-context-menu summary {
+  cursor: pointer;
+  font-weight: 800;
+}
+.gf-case-packet {
+  background: color-mix(in srgb, var(--gf-soft) 72%, white);
+  border: 1px solid var(--gf-line);
+  border-radius: 12px;
+  display: grid;
+  gap: 8px;
+  margin: 12px 0;
+  padding: 10px;
+}
+.gf-case-packet h4,
+.gf-case-packet h5 {
+  margin: 0;
+}
+.gf-surface-menu {
+  background: color-mix(in srgb, var(--gf-panel) 94%, white);
+  border: 1px solid var(--gf-line);
+  border-radius: 12px;
+  box-shadow: 0 18px 42px rgb(20 29 44 / 20%);
+  display: grid;
+  gap: 6px;
+  min-width: 170px;
+  padding: 10px;
+  position: fixed;
+  z-index: 20;
+}
+.gf-surface-menu strong {
+  color: var(--gf-ink);
+  font-size: 12px;
+  overflow: hidden;
+  padding: 2px 4px 5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gf-surface-menu a,
+.gf-surface-menu button {
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  color: var(--gf-ink);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  padding: 7px 8px;
+  text-align: left;
+  text-decoration: none;
+}
+.gf-surface-menu a:hover,
+.gf-surface-menu button:hover,
+.gf-surface-menu a:focus-visible,
+.gf-surface-menu button:focus-visible {
+  background: var(--gf-accent-soft);
+  outline: none;
+}
 .gf-canvas-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 190px;
@@ -3187,18 +8463,54 @@ body.gf-page {
 .gf-canvas-shell {
   min-width: 0;
   outline: none;
+  position: relative;
 }
 .gf-canvas-shell:focus-visible {
   box-shadow: 0 0 0 3px var(--gf-accent-soft);
+}
+.gf-shortcut-hint {
+  color: var(--gf-muted);
+  font-size: 12px;
+  margin: -4px 0 10px;
+}
+.gf-live-selection {
+  align-items: center;
+  background: color-mix(in srgb, var(--gf-blue-soft) 58%, transparent);
+  border: 1px solid color-mix(in srgb, var(--gf-blue) 24%, var(--gf-line));
+  border-radius: 999px;
+  color: var(--gf-ink);
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 800;
+  margin: 0 0 10px;
+  max-width: 100%;
+  padding: 6px 10px;
+}
+.gf-live-selection[data-selected-count="0"][data-edge-selected="false"] {
+  background: var(--gf-soft);
+  color: var(--gf-muted);
+  font-weight: 700;
 }
 .gf-canvas {
   width: 100%;
   min-height: 360px;
   border: 1px solid var(--gf-line);
   border-radius: 8px;
-  background: #fbfcfa;
+  background:
+    radial-gradient(circle at 20px 20px, color-mix(in srgb, var(--gf-line) 34%, transparent) 1px, transparent 1px),
+    var(--gf-panel);
+  background-size: 28px 28px;
   cursor: grab;
   touch-action: none;
+}
+.gf-canvas-renderer {
+  background: color-mix(in srgb, var(--gf-panel) 92%, var(--gf-blue));
+  border: 1px solid var(--gf-line);
+  border-radius: 8px;
+  display: block;
+  height: auto;
+  margin-bottom: 10px;
+  width: 100%;
 }
 .gf-canvas:active { cursor: grabbing; }
 .gf-canvas defs path,
@@ -3218,9 +8530,37 @@ body.gf-page {
   stroke: var(--gf-accent);
   stroke-width: 3;
 }
+.gf-edge[data-clutter="reduced"] {
+  opacity: .42;
+  stroke-width: 1;
+}
+.gf-edge[data-clutter="hidden"] {
+  opacity: .08;
+}
 .gf-edge:hover {
   stroke: var(--gf-accent);
   stroke-width: 3;
+}
+.gf-graph-item-link:focus-visible {
+  outline: none;
+}
+.gf-graph-item-link:focus-visible .gf-edge {
+  stroke: var(--gf-blue);
+  stroke-width: 4;
+}
+.gf-graph-item-link:focus-visible .gf-node circle,
+.gf-graph-item-link:focus-visible .gf-node rect,
+.gf-graph-item-link:focus-visible .gf-node polygon {
+  filter: drop-shadow(0 0 0.45rem var(--gf-blue-soft));
+  stroke: var(--gf-blue);
+  stroke-width: 4;
+}
+.gf-selection-box {
+  fill: color-mix(in srgb, var(--gf-blue-soft) 62%, transparent);
+  pointer-events: none;
+  stroke: var(--gf-blue);
+  stroke-dasharray: 6 4;
+  stroke-width: 2;
 }
 .gf-node circle,
 .gf-node rect,
@@ -3251,12 +8591,21 @@ body.gf-page {
 .gf-node[data-selected="true"] circle,
 .gf-node[data-selected="true"] rect,
 .gf-node[data-selected="true"] polygon,
+.gf-node:hover circle,
+.gf-node:hover rect,
+.gf-node:hover polygon,
 .gf-node[data-highlight="true"] circle,
 .gf-node[data-highlight="true"] rect,
 .gf-node[data-highlight="true"] polygon {
   fill: var(--gf-blue-soft);
   stroke: var(--gf-blue);
   stroke-width: 3;
+  filter: drop-shadow(0 4px 8px rgb(0 0 0 / 18%));
+}
+.gf-node[data-pinned="true"] circle,
+.gf-node[data-pinned="true"] rect,
+.gf-node[data-pinned="true"] polygon {
+  stroke-dasharray: 5 3;
 }
 .gf-node[data-hidden="true"],
 .gf-edge[data-hidden="true"] {
@@ -3272,10 +8621,97 @@ body.gf-page {
   stroke-linejoin: round;
   pointer-events: none;
 }
+.gf-canvas-legend {
+  background: color-mix(in srgb, var(--gf-soft) 74%, white);
+  border: 1px solid var(--gf-line);
+  border-radius: 14px;
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 12px;
+}
+.gf-canvas-legend-heading {
+  display: grid;
+  gap: 2px;
+}
+.gf-canvas-legend-heading span {
+  color: var(--gf-muted);
+  font-size: 12px;
+}
+.gf-canvas-legend-group {
+  display: grid;
+  gap: 6px;
+}
+.gf-canvas-legend-group h4 {
+  font-size: 12px;
+  letter-spacing: .04em;
+  margin: 0;
+  text-transform: uppercase;
+}
+.gf-canvas-legend-group div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.gf-legend-pill {
+  align-items: center;
+  background: white;
+  border: 1px solid var(--gf-line);
+  border-radius: 999px;
+  color: var(--gf-ink);
+  display: inline-flex;
+  gap: 6px;
+  padding: 4px 7px;
+  text-decoration: none;
+}
+.gf-legend-pill strong {
+  color: var(--gf-muted);
+  font-size: 12px;
+}
+.gf-canvas-legend-markers {
+  display: grid;
+  gap: 7px;
+}
+.gf-legend-marker {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 18px minmax(0, 1fr);
+}
+.gf-legend-marker > span {
+  align-self: start;
+  border: 2px solid var(--gf-accent);
+  border-radius: 999px;
+  height: 14px;
+  margin-top: 2px;
+  width: 14px;
+}
+.gf-legend-marker > span[data-marker="selected"] {
+  background: var(--gf-blue-soft);
+  border-color: var(--gf-blue);
+}
+.gf-legend-marker > span[data-marker="pinned"] {
+  border-style: dashed;
+}
+.gf-legend-marker > span[data-marker="hub"] {
+  background: var(--gf-accent-soft);
+}
+.gf-legend-marker > span[data-marker="evidence"] {
+  background: #fff3d6;
+  border-color: #9b6b17;
+}
+.gf-legend-marker strong {
+  font-size: 12px;
+}
+.gf-legend-marker p {
+  color: var(--gf-muted);
+  font-size: 12px;
+  line-height: 1.35;
+  margin: 0;
+}
 .gf-minimap {
   border: 1px solid var(--gf-line);
   border-radius: 8px;
-  background: #fbfcfa;
+  background: var(--gf-panel);
   padding: 10px;
 }
 .gf-minimap-heading {
@@ -3290,11 +8726,30 @@ body.gf-page {
   width: 100%;
   border: 1px solid var(--gf-line);
   border-radius: 6px;
-  background: #fff;
+  background: var(--gf-panel);
 }
 .gf-minimap circle {
   fill: var(--gf-accent-soft);
   stroke: var(--gf-accent);
+}
+.gf-minimap-viewport {
+  fill: color-mix(in srgb, var(--gf-blue-soft) 28%, transparent);
+  pointer-events: none;
+  stroke: var(--gf-blue);
+  stroke-dasharray: 5 3;
+  stroke-width: 1.5;
+}
+.gf-minimap-node-link {
+  cursor: pointer;
+}
+.gf-minimap-node-link:focus-visible {
+  outline: none;
+}
+.gf-minimap-node-link:focus-visible circle,
+.gf-minimap-node-link:hover circle {
+  fill: var(--gf-blue-soft);
+  stroke: var(--gf-blue);
+  stroke-width: 2;
 }
 .gf-minimap circle[data-selected="true"] {
   fill: var(--gf-blue-soft);
@@ -3312,7 +8767,7 @@ body.gf-page {
 .gf-group-fallback a {
   border: 1px solid var(--gf-line);
   border-radius: 999px;
-  background: #fff;
+  background: var(--gf-panel);
   color: var(--gf-muted);
   font: inherit;
   font-size: 12px;
@@ -3334,7 +8789,7 @@ body.gf-page {
   border: 1px solid var(--gf-line);
   border-radius: 8px;
   padding: 12px;
-  background: #fff;
+  background: var(--gf-panel);
   margin-bottom: 10px;
   overflow-wrap: anywhere;
 }
@@ -3343,6 +8798,38 @@ body.gf-page {
   font-size: 15px;
 }
 .gf-card p { margin: 8px 0; }
+.gf-component-grid {
+  display: grid;
+  gap: 10px;
+}
+.gf-component-card {
+  border-color: color-mix(in srgb, var(--gf-blue) 24%, var(--gf-line));
+}
+.gf-timeline-rail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0;
+}
+.gf-timeline-grid {
+  display: grid;
+  gap: 10px;
+}
+.gf-timeline-card {
+  border-color: color-mix(in srgb, var(--gf-accent) 24%, var(--gf-line));
+}
+.gf-diff-workbench {
+  border-top: 1px solid var(--gf-line);
+  margin-top: 12px;
+  padding-top: 12px;
+}
+.gf-diff-grid {
+  display: grid;
+  gap: 10px;
+}
+.gf-diff-card {
+  border-color: color-mix(in srgb, var(--gf-accent) 30%, var(--gf-line));
+}
 .gf-badge {
   display: inline-flex;
   align-items: center;
@@ -3373,7 +8860,7 @@ body.gf-page {
   border: 1px solid var(--gf-line);
   border-radius: 8px;
   padding: 9px 10px;
-  background: #fff;
+  background: var(--gf-panel);
   overflow-wrap: anywhere;
 }
 .gf-kv {
@@ -3403,7 +8890,7 @@ body.gf-page {
   display: block;
   border: 1px solid var(--gf-line);
   border-radius: 8px;
-  background: #fbfcfa;
+  background: var(--gf-soft);
   padding: 9px 10px;
   color: var(--gf-ink);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -3424,6 +8911,14 @@ a {
   .gf-command-bar,
   .gf-toolbar form { grid-template-columns: 1fr; }
   .gf-summary { justify-content: flex-start; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gf-edge,
+  .gf-node circle,
+  .gf-node rect,
+  .gf-node polygon {
+    transition: none;
+  }
 }
 </style>
 """

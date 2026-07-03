@@ -23,6 +23,7 @@ class GraphFakosViewerState:
     screen: str = "explore"
     layout: str = "force"
     selected_node_id: str | None = None
+    selected_node_ids: tuple[str, ...] = ()
     selected_edge_id: str | None = None
     camera_x: float = 0.0
     camera_y: float = 0.0
@@ -33,6 +34,31 @@ class GraphFakosViewerState:
     expanded_groups: tuple[str, ...] = ()
     hidden_groups: tuple[str, ...] = ()
     saved_view_id: str = ""
+    show_orphans: bool = True
+    show_neighbor_links: bool = True
+    edge_clutter: str = "normal"
+    analytics_overlay: str = "degree"
+    center_force: float = 0.012
+    repel_force: float = 1.0
+    link_distance: float = 1.0
+    node_scale: float = 1.0
+    edge_scale: float = 1.0
+    edge_opacity: float = 1.0
+    label_density: float = 1.0
+    pinned_positions: dict[str, tuple[float, float]] = field(default_factory=dict)
+    style_color_by: str = "kind"
+    style_size_by: str = "score"
+    style_edge_width_by: str = "kind"
+    min_degree: int | None = None
+    max_degree: int | None = None
+    component_id: str = ""
+    connected_to_node_id: str = ""
+    evidence_filter: str = ""
+    cluster_id: str = ""
+    timeline_frame: str = ""
+    timeline_playback: str = "stopped"
+    pivot_node_id: str = ""
+    pivot_mode: str = ""
 
     @classmethod
     def from_request(cls, request: GraphFakosRequest) -> GraphFakosViewerState:
@@ -40,11 +66,40 @@ class GraphFakosViewerState:
             screen=request.screen,
             layout=request.layout,
             selected_node_id=request.focus_node_id,
+            selected_node_ids=request.selected_node_ids,
             selected_edge_id=request.selected_edge_id,
             camera_x=request.camera_x if request.camera_x is not None else 0.0,
             camera_y=request.camera_y if request.camera_y is not None else 0.0,
             camera_zoom=request.camera_zoom if request.camera_zoom is not None else 1.0,
+            render_engine=request.render_engine,
+            theme=request.theme,
             filters=dict(request.filters),
+            saved_view_id=request.saved_view_id,
+            show_orphans=request.show_orphans,
+            show_neighbor_links=request.show_neighbor_links,
+            edge_clutter=request.edge_clutter,
+            analytics_overlay=request.analytics_overlay,
+            center_force=request.center_force,
+            repel_force=request.repel_force,
+            link_distance=request.link_distance,
+            node_scale=request.node_scale,
+            edge_scale=request.edge_scale,
+            edge_opacity=request.edge_opacity,
+            label_density=request.label_density,
+            pinned_positions=dict(request.pinned_positions),
+            style_color_by=request.style_color_by,
+            style_size_by=request.style_size_by,
+            style_edge_width_by=request.style_edge_width_by,
+            min_degree=request.min_degree,
+            max_degree=request.max_degree,
+            component_id=request.component_id,
+            connected_to_node_id=request.connected_to_node_id,
+            evidence_filter=request.evidence_filter,
+            cluster_id=request.cluster_id,
+            timeline_frame=request.timeline_frame,
+            timeline_playback=request.timeline_playback,
+            pivot_node_id=request.pivot_node_id,
+            pivot_mode=request.pivot_mode,
         )
 
     def to_route_query(self) -> dict[str, object]:
@@ -56,9 +111,35 @@ class GraphFakosViewerState:
             "camera_zoom": self.camera_zoom,
             "render_engine": self.render_engine,
             "theme": self.theme,
+            "show_orphans": self.show_orphans,
+            "show_neighbor_links": self.show_neighbor_links,
+            "edge_clutter": self.edge_clutter,
+            "analytics_overlay": self.analytics_overlay,
+            "center_force": self.center_force,
+            "repel_force": self.repel_force,
+            "link_distance": self.link_distance,
+            "node_scale": self.node_scale,
+            "edge_scale": self.edge_scale,
+            "edge_opacity": self.edge_opacity,
+            "label_density": self.label_density,
+            "style_color_by": self.style_color_by,
+            "style_size_by": self.style_size_by,
+            "style_edge_width_by": self.style_edge_width_by,
+            "min_degree": self.min_degree,
+            "max_degree": self.max_degree,
+            "component_id": self.component_id,
+            "connected_to_node_id": self.connected_to_node_id,
+            "evidence_filter": self.evidence_filter,
+            "cluster_id": self.cluster_id,
+            "timeline_frame": self.timeline_frame,
+            "timeline_playback": self.timeline_playback,
+            "pivot_node_id": self.pivot_node_id,
+            "pivot_mode": self.pivot_mode,
         }
         if self.selected_node_id:
             payload["focus_node_id"] = self.selected_node_id
+        if self.selected_node_ids:
+            payload["selected_node_ids"] = ",".join(self.selected_node_ids)
         if self.selected_edge_id:
             payload["selected_edge_id"] = self.selected_edge_id
         if self.saved_view_id:
@@ -75,6 +156,7 @@ class GraphFakosViewerState:
             "screen": self.screen,
             "layout": self.layout,
             "selected_node_id": self.selected_node_id,
+            "selected_node_ids": list(self.selected_node_ids),
             "selected_edge_id": self.selected_edge_id,
             "camera_x": self.camera_x,
             "camera_y": self.camera_y,
@@ -85,6 +167,34 @@ class GraphFakosViewerState:
             "expanded_groups": list(self.expanded_groups),
             "hidden_groups": list(self.hidden_groups),
             "saved_view_id": self.saved_view_id,
+            "show_orphans": self.show_orphans,
+            "show_neighbor_links": self.show_neighbor_links,
+            "edge_clutter": self.edge_clutter,
+            "analytics_overlay": self.analytics_overlay,
+            "center_force": self.center_force,
+            "repel_force": self.repel_force,
+            "link_distance": self.link_distance,
+            "node_scale": self.node_scale,
+            "edge_scale": self.edge_scale,
+            "edge_opacity": self.edge_opacity,
+            "label_density": self.label_density,
+            "pinned_positions": {
+                node_id: [x, y]
+                for node_id, (x, y) in sorted(self.pinned_positions.items())
+            },
+            "style_color_by": self.style_color_by,
+            "style_size_by": self.style_size_by,
+            "style_edge_width_by": self.style_edge_width_by,
+            "min_degree": self.min_degree,
+            "max_degree": self.max_degree,
+            "component_id": self.component_id,
+            "connected_to_node_id": self.connected_to_node_id,
+            "evidence_filter": self.evidence_filter,
+            "cluster_id": self.cluster_id,
+            "timeline_frame": self.timeline_frame,
+            "timeline_playback": self.timeline_playback,
+            "pivot_node_id": self.pivot_node_id,
+            "pivot_mode": self.pivot_mode,
         }
 
     @classmethod
@@ -94,6 +204,10 @@ class GraphFakosViewerState:
             layout=_string(payload.get("layout", "force"), "viewer_state.layout"),
             selected_node_id=_string_or_none(
                 payload.get("selected_node_id"), "viewer_state.selected_node_id"
+            ),
+            selected_node_ids=_tag_tuple(
+                payload.get("selected_node_ids", ()),
+                "viewer_state.selected_node_ids",
             ),
             selected_edge_id=_string_or_none(
                 payload.get("selected_edge_id"), "viewer_state.selected_edge_id"
@@ -118,6 +232,87 @@ class GraphFakosViewerState:
             ),
             saved_view_id=_string(
                 payload.get("saved_view_id", ""), "viewer_state.saved_view_id"
+            ),
+            show_orphans=_bool(
+                payload.get("show_orphans", True), "viewer_state.show_orphans"
+            ),
+            show_neighbor_links=_bool(
+                payload.get("show_neighbor_links", True),
+                "viewer_state.show_neighbor_links",
+            ),
+            edge_clutter=_string(
+                payload.get("edge_clutter", "normal"), "viewer_state.edge_clutter"
+            ),
+            analytics_overlay=_string(
+                payload.get("analytics_overlay", "degree"),
+                "viewer_state.analytics_overlay",
+            ),
+            center_force=_float(
+                payload.get("center_force", 0.012), "viewer_state.center_force"
+            ),
+            repel_force=_float(
+                payload.get("repel_force", 1.0), "viewer_state.repel_force"
+            ),
+            link_distance=_float(
+                payload.get("link_distance", 1.0), "viewer_state.link_distance"
+            ),
+            node_scale=_float(
+                payload.get("node_scale", 1.0), "viewer_state.node_scale"
+            ),
+            edge_scale=_float(
+                payload.get("edge_scale", 1.0), "viewer_state.edge_scale"
+            ),
+            edge_opacity=_float(
+                payload.get("edge_opacity", 1.0), "viewer_state.edge_opacity"
+            ),
+            label_density=_float(
+                payload.get("label_density", 1.0), "viewer_state.label_density"
+            ),
+            pinned_positions=_position_dict(
+                payload.get("pinned_positions", {}),
+                "viewer_state.pinned_positions",
+            ),
+            style_color_by=_string(
+                payload.get("style_color_by", "kind"), "viewer_state.style_color_by"
+            ),
+            style_size_by=_string(
+                payload.get("style_size_by", "score"), "viewer_state.style_size_by"
+            ),
+            style_edge_width_by=_string(
+                payload.get("style_edge_width_by", "kind"),
+                "viewer_state.style_edge_width_by",
+            ),
+            min_degree=_int_or_none(
+                payload.get("min_degree"), "viewer_state.min_degree"
+            ),
+            max_degree=_int_or_none(
+                payload.get("max_degree"), "viewer_state.max_degree"
+            ),
+            component_id=_string(
+                payload.get("component_id", ""), "viewer_state.component_id"
+            ),
+            connected_to_node_id=_string(
+                payload.get("connected_to_node_id", ""),
+                "viewer_state.connected_to_node_id",
+            ),
+            evidence_filter=_string(
+                payload.get("evidence_filter", ""), "viewer_state.evidence_filter"
+            ),
+            cluster_id=_string(
+                payload.get("cluster_id", ""), "viewer_state.cluster_id"
+            ),
+            timeline_frame=_string(
+                payload.get("timeline_frame", ""), "viewer_state.timeline_frame"
+            ),
+            timeline_playback=_string(
+                payload.get("timeline_playback", "stopped"),
+                "viewer_state.timeline_playback",
+            ),
+            pivot_node_id=_string(
+                payload.get("pivot_node_id", ""), "viewer_state.pivot_node_id"
+            ),
+            pivot_mode=_string(
+                payload.get("pivot_mode", ""), "viewer_state.pivot_mode"
             ),
         )
 
@@ -252,6 +447,291 @@ class GraphFakosKnowledgeCapture:
             provider_payload=_object_dict(
                 payload.get("provider_payload", {}),
                 "knowledge_capture.provider_payload",
+            ),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class GraphFakosSavedQuery:
+    query_id: str
+    label: str
+    query: str = ""
+    filters: dict[str, str] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "query_id": self.query_id,
+            "label": self.label,
+            "query": self.query,
+            "filters": dict(self.filters),
+        }
+
+    @classmethod
+    def from_dict(cls, payload: Mapping[str, object]) -> GraphFakosSavedQuery:
+        return cls(
+            query_id=_required_string(payload, "query_id", "saved_query.query_id"),
+            label=_required_string(payload, "label", "saved_query.label"),
+            query=_string(payload.get("query", ""), "saved_query.query"),
+            filters=_string_dict(payload.get("filters", {}), "saved_query.filters"),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class GraphFakosSavedView:
+    view_id: str
+    label: str
+    state: GraphFakosViewerState
+    pinned_positions: dict[str, tuple[float, float]] = field(default_factory=dict)
+    saved_queries: tuple[GraphFakosSavedQuery, ...] = ()
+    provider_payload: dict[str, object] = field(default_factory=dict)
+
+    @classmethod
+    def from_request(
+        cls,
+        request: GraphFakosRequest,
+        *,
+        view_id: str = "route",
+        label: str = "Route View",
+        pinned_positions: dict[str, tuple[float, float]] | None = None,
+        saved_queries: tuple[GraphFakosSavedQuery, ...] = (),
+        provider_payload: dict[str, object] | None = None,
+    ) -> GraphFakosSavedView:
+        return cls(
+            view_id=view_id,
+            label=label,
+            state=GraphFakosViewerState.from_request(request),
+            pinned_positions=pinned_positions
+            if pinned_positions is not None
+            else dict(request.pinned_positions),
+            saved_queries=saved_queries,
+            provider_payload=provider_payload or {},
+        )
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "view_id": self.view_id,
+            "label": self.label,
+            "state": self.state.to_dict(),
+            "pinned_positions": {
+                node_id: [x, y]
+                for node_id, (x, y) in sorted(self.pinned_positions.items())
+            },
+            "saved_queries": [query.to_dict() for query in self.saved_queries],
+            "provider_payload": _json_compatible_dict(self.provider_payload),
+        }
+
+    @classmethod
+    def from_dict(cls, payload: Mapping[str, object]) -> GraphFakosSavedView:
+        return cls(
+            view_id=_required_string(payload, "view_id", "saved_view.view_id"),
+            label=_required_string(payload, "label", "saved_view.label"),
+            state=GraphFakosViewerState.from_dict(
+                _mapping(payload.get("state", {}), "saved_view.state")
+            ),
+            pinned_positions=_position_dict(
+                payload.get("pinned_positions", {}),
+                "saved_view.pinned_positions",
+            ),
+            saved_queries=tuple(
+                GraphFakosSavedQuery.from_dict(item)
+                for item in _mapping_list(
+                    payload.get("saved_queries", []),
+                    "saved_view.saved_queries",
+                )
+            ),
+            provider_payload=_object_dict(
+                payload.get("provider_payload", {}),
+                "saved_view.provider_payload",
+            ),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class GraphFakosGraphAction:
+    action_id: str
+    action_type: str
+    label: str = ""
+    target_id: str = ""
+    body: str = ""
+    tags: tuple[str, ...] = ()
+    source_id: str = ""
+    target_node_id: str = ""
+    provider_payload: dict[str, object] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "action_id": self.action_id,
+            "action_type": self.action_type,
+            "label": self.label,
+            "target_id": self.target_id,
+            "body": self.body,
+            "tags": list(self.tags),
+            "source_id": self.source_id,
+            "target_node_id": self.target_node_id,
+            "provider_payload": _json_compatible_dict(self.provider_payload),
+        }
+
+    @classmethod
+    def from_dict(cls, payload: Mapping[str, object]) -> GraphFakosGraphAction:
+        return cls(
+            action_id=_required_string(payload, "action_id", "graph_action.action_id"),
+            action_type=_required_string(
+                payload,
+                "action_type",
+                "graph_action.action_type",
+            ),
+            label=_string(payload.get("label", ""), "graph_action.label"),
+            target_id=_string(payload.get("target_id", ""), "graph_action.target_id"),
+            body=_string(payload.get("body", ""), "graph_action.body"),
+            tags=_tag_tuple(payload.get("tags", ()), "graph_action.tags"),
+            source_id=_string(payload.get("source_id", ""), "graph_action.source_id"),
+            target_node_id=_string(
+                payload.get("target_node_id", ""),
+                "graph_action.target_node_id",
+            ),
+            provider_payload=_object_dict(
+                payload.get("provider_payload", {}),
+                "graph_action.provider_payload",
+            ),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class GraphFakosActionStatus:
+    action_id: str
+    status: str
+    message: str = ""
+    graph_id: str = ""
+    provider_payload: dict[str, object] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "action_id": self.action_id,
+            "status": self.status,
+            "message": self.message,
+            "graph_id": self.graph_id,
+            "provider_payload": _json_compatible_dict(self.provider_payload),
+        }
+
+    @classmethod
+    def from_dict(cls, payload: Mapping[str, object]) -> GraphFakosActionStatus:
+        return cls(
+            action_id=_required_string(
+                payload,
+                "action_id",
+                "action_status.action_id",
+            ),
+            status=_required_string(payload, "status", "action_status.status"),
+            message=_string(payload.get("message", ""), "action_status.message"),
+            graph_id=_string(payload.get("graph_id", ""), "action_status.graph_id"),
+            provider_payload=_object_dict(
+                payload.get("provider_payload", {}),
+                "action_status.provider_payload",
+            ),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class GraphFakosGraphAnalytics:
+    component_count: int
+    node_count: int = 0
+    edge_count: int = 0
+    hub_node_ids: tuple[str, ...] = ()
+    orphan_node_ids: tuple[str, ...] = ()
+    max_degree: int = 0
+    average_degree: float = 0.0
+    density: float = 0.0
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "component_count": self.component_count,
+            "node_count": self.node_count,
+            "edge_count": self.edge_count,
+            "hub_node_ids": list(self.hub_node_ids),
+            "orphan_node_ids": list(self.orphan_node_ids),
+            "max_degree": self.max_degree,
+            "average_degree": self.average_degree,
+            "density": self.density,
+        }
+
+    @classmethod
+    def from_dict(cls, payload: Mapping[str, object]) -> GraphFakosGraphAnalytics:
+        return cls(
+            component_count=_int(
+                payload.get("component_count", 0),
+                "graph_analytics.component_count",
+            ),
+            node_count=_int(payload.get("node_count", 0), "graph_analytics.node_count"),
+            edge_count=_int(payload.get("edge_count", 0), "graph_analytics.edge_count"),
+            hub_node_ids=_string_tuple(
+                payload.get("hub_node_ids", ()),
+                "graph_analytics.hub_node_ids",
+            ),
+            orphan_node_ids=_string_tuple(
+                payload.get("orphan_node_ids", ()),
+                "graph_analytics.orphan_node_ids",
+            ),
+            max_degree=_int(payload.get("max_degree", 0), "graph_analytics.max_degree"),
+            average_degree=_float(
+                payload.get("average_degree", 0.0),
+                "graph_analytics.average_degree",
+            ),
+            density=_float(payload.get("density", 0.0), "graph_analytics.density"),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class GraphFakosReplayBundle:
+    bundle_id: str
+    graph: GraphFakosGraph
+    viewer_state: GraphFakosViewerState
+    schema_version: str = "graphfakos.replay.v1"
+    created_at: str = ""
+    saved_views: tuple[GraphFakosSavedView, ...] = ()
+    analytics: GraphFakosGraphAnalytics | None = None
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "schema_version": self.schema_version,
+            "bundle_id": self.bundle_id,
+            "created_at": self.created_at,
+            "graph": self.graph.to_dict(),
+            "viewer_state": self.viewer_state.to_dict(),
+            "saved_views": [view.to_dict() for view in self.saved_views],
+            "analytics": self.analytics.to_dict()
+            if self.analytics is not None
+            else None,
+        }
+
+    @classmethod
+    def from_dict(cls, payload: Mapping[str, object]) -> GraphFakosReplayBundle:
+        analytics_payload = payload.get("analytics")
+        return cls(
+            bundle_id=_required_string(payload, "bundle_id", "replay_bundle.bundle_id"),
+            schema_version=_string(
+                payload.get("schema_version", "graphfakos.replay.v1"),
+                "replay_bundle.schema_version",
+            ),
+            created_at=_string(
+                payload.get("created_at", ""), "replay_bundle.created_at"
+            ),
+            graph=GraphFakosGraph.from_dict(
+                _mapping(payload.get("graph", {}), "replay_bundle.graph")
+            ),
+            viewer_state=GraphFakosViewerState.from_dict(
+                _mapping(payload.get("viewer_state", {}), "replay_bundle.viewer_state")
+            ),
+            saved_views=tuple(
+                GraphFakosSavedView.from_dict(item)
+                for item in _mapping_list(
+                    payload.get("saved_views", []),
+                    "replay_bundle.saved_views",
+                )
+            ),
+            analytics=None
+            if analytics_payload in (None, "")
+            else GraphFakosGraphAnalytics.from_dict(
+                _mapping(analytics_payload, "replay_bundle.analytics")
             ),
         )
 
@@ -775,6 +1255,7 @@ class GraphFakosRequest:
     preset_id: str = ""
     query: str = ""
     focus_node_id: str | None = None
+    selected_node_ids: tuple[str, ...] = ()
     selected_edge_id: str | None = None
     source_node_id: str | None = None
     target_node_id: str | None = None
@@ -789,6 +1270,34 @@ class GraphFakosRequest:
     camera_x: float | None = None
     camera_y: float | None = None
     camera_zoom: float | None = None
+    render_engine: str = "svg"
+    theme: str = "default"
+    saved_view_id: str = ""
+    show_orphans: bool = True
+    show_neighbor_links: bool = True
+    edge_clutter: str = "normal"
+    analytics_overlay: str = "degree"
+    center_force: float = 0.012
+    repel_force: float = 1.0
+    link_distance: float = 1.0
+    node_scale: float = 1.0
+    edge_scale: float = 1.0
+    edge_opacity: float = 1.0
+    label_density: float = 1.0
+    pinned_positions: dict[str, tuple[float, float]] = field(default_factory=dict)
+    style_color_by: str = "kind"
+    style_size_by: str = "score"
+    style_edge_width_by: str = "kind"
+    min_degree: int | None = None
+    max_degree: int | None = None
+    component_id: str = ""
+    connected_to_node_id: str = ""
+    evidence_filter: str = ""
+    cluster_id: str = ""
+    timeline_frame: str = ""
+    timeline_playback: str = "stopped"
+    pivot_node_id: str = ""
+    pivot_mode: str = ""
 
     def with_screen(self, screen: GraphFakosScreen) -> GraphFakosRequest:
         return GraphFakosRequest(
@@ -796,6 +1305,7 @@ class GraphFakosRequest:
             preset_id=self.preset_id,
             query=self.query,
             focus_node_id=self.focus_node_id,
+            selected_node_ids=self.selected_node_ids,
             selected_edge_id=self.selected_edge_id,
             source_node_id=self.source_node_id,
             target_node_id=self.target_node_id,
@@ -810,6 +1320,34 @@ class GraphFakosRequest:
             camera_x=self.camera_x,
             camera_y=self.camera_y,
             camera_zoom=self.camera_zoom,
+            render_engine=self.render_engine,
+            theme=self.theme,
+            saved_view_id=self.saved_view_id,
+            show_orphans=self.show_orphans,
+            show_neighbor_links=self.show_neighbor_links,
+            edge_clutter=self.edge_clutter,
+            analytics_overlay=self.analytics_overlay,
+            center_force=self.center_force,
+            repel_force=self.repel_force,
+            link_distance=self.link_distance,
+            node_scale=self.node_scale,
+            edge_scale=self.edge_scale,
+            edge_opacity=self.edge_opacity,
+            label_density=self.label_density,
+            pinned_positions=dict(self.pinned_positions),
+            style_color_by=self.style_color_by,
+            style_size_by=self.style_size_by,
+            style_edge_width_by=self.style_edge_width_by,
+            min_degree=self.min_degree,
+            max_degree=self.max_degree,
+            component_id=self.component_id,
+            connected_to_node_id=self.connected_to_node_id,
+            evidence_filter=self.evidence_filter,
+            cluster_id=self.cluster_id,
+            timeline_frame=self.timeline_frame,
+            timeline_playback=self.timeline_playback,
+            pivot_node_id=self.pivot_node_id,
+            pivot_mode=self.pivot_mode,
         )
 
     def to_dict(self) -> dict[str, object]:
@@ -818,6 +1356,7 @@ class GraphFakosRequest:
             "preset_id": self.preset_id,
             "query": self.query,
             "focus_node_id": self.focus_node_id,
+            "selected_node_ids": list(self.selected_node_ids),
             "selected_edge_id": self.selected_edge_id,
             "source_node_id": self.source_node_id,
             "target_node_id": self.target_node_id,
@@ -832,6 +1371,37 @@ class GraphFakosRequest:
             "camera_x": self.camera_x,
             "camera_y": self.camera_y,
             "camera_zoom": self.camera_zoom,
+            "render_engine": self.render_engine,
+            "theme": self.theme,
+            "saved_view_id": self.saved_view_id,
+            "show_orphans": self.show_orphans,
+            "show_neighbor_links": self.show_neighbor_links,
+            "edge_clutter": self.edge_clutter,
+            "analytics_overlay": self.analytics_overlay,
+            "center_force": self.center_force,
+            "repel_force": self.repel_force,
+            "link_distance": self.link_distance,
+            "node_scale": self.node_scale,
+            "edge_scale": self.edge_scale,
+            "edge_opacity": self.edge_opacity,
+            "label_density": self.label_density,
+            "pinned_positions": {
+                node_id: [x, y]
+                for node_id, (x, y) in sorted(self.pinned_positions.items())
+            },
+            "style_color_by": self.style_color_by,
+            "style_size_by": self.style_size_by,
+            "style_edge_width_by": self.style_edge_width_by,
+            "min_degree": self.min_degree,
+            "max_degree": self.max_degree,
+            "component_id": self.component_id,
+            "connected_to_node_id": self.connected_to_node_id,
+            "evidence_filter": self.evidence_filter,
+            "cluster_id": self.cluster_id,
+            "timeline_frame": self.timeline_frame,
+            "timeline_playback": self.timeline_playback,
+            "pivot_node_id": self.pivot_node_id,
+            "pivot_mode": self.pivot_mode,
         }
 
     @classmethod
@@ -845,6 +1415,9 @@ class GraphFakosRequest:
             query=_string(payload.get("query", ""), "request.query"),
             focus_node_id=_string_or_none(
                 payload.get("focus_node_id"), "request.focus_node_id"
+            ),
+            selected_node_ids=_tag_tuple(
+                payload.get("selected_node_ids", ()), "request.selected_node_ids"
             ),
             selected_edge_id=_string_or_none(
                 payload.get("selected_edge_id"),
@@ -880,6 +1453,82 @@ class GraphFakosRequest:
             camera_zoom=_float_or_none(
                 payload.get("camera_zoom"), "request.camera_zoom"
             ),
+            render_engine=_string(
+                payload.get("render_engine", "svg"), "request.render_engine"
+            ),
+            theme=_string(payload.get("theme", "default"), "request.theme"),
+            saved_view_id=_string(
+                payload.get("saved_view_id", ""),
+                "request.saved_view_id",
+            ),
+            show_orphans=_bool(
+                payload.get("show_orphans", True),
+                "request.show_orphans",
+            ),
+            show_neighbor_links=_bool(
+                payload.get("show_neighbor_links", True),
+                "request.show_neighbor_links",
+            ),
+            edge_clutter=_string(
+                payload.get("edge_clutter", "normal"),
+                "request.edge_clutter",
+            ),
+            analytics_overlay=_string(
+                payload.get("analytics_overlay", "degree"),
+                "request.analytics_overlay",
+            ),
+            center_force=_float(
+                payload.get("center_force", 0.012), "request.center_force"
+            ),
+            repel_force=_float(payload.get("repel_force", 1.0), "request.repel_force"),
+            link_distance=_float(
+                payload.get("link_distance", 1.0), "request.link_distance"
+            ),
+            node_scale=_float(payload.get("node_scale", 1.0), "request.node_scale"),
+            edge_scale=_float(payload.get("edge_scale", 1.0), "request.edge_scale"),
+            edge_opacity=_float(
+                payload.get("edge_opacity", 1.0), "request.edge_opacity"
+            ),
+            label_density=_float(
+                payload.get("label_density", 1.0), "request.label_density"
+            ),
+            pinned_positions=_position_dict(
+                payload.get("pinned_positions", {}), "request.pinned_positions"
+            ),
+            style_color_by=_string(
+                payload.get("style_color_by", "kind"), "request.style_color_by"
+            ),
+            style_size_by=_string(
+                payload.get("style_size_by", "score"), "request.style_size_by"
+            ),
+            style_edge_width_by=_string(
+                payload.get("style_edge_width_by", "kind"),
+                "request.style_edge_width_by",
+            ),
+            min_degree=_int_or_none(payload.get("min_degree"), "request.min_degree"),
+            max_degree=_int_or_none(payload.get("max_degree"), "request.max_degree"),
+            component_id=_string(
+                payload.get("component_id", ""), "request.component_id"
+            ),
+            connected_to_node_id=_string(
+                payload.get("connected_to_node_id", ""),
+                "request.connected_to_node_id",
+            ),
+            evidence_filter=_string(
+                payload.get("evidence_filter", ""), "request.evidence_filter"
+            ),
+            cluster_id=_string(payload.get("cluster_id", ""), "request.cluster_id"),
+            timeline_frame=_string(
+                payload.get("timeline_frame", ""), "request.timeline_frame"
+            ),
+            timeline_playback=_string(
+                payload.get("timeline_playback", "stopped"),
+                "request.timeline_playback",
+            ),
+            pivot_node_id=_string(
+                payload.get("pivot_node_id", ""), "request.pivot_node_id"
+            ),
+            pivot_mode=_string(payload.get("pivot_mode", ""), "request.pivot_mode"),
         )
 
 
@@ -987,6 +1636,21 @@ def _string_tuple_dict(value: object, field_name: str) -> dict[str, tuple[str, .
     return parsed
 
 
+def _position_dict(value: object, field_name: str) -> dict[str, tuple[float, float]]:
+    mapping = _mapping(value, field_name)
+    parsed: dict[str, tuple[float, float]] = {}
+    for key, item in mapping.items():
+        if not isinstance(key, str):
+            raise TypeError(f"{field_name} must use string keys")
+        if not isinstance(item, (list, tuple)) or len(item) != 2:
+            raise TypeError(f"{field_name}.{key} must be a two-item coordinate")
+        parsed[key] = (
+            _float(item[0], f"{field_name}.{key}.x"),
+            _float(item[1], f"{field_name}.{key}.y"),
+        )
+    return parsed
+
+
 def _object_dict(value: object, field_name: str) -> dict[str, object]:
     mapping = _mapping(value, field_name)
     parsed: dict[str, object] = {}
@@ -1016,14 +1680,20 @@ def _json_compatible(value: object) -> object:
 
 __all__ = [
     "GraphFakosCitation",
+    "GraphFakosActionStatus",
     "GraphFakosDiagnostics",
     "GraphFakosEdge",
     "GraphFakosExpansionRequest",
     "GraphFakosGraph",
+    "GraphFakosGraphAction",
+    "GraphFakosGraphAnalytics",
     "GraphFakosKnowledgeCapture",
     "GraphFakosNode",
     "GraphFakosProvenance",
     "GraphFakosRequest",
+    "GraphFakosReplayBundle",
+    "GraphFakosSavedQuery",
+    "GraphFakosSavedView",
     "GraphFakosScreen",
     "GraphFakosSnapshot",
     "GraphFakosTheme",

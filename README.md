@@ -38,9 +38,9 @@ builder or memory store.
 
 ## Initial Release Status
 
-GraphFakos is a `0.0.1` semantic-alpha package. The initial public release is
-intended for local package integrations, adapter development, and visual graph
-inspection. The stable starting contract is the provider-neutral DTO model,
+GraphFakos is a `0.0.2` semantic-alpha release intended for
+local package integrations, adapter development, and visual graph inspection.
+The stable package contract is the provider-neutral DTO model,
 `GraphFakosProvider`, static HTML export, local preview serving, console
 scripts, and reusable viewer assertions.
 
@@ -104,19 +104,32 @@ python3.11 -m pip install -e .
   browser runtime assets
 - camera-aware saved-view routes with `camera_x`, `camera_y`, and
   `camera_zoom`
+- browser-local saved-view slots for workbench iteration without implying
+  provider persistence or hosted collaboration
 - serializable viewer state plus provider-neutral command, event,
-  expansion-request, knowledge-capture, and theme DTOs for host integrations
+  expansion-request, knowledge-capture, saved-view, saved-query, graph-action,
+  action-status, graph-analytics, replay-bundle, and theme DTOs for host
+  integrations
 - an explicit SVG renderer contract with clear unsupported-engine failures for
   future Canvas/WebGL seams
+- route-preserved renderer/theme state so host workbenches can experiment with
+  Canvas/WebGL while static exports honestly fall back to SVG
 - provider-neutral visual hierarchy with node shapes, edge arrows, selected
   path emphasis, minimap orientation, group toggles, and side-panel
   cross-highlighting
-- depth-aware neighborhood expansion and path source/target controls
+- depth-aware neighborhood expansion, orphan visibility, neighbor-link
+  visibility, edge-clutter controls, analytics overlays, and path source/target
+  controls
+- route-backed command palette with saved queries, navigation, evidence review,
+  authoring jumps, export-state shortcuts, and progressive keyboard filtering
+  for faster graph workbench flow
 - hub-aware navigation panels that recommend global, local-depth, evidence,
   path, status, and context routes for larger graphs
 - preview-server knowledge capture forms so host providers or workers can
   consume operator notes, code observations, questions, or memory hints and
   rebuild the graph
+- preview-server graph action forms so providers can accept draft nodes, links,
+  merge/alias requests, or return clear unsupported-action statuses
 - public query syntax guidance for graph filters such as `kind:`, `tag:`,
   `source:`, `edge:`, `id:`, `label:`, `summary:`, `has:`, quoted phrases,
   `score>=`, and `time>=`
@@ -128,8 +141,8 @@ python3.11 -m pip install -e .
   standalone review flows
 - static HTML export for portable inspection
 - embeddable HTML fragments for host package shells
-- JSON, Markdown, and DOT graph exports for CI proof, issue attachments, and
-  package-local review flows
+- JSON, Markdown, DOT, and replay-bundle exports for CI proof, issue
+  attachments, exact-state replay, and package-local review flows
 - a local HTTP preview server for interactive package development
 - a fake fixture provider for tests and third-party adapter examples
 - shared test assertions for graph viewer contracts
@@ -215,6 +228,7 @@ make preview-timeline
 make preview-warnings
 make preview-path
 make preview-provenance
+make preview-workbench
 make preview-budget
 make preview-islands
 ```
@@ -222,13 +236,15 @@ make preview-islands
 These commands use deterministic demo scenarios instead of real provider data,
 which makes UI work easier to repeat. The available scenarios are
 `agent-memory`, `source-code`, `dense`, `timeline`, `warnings`, `pathfinding`,
-`provenance`, `facets`, `budget`, and `islands`.
+`provenance`, `facets`, `workbench-mixed`, `budget`, and `islands`.
 
 Use the scenarios as a core-feature plus UI matrix:
 
 - `pathfinding`: path screen, source/target controls, shortest-path highlight.
 - `provenance`: provenance screen, citation cards, evidence coverage.
 - `facets`: filter controls across node kind, edge kind, tag, and source.
+- `workbench-mixed`: combined agent/session memory, code, docs, tests, human
+  notes, evidence gaps, and preview-only graph actions.
 - `budget`: render-limit behavior, summarized hidden nodes, show-more route.
 - `islands`: provider-status diagnostics for disconnected components.
 - `agent-memory`: knowledge capture workflow beside a focused agent/memory
@@ -248,6 +264,7 @@ graphfakos-ui --demo-scenario source-code --screen explore --serve --open
 graphfakos-ui --demo-scenario dense --screen explore --layout grouped --render-limit 240 --serve --open
 graphfakos-ui --demo-scenario timeline --screen timeline --layout timeline --serve --open
 graphfakos-ui --demo-scenario pathfinding --screen path --source-node-id provider:entry --target-node-id artifact:result --serve --open
+graphfakos-ui --demo-scenario workbench-mixed --screen explore --focus-node-id agent:reviewer --serve --open
 ```
 
 Render the built-in third-party fixture manually:
@@ -267,6 +284,7 @@ graphfakos-ui \
   --report-out graphfakos-report.json \
   --markdown-report-out graphfakos-report.md \
   --dot-out graphfakos-report.dot \
+  --bundle-out graphfakos-replay.json \
   --json
 ```
 

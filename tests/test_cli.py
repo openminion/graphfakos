@@ -154,6 +154,7 @@ def test_graphfakos_ui_preview_writes_embed_and_report_outputs(tmp_path) -> None
     report_path = tmp_path / "graphfakos-report.json"
     markdown_path = tmp_path / "graphfakos-report.md"
     dot_path = tmp_path / "graphfakos-report.dot"
+    bundle_path = tmp_path / "graphfakos-replay.json"
     result = subprocess.run(
         [
             sys.executable,
@@ -174,6 +175,8 @@ def test_graphfakos_ui_preview_writes_embed_and_report_outputs(tmp_path) -> None
             str(markdown_path),
             "--dot-out",
             str(dot_path),
+            "--bundle-out",
+            str(bundle_path),
             "--json",
         ],
         check=True,
@@ -188,6 +191,7 @@ def test_graphfakos_ui_preview_writes_embed_and_report_outputs(tmp_path) -> None
     assert payload["report"]["report"] is True
     assert payload["markdown_report"]["markdown_report"] is True
     assert payload["dot"]["dot"] is True
+    assert payload["replay_bundle"]["replay_bundle"] is True
     assert "Snapshot Diff" in output_path.read_text(encoding="utf-8")
     assert "data-graphfakos-embed='true'" in embed_path.read_text(encoding="utf-8")
     report = json.loads(report_path.read_text(encoding="utf-8"))
@@ -197,6 +201,9 @@ def test_graphfakos_ui_preview_writes_embed_and_report_outputs(tmp_path) -> None
     assert 'digraph "fixture"' in dot_path.read_text(encoding="utf-8")
     artifact = json.loads(artifact_path.read_text(encoding="utf-8"))
     assert artifact["provider_id"] == "fixture"
+    bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+    assert bundle["graph"]["provider_id"] == "fixture"
+    assert bundle["saved_views"][0]["view_id"] == "route"
 
 
 def test_graphfakos_ui_preview_loads_provider_module_and_graph_artifact(

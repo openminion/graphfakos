@@ -12,6 +12,7 @@ import webbrowser
 RenderPath = Callable[[str, dict[str, list[str]]], str]
 ActionHandler = Callable[[str, dict[str, object]], dict[str, object]]
 _MAX_ACTION_BYTES = 1024 * 1024
+_VIEWER_CONTEXT_FIELD = "viewer_context"
 
 
 @dataclass(frozen=True, slots=True)
@@ -110,9 +111,9 @@ def make_local_viewer_server(
                 return
             try:
                 raw_payload = self.rfile.read(content_length).decode("utf-8")
-                payload = json.loads(raw_payload)
-            except (UnicodeDecodeError, json.JSONDecodeError):
-                self._send_json(400, {"ok": False, "error": "body must be JSON"})
+                payload = self._parse_action_payload(raw_payload)
+            except (UnicodeDecodeError, json.JSONDecodeError, TypeError) as exc:
+                self._send_json(400, {"ok": False, "error": str(exc)})
                 return
             if not isinstance(payload, dict):
                 self._send_json(400, {"ok": False, "error": "body must be an object"})
@@ -125,6 +126,12 @@ def make_local_viewer_server(
             except Exception as exc:
                 self._send_json(500, {"ok": False, "error": str(exc)})
                 return
+            if self._should_redirect_after_action(result):
+                self.send_response(303)
+                self.send_header("Location", self._safe_return_path())
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                return
             self._send_json(200, result)
 
         def _send_json(self, status: int, payload: dict[str, object]) -> None:
@@ -136,6 +143,49 @@ def make_local_viewer_server(
             self.end_headers()
             self.wfile.write(body)
 
+        def _parse_action_payload(self, raw_payload: str) -> dict[str, object]:
+            content_type = self.headers.get("Content-Type", "")
+            media_type = content_type.split(";", 1)[0].strip().lower()
+            if media_type in ("", "application/json"):
+                payload = json.loads(raw_payload)
+                if not isinstance(payload, dict):
+                    raise TypeError("body must be an object")
+                return payload
+            if media_type == "application/x-www-form-urlencoded":
+                fields = parse_qs(raw_payload, keep_blank_values=True)
+                return _normalize_form_action_payload(
+                    {
+                        key: values[-1] if values else ""
+                        for key, values in fields.items()
+                    }
+                )
+            raise TypeError("body must be JSON or application/x-www-form-urlencoded")
+
+        def _should_redirect_after_action(
+            self,
+            payload: dict[str, object],
+        ) -> bool:
+            if payload.get("ok") is not True:
+                return False
+            content_type = self.headers.get("Content-Type", "")
+            media_type = content_type.split(";", 1)[0].strip().lower()
+            if media_type != "application/x-www-form-urlencoded":
+                return False
+            accept = self.headers.get("Accept", "")
+            return "application/json" not in accept.lower()
+
+        def _safe_return_path(self) -> str:
+            fallback = default_path if default_path.startswith("/") else "/explore"
+            referer = self.headers.get("Referer", "")
+            if not referer:
+                return fallback
+            parsed = urlparse(referer)
+            if parsed.path.startswith("/api/") or not parsed.path.startswith("/"):
+                return fallback
+            if parsed.query:
+                return f"{parsed.path}?{parsed.query}"
+            return parsed.path or fallback
+
         def log_message(self, format: str, *args: object) -> None:
             return
 
@@ -143,6 +193,35 @@ def make_local_viewer_server(
     bound_host, bound_port = server.server_address
     server.preview_url = f"http://{bound_host}:{bound_port}{default_path}"
     return server
+
+
+def _normalize_form_action_payload(payload: dict[str, object]) -> dict[str, object]:
+    provider_payload = _form_provider_payload(payload)
+    viewer_context = _json_mapping(payload.get(_VIEWER_CONTEXT_FIELD))
+    if viewer_context:
+        provider_payload = {**provider_payload, _VIEWER_CONTEXT_FIELD: viewer_context}
+    if provider_payload:
+        payload["provider_payload"] = provider_payload
+    return payload
+
+
+def _form_provider_payload(payload: dict[str, object]) -> dict[str, object]:
+    provider_payload = payload.get("provider_payload")
+    if isinstance(provider_payload, dict):
+        return dict(provider_payload)
+    parsed = _json_mapping(provider_payload)
+    return parsed if parsed is not None else {}
+
+
+def _json_mapping(value: object) -> dict[str, object] | None:
+    if isinstance(value, dict):
+        return dict(value)
+    if not isinstance(value, str) or not value.strip():
+        return None
+    parsed = json.loads(value)
+    if not isinstance(parsed, dict):
+        raise TypeError("JSON form payload fields must be objects")
+    return parsed
 
 
 def serve_local_viewer(

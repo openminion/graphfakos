@@ -14,12 +14,18 @@ from .adapters import (
     FixtureGraphProvider,
 )
 from .models import (
+    GraphFakosActionStatus,
+    GraphFakosGraphAction,
     GraphFakosGraph,
     GraphFakosKnowledgeCapture,
     GraphFakosRequest,
     GraphFakosScreen,
 )
-from .provider import GraphFakosKnowledgeCaptureProvider, GraphFakosProvider
+from .provider import (
+    GraphFakosGraphActionProvider,
+    GraphFakosKnowledgeCaptureProvider,
+    GraphFakosProvider,
+)
 from .server import serve_local_viewer
 from .static import (
     GraphPreviewOutputPaths,
@@ -42,7 +48,7 @@ _SCREENS: tuple[GraphFakosScreen, ...] = (
 def smoke_payload() -> dict[str, object]:
     return {
         "package": "graphfakos",
-        "version": "0.0.1",
+        "version": "0.0.2",
         "status": "semantic-alpha",
         "semantic_contract": True,
         "openminion_imports": False,
@@ -81,6 +87,7 @@ def _request_from_args(args: argparse.Namespace) -> GraphFakosRequest:
         preset_id=args.preset,
         query=args.query,
         focus_node_id=args.focus_node_id,
+        selected_node_ids=_tuple_from_csv(args.selected_node_ids),
         selected_edge_id=args.selected_edge_id,
         source_node_id=args.source_node_id,
         target_node_id=args.target_node_id,
@@ -93,6 +100,34 @@ def _request_from_args(args: argparse.Namespace) -> GraphFakosRequest:
         camera_x=args.camera_x,
         camera_y=args.camera_y,
         camera_zoom=args.camera_zoom,
+        render_engine=args.render_engine,
+        theme=args.theme,
+        saved_view_id=args.saved_view_id,
+        show_orphans=not args.hide_orphans,
+        show_neighbor_links=not args.hide_neighbor_links,
+        edge_clutter=args.edge_clutter,
+        analytics_overlay=args.analytics_overlay,
+        center_force=args.center_force,
+        repel_force=args.repel_force,
+        link_distance=args.link_distance,
+        node_scale=args.node_scale,
+        edge_scale=args.edge_scale,
+        edge_opacity=args.edge_opacity,
+        label_density=args.label_density,
+        pinned_positions=_pinned_positions_from_json(args.pinned_positions_json),
+        style_color_by=args.style_color_by,
+        style_size_by=args.style_size_by,
+        style_edge_width_by=args.style_edge_width_by,
+        min_degree=args.min_degree,
+        max_degree=args.max_degree,
+        component_id=args.component_id,
+        connected_to_node_id=args.connected_to_node_id,
+        evidence_filter=args.evidence_filter,
+        cluster_id=args.cluster_id,
+        timeline_frame=args.timeline_frame,
+        timeline_playback=args.timeline_playback,
+        pivot_node_id=args.pivot_node_id,
+        pivot_mode=args.pivot_mode,
     )
 
 
@@ -174,6 +209,36 @@ def _provider_config(raw_payload: str) -> dict[str, Any]:
     return payload
 
 
+def _tuple_from_csv(raw_value: str) -> tuple[str, ...]:
+    return tuple(item.strip() for item in raw_value.split(",") if item.strip())
+
+
+def _pinned_positions_from_json(raw_payload: str) -> dict[str, tuple[float, float]]:
+    if not raw_payload:
+        return {}
+    try:
+        payload = json.loads(raw_payload)
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"--pinned-positions-json must be valid JSON: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise SystemExit("--pinned-positions-json must decode to an object")
+    positions: dict[str, tuple[float, float]] = {}
+    for node_id, coordinate in payload.items():
+        if not isinstance(node_id, str):
+            raise SystemExit("--pinned-positions-json keys must be node id strings")
+        if not isinstance(coordinate, (list, tuple)) or len(coordinate) != 2:
+            raise SystemExit(
+                "--pinned-positions-json values must be two-item coordinate arrays"
+            )
+        try:
+            positions[node_id] = (float(coordinate[0]), float(coordinate[1]))
+        except (TypeError, ValueError) as exc:
+            raise SystemExit(
+                "--pinned-positions-json coordinates must be numeric"
+            ) from exc
+    return positions
+
+
 def _validate_provider_args(args: argparse.Namespace) -> None:
     if args.demo_scenario and (args.graph_json or args.provider_module):
         raise SystemExit(
@@ -195,11 +260,31 @@ def _validate_provider_args(args: argparse.Namespace) -> None:
         raise SystemExit("--provider-class requires --provider-module")
 
 
-def _handle_provider_action(
+def handle_provider_action(
     provider: GraphFakosProvider,
     path: str,
     payload: dict[str, object],
 ) -> dict[str, object]:
+    if path == "/api/action":
+        action = GraphFakosGraphAction.from_dict(payload)
+        if not isinstance(provider, GraphFakosGraphActionProvider):
+            status = GraphFakosActionStatus(
+                action_id=action.action_id,
+                status="unsupported",
+                message="provider does not support graph edit actions",
+            )
+            return {"ok": False, "status": status.to_dict(), "action": action.to_dict()}
+        result = provider.submit_graph_action(action)
+        if isinstance(result, GraphFakosActionStatus):
+            return {"ok": True, "status": result.to_dict(), "action": action.to_dict()}
+        if isinstance(result, dict):
+            return {"ok": True, "result": result, "action": action.to_dict()}
+        status = GraphFakosActionStatus(
+            action_id=action.action_id,
+            status="queued",
+            message="provider accepted the graph action",
+        )
+        return {"ok": True, "status": status.to_dict(), "action": action.to_dict()}
     if path != "/api/knowledge":
         return {"ok": False, "error": f"unsupported GraphFakos action path: {path}"}
     capture = GraphFakosKnowledgeCapture.from_dict(payload)
@@ -213,6 +298,12 @@ def _handle_provider_action(
     response: dict[str, object] = {"ok": True, "capture": capture.to_dict()}
     if isinstance(result, GraphFakosGraph):
         response["graph"] = result.to_dict()
+        response["status"] = GraphFakosActionStatus(
+            action_id=f"capture:{capture.link_node_id or 'graph'}",
+            status="done",
+            message="knowledge capture was applied by the provider",
+            graph_id=result.graph_id,
+        ).to_dict()
     elif isinstance(result, dict):
         response["result"] = result
     elif result is not None:
@@ -226,6 +317,7 @@ def ui_preview_main(argv: list[str] | None = None) -> int:
     parser.add_argument("--preset", default="")
     parser.add_argument("--query", default="")
     parser.add_argument("--focus-node-id")
+    parser.add_argument("--selected-node-ids", default="")
     parser.add_argument("--selected-edge-id")
     parser.add_argument("--source-node-id")
     parser.add_argument("--target-node-id")
@@ -242,12 +334,41 @@ def ui_preview_main(argv: list[str] | None = None) -> int:
     parser.add_argument("--camera-x", type=float)
     parser.add_argument("--camera-y", type=float)
     parser.add_argument("--camera-zoom", type=float)
+    parser.add_argument("--render-engine", default="svg")
+    parser.add_argument("--theme", default="default")
+    parser.add_argument("--saved-view-id", default="")
+    parser.add_argument("--hide-orphans", action="store_true")
+    parser.add_argument("--hide-neighbor-links", action="store_true")
+    parser.add_argument("--edge-clutter", default="normal")
+    parser.add_argument("--analytics-overlay", default="degree")
+    parser.add_argument("--center-force", type=float, default=0.012)
+    parser.add_argument("--repel-force", type=float, default=1.0)
+    parser.add_argument("--link-distance", type=float, default=1.0)
+    parser.add_argument("--node-scale", type=float, default=1.0)
+    parser.add_argument("--edge-scale", type=float, default=1.0)
+    parser.add_argument("--edge-opacity", type=float, default=1.0)
+    parser.add_argument("--label-density", type=float, default=1.0)
+    parser.add_argument("--pinned-positions-json", default="")
+    parser.add_argument("--style-color-by", default="kind")
+    parser.add_argument("--style-size-by", default="score")
+    parser.add_argument("--style-edge-width-by", default="kind")
+    parser.add_argument("--min-degree", type=int)
+    parser.add_argument("--max-degree", type=int)
+    parser.add_argument("--component-id", default="")
+    parser.add_argument("--connected-to-node-id", default="")
+    parser.add_argument("--evidence-filter", default="")
+    parser.add_argument("--cluster-id", default="")
+    parser.add_argument("--timeline-frame", default="")
+    parser.add_argument("--timeline-playback", default="stopped")
+    parser.add_argument("--pivot-node-id", default="")
+    parser.add_argument("--pivot-mode", default="")
     parser.add_argument("--html-out", default="graphfakos-ui-preview.html")
     parser.add_argument("--artifact-out", default="")
     parser.add_argument("--embed-out", default="")
     parser.add_argument("--report-out", default="")
     parser.add_argument("--markdown-report-out", default="")
     parser.add_argument("--dot-out", default="")
+    parser.add_argument("--bundle-out", default="")
     parser.add_argument("--demo-scenario", choices=DEMO_SCENARIOS, default="")
     parser.add_argument("--graph-json", default="")
     parser.add_argument("--comparison-graph-json", default="")
@@ -278,7 +399,7 @@ def ui_preview_main(argv: list[str] | None = None) -> int:
                 path,
                 query,
             ),
-            handle_action=lambda path, payload: _handle_provider_action(
+            handle_action=lambda path, payload: handle_provider_action(
                 provider,
                 path,
                 payload,
@@ -301,6 +422,7 @@ def ui_preview_main(argv: list[str] | None = None) -> int:
             report_path=args.report_out,
             markdown_report_path=args.markdown_report_out,
             dot_path=args.dot_out,
+            bundle_path=args.bundle_out,
         ),
         open_browser=args.open,
     )

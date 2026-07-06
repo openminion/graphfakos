@@ -110,7 +110,8 @@ persists the saved view or accepts a graph action.
 Automated package tests should cover generated HTML, route state, camera
 parameters, controls, data attributes, and no-JavaScript SVG fallback. Pointer
 behavior can be proven by a future browser/DOM harness or by recorded manual
-preview evidence when a tracker explicitly allows that proof mode.
+preview evidence when the package validation plan explicitly allows that proof
+mode.
 
 ## Dynamic Viewer Runtime Contract
 

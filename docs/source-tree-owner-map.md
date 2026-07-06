@@ -39,10 +39,6 @@ and `graphfakos.ui`.
 - `docs/custom-provider-example.md`: package-neutral third-party provider example
 - `docs/ui-contracts.md`: shared viewer contract, wrapper responsibilities,
   and provider-adapter expectations
-- `docs/specs/`: package-local planning specs for GraphFakos-owned viewer
-  roadmap work
-- `docs/trackers/`: package-local execution trackers for GraphFakos-owned
-  viewer roadmap work
 - `docs/source-tree-owner-map.md`: this source-tree owner map
 
 ## Source

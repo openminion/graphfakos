@@ -426,9 +426,10 @@ def test_build_graph_replay_bundle_uses_provider_neutral_state() -> None:
 
 
 def test_renderer_selection_contract_rejects_unsupported_engines() -> None:
-    assert SUPPORTED_RENDER_ENGINES == ("svg", "canvas")
+    assert SUPPORTED_RENDER_ENGINES == ("svg", "canvas", "3d")
     assert validate_render_engine("svg") == "svg"
     assert validate_render_engine("canvas") == "canvas"
+    assert validate_render_engine("3d") == "3d"
 
     with pytest.raises(ValueError, match="unsupported GraphFakos render engine"):
         validate_render_engine("webgl")

@@ -12,6 +12,7 @@ from .adapters import (
     DemoGraphProvider,
     FileGraphProvider,
     FixtureGraphProvider,
+    ProviderEnvelopeGraphProvider,
 )
 from .models import (
     GraphFakosActionStatus,
@@ -155,6 +156,11 @@ def _provider_from_args(args: argparse.Namespace) -> GraphFakosProvider:
         except (OSError, TypeError, ValueError) as exc:
             raise SystemExit(f"Unable to load graph artifact provider: {exc}") from exc
         return provider
+    if args.provider_envelope:
+        try:
+            return ProviderEnvelopeGraphProvider(args.provider_envelope)
+        except (OSError, TypeError, ValueError) as exc:
+            raise SystemExit(f"Unable to load provider envelope: {exc}") from exc
     if args.provider_module:
         try:
             module = importlib.import_module(args.provider_module)
@@ -240,12 +246,22 @@ def _pinned_positions_from_json(raw_payload: str) -> dict[str, tuple[float, floa
 
 
 def _validate_provider_args(args: argparse.Namespace) -> None:
-    if args.demo_scenario and (args.graph_json or args.provider_module):
+    if args.demo_scenario and (
+        args.graph_json or args.provider_module or args.provider_envelope
+    ):
         raise SystemExit(
-            "--demo-scenario cannot be combined with --graph-json or --provider-module"
+            "--demo-scenario cannot be combined with --graph-json, "
+            "--provider-envelope, or --provider-module"
         )
-    if args.graph_json and args.provider_module:
-        raise SystemExit("--graph-json cannot be combined with --provider-module")
+    if args.graph_json and (args.provider_module or args.provider_envelope):
+        raise SystemExit(
+            "--graph-json cannot be combined with --provider-envelope "
+            "or --provider-module"
+        )
+    if args.provider_envelope and args.provider_module:
+        raise SystemExit(
+            "--provider-envelope cannot be combined with --provider-module"
+        )
     if args.comparison_graph_json and not args.graph_json:
         raise SystemExit("--comparison-graph-json requires --graph-json")
     if args.overlay_graph_json and not args.graph_json:
@@ -256,6 +272,7 @@ def _validate_provider_args(args: argparse.Namespace) -> None:
         args.provider_class != "FixtureGraphProvider"
         and not args.provider_module
         and not args.graph_json
+        and not args.provider_envelope
     ):
         raise SystemExit("--provider-class requires --provider-module")
 
@@ -371,6 +388,7 @@ def ui_preview_main(argv: list[str] | None = None) -> int:
     parser.add_argument("--bundle-out", default="")
     parser.add_argument("--demo-scenario", choices=DEMO_SCENARIOS, default="")
     parser.add_argument("--graph-json", default="")
+    parser.add_argument("--provider-envelope", default="")
     parser.add_argument("--comparison-graph-json", default="")
     parser.add_argument("--overlay-graph-json", action="append", default=[])
     parser.add_argument("--provider-module", default="")

@@ -1576,8 +1576,8 @@ def _filter_toolbar(
         f"<input name='min_score' value='{escape(filters.get('min_score', ''))}' "
         "placeholder='Min score'>"
         f"{_select('layout', 'Layout', layout_options, request.layout)}"
-        f"{_select('render_engine', 'Renderer', ('svg', 'canvas', 'webgl'), request.render_engine)}"
-        f"{_select('theme', 'Theme', ('default', 'ink', 'paper'), request.theme)}"
+        f"{_select('render_engine', 'Renderer', ('svg', 'canvas', '3d'), request.render_engine)}"
+        f"{_select('theme', 'Theme', ('default', 'ink', 'paper', 'space'), request.theme)}"
         f"<input name='limit' value='{request.limit}' placeholder='Cards'>"
         f"<input name='render_limit' value='{request.render_limit}' placeholder='Canvas'>"
         f"<input type='hidden' name='saved_view_id' value='{escape(request.saved_view_id)}'>"
@@ -1609,7 +1609,7 @@ def _workspace_controls(graph: GraphFakosGraph, request: GraphFakosRequest) -> s
         "<section class='gf-toolbar gf-workspace-controls' aria-label='Saved workspace controls'>"
         "<form method='get' action='/explore'>"
         f"<input name='saved_view_id' value='{escape(saved_view.view_id)}' placeholder='Saved view id'>"
-        f"{_select('theme', 'Theme', ('default', 'ink', 'paper'), request.theme)}"
+        f"{_select('theme', 'Theme', ('default', 'ink', 'paper', 'space'), request.theme)}"
         f"<input type='hidden' name='query' value='{escape(request.query)}'>"
         f"<input type='hidden' name='layout' value='{escape(request.layout)}'>"
         f"<input type='hidden' name='focus_node_id' value='{escape(request.focus_node_id or '')}'>"
@@ -6171,6 +6171,14 @@ def _renderer_notice(request: GraphFakosRequest) -> str:
             "available as the static fallback and accessibility surface."
             "</p>"
         )
+    if request.render_engine == "3d":
+        return (
+            "<p class='gf-note gf-renderer-notice'>"
+            "3D navigation mode is selected. This portable export keeps the SVG graph "
+            "as the accessibility fallback while browser hosts can enhance orbit, "
+            "cluster drag, and space-style navigation from the same state."
+            "</p>"
+        )
     return (
         "<p class='gf-note gf-renderer-notice'>"
         f"Requested renderer {escape(request.render_engine)} is recorded for host workbenches; "
@@ -7690,6 +7698,19 @@ body.gf-page[data-theme="ink"] {
   --gf-blue-soft: #172b46;
   color-scheme: dark;
 }
+body.gf-page[data-theme="space"] {
+  --gf-bg: #060b1c;
+  --gf-ink: #eef5ff;
+  --gf-muted: #aebbe0;
+  --gf-line: #263458;
+  --gf-panel: #0b1229;
+  --gf-soft: #101a36;
+  --gf-accent: #64d9f3;
+  --gf-accent-soft: #0b3444;
+  --gf-blue: #a998ff;
+  --gf-blue-soft: #201a50;
+  color-scheme: dark;
+}
 body.gf-page[data-theme="paper"] {
   --gf-bg: #fbf3df;
   --gf-ink: #30251b;
@@ -8502,6 +8523,24 @@ body.gf-page[data-theme="paper"] {
   background-size: 28px 28px;
   cursor: grab;
   touch-action: none;
+}
+body.gf-page[data-theme="space"] .gf-canvas {
+  background:
+    radial-gradient(circle at 16% 24%, rgba(100, 217, 243, .13), transparent 24%),
+    radial-gradient(circle at 78% 18%, rgba(169, 152, 255, .12), transparent 22%),
+    radial-gradient(circle at 50% 80%, rgba(72, 255, 190, .09), transparent 24%),
+    radial-gradient(circle at 18px 18px, rgba(238, 245, 255, .18) 1px, transparent 1px),
+    linear-gradient(135deg, #071126, #070a1c 52%, #10123a);
+  background-size: auto, auto, auto, 64px 64px, auto;
+  box-shadow: inset 0 0 90px rgba(100, 217, 243, .08);
+}
+body.gf-page[data-theme="space"] .gf-edge {
+  stroke: rgba(198, 224, 255, .58);
+}
+body.gf-page[data-theme="space"] .gf-node circle,
+body.gf-page[data-theme="space"] .gf-node rect,
+body.gf-page[data-theme="space"] .gf-node polygon {
+  filter: drop-shadow(0 0 8px rgba(100, 217, 243, .24));
 }
 .gf-canvas-renderer {
   background: color-mix(in srgb, var(--gf-panel) 92%, var(--gf-blue));

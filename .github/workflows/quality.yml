@@ -45,7 +45,9 @@ jobs:
               --show-diff-on-failure
             exit 0
           fi
-          if [[ -n "${BEFORE_SHA}" && "${BEFORE_SHA}" != "0000000000000000000000000000000000000000" ]]; then
+          if [[ -n "${BEFORE_SHA}" \
+            && "${BEFORE_SHA}" != "0000000000000000000000000000000000000000" \
+            && -n "$(git rev-parse --verify --quiet "${BEFORE_SHA}^{commit}")" ]]; then
             ./.venv/bin/python3.11 -m pre_commit run \
               --from-ref "${BEFORE_SHA}" \
               --to-ref HEAD \
@@ -81,7 +83,9 @@ jobs:
               base_commit="$(git merge-base HEAD FETCH_HEAD)"
               mapfile -t commits < <(git rev-list --reverse "${base_commit}..HEAD")
             fi
-          elif [[ -n "${BEFORE_SHA}" && "${BEFORE_SHA}" != "0000000000000000000000000000000000000000" ]]; then
+          elif [[ -n "${BEFORE_SHA}" \
+            && "${BEFORE_SHA}" != "0000000000000000000000000000000000000000" \
+            && -n "$(git rev-parse --verify --quiet "${BEFORE_SHA}^{commit}")" ]]; then
             mapfile -t commits < <(git rev-list --reverse "${BEFORE_SHA}..HEAD")
           fi
           if [[ ${#commits[@]} -eq 0 ]]; then

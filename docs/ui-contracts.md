@@ -145,10 +145,48 @@ Knowledge capture follows the same boundary. GraphFakos may render a
 local preview mode, but the provider or host owns persistence, worker queues,
 fact extraction, memory promotion, source ingestion, and graph rebuild policy.
 
-The first renderer is `svg`. `canvas` and `webgl` are future
-renderer-interface targets only; unsupported render engines should fail clearly
+The static baseline renderer is `svg`. The dynamic runtime also accepts `3d` as
+a package-local projected SVG interaction mode with yaw/pitch camera state,
+orbit gestures, perspective scaling, and route/export persistence. `canvas` and
+WebGL-backed renderers remain future backend targets behind the same
+provider-neutral state contract; unsupported render engines should fail clearly
 through the public renderer validation helper rather than silently changing DTO
 behavior.
+
+## Scalable Graph Interaction Contract
+
+The graph surface is the primary UI. Dense views should preserve a large canvas,
+small readable points, progressive labels, natural curved edges, reversible
+group chips, and cluster/island placement before exposing secondary panels.
+Static export remains the SVG baseline when JavaScript is unavailable.
+
+Viewer state owns theme, camera, hidden groups, selected ids, and pinned
+positions. Theme may persist in browser-local storage and should be carried
+across same-origin viewer route changes, but that is workbench convenience only;
+it is not provider persistence.
+
+Group controls must be reversible. Hiding a group should leave the chip visible
+with an inactive state, and `Show all` must restore all hidden groups without
+rebuilding provider data.
+
+Node drag may pin one viewer-local node position. Cluster drag may move members
+of the same rendered cluster together while preserving their relative offsets.
+Both behaviors are viewer-local until a provider explicitly accepts a
+provider-neutral action payload. `Reset`, `Layout`, or an equivalent control
+must restore the canonical formation.
+
+Edges should update live when nodes or clusters move. Dense routes should prefer
+curved, bundled, alpha-scaled, or aggregate edge rendering over straight-line
+clutter. Providers remain responsible for graph truth; GraphFakos only renders
+the provider-neutral DTOs and emits provider-neutral commands.
+
+`3d` navigation is a progressive enhancement over the same SVG fallback. Empty
+canvas drag orbits the projected scene, Shift/Alt-drag pans, scroll zooms toward
+the cursor, `W/A/S/D` moves through the scene, `Q/E` adjusts yaw, and
+double-click centers a node. Saved routes and exported viewer state must carry
+`camera_yaw` and `camera_pitch` in addition to `camera_x`, `camera_y`, and
+`camera_zoom`. Static export may render the same graph without live orbit, but
+it must remain readable and provider-neutral.
 
 ## Local Workbench Server Contract
 

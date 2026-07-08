@@ -86,7 +86,13 @@ def _provider_envelope() -> dict[str, object]:
                 "source_cluster_id": "scale-001",
                 "target_cluster_id": "scale-002",
                 "edge_count": 1200,
-            }
+            },
+            {
+                "id": "bundle:scale-001:scale-002",
+                "source_cluster_id": "scale-001",
+                "target_cluster_id": "scale-002",
+                "edge_count": 350,
+            },
         ],
         "omitted": [
             {"reason": "node_budget", "count": 199_998},
@@ -111,6 +117,8 @@ def test_provider_envelope_converts_to_cluster_graph() -> None:
     assert graph.stats["hidden_nodes"] == 199_998
     assert any(node.kind == "cluster" for node in graph.nodes)
     assert any(edge.kind == "edge_bundle" for edge in graph.edges)
+    assert len({edge.id for edge in graph.edges}) == len(graph.edges)
+    assert any(edge.id.startswith("edge-bundle:") for edge in graph.edges)
     assert graph.citations[0].excerpt == "Actual provider content preview."
 
 

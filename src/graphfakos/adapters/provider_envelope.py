@@ -64,7 +64,8 @@ def graph_from_provider_envelope(
     nodes.extend(_raw_node(_mapping(item)) for item in envelope.get("nodes") or ())
     edges = [_raw_edge(_mapping(item)) for item in envelope.get("edges") or ()]
     edges.extend(
-        _bundle_edge(_mapping(item)) for item in envelope.get("edge_bundles") or ()
+        _bundle_edge(_mapping(item), index)
+        for index, item in enumerate(envelope.get("edge_bundles") or ())
     )
     stats = _mapping(envelope.get("graph_stats"))
     omitted = tuple(_mapping(item) for item in envelope.get("omitted") or ())
@@ -201,11 +202,12 @@ def _raw_edge(edge: Mapping[str, Any]) -> GraphFakosEdge:
     )
 
 
-def _bundle_edge(bundle: Mapping[str, Any]) -> GraphFakosEdge:
+def _bundle_edge(bundle: Mapping[str, Any], index: int) -> GraphFakosEdge:
     source = str(bundle.get("source_cluster_id") or "")
     target = str(bundle.get("target_cluster_id") or "")
+    provider_id = str(bundle.get("id") or f"bundle:{source}:{target}")
     return GraphFakosEdge(
-        id=str(bundle.get("id") or f"bundle:{source}:{target}"),
+        id=f"edge-bundle:{index}:{provider_id}",
         source_id=f"cluster:{source}",
         target_id=f"cluster:{target}",
         kind="edge_bundle",

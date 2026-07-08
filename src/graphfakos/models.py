@@ -28,6 +28,8 @@ class GraphFakosViewerState:
     camera_x: float = 0.0
     camera_y: float = 0.0
     camera_zoom: float = 1.0
+    camera_yaw: float = 0.0
+    camera_pitch: float = 0.0
     render_engine: str = "svg"
     theme: str = "default"
     filters: dict[str, str] = field(default_factory=dict)
@@ -71,6 +73,10 @@ class GraphFakosViewerState:
             camera_x=request.camera_x if request.camera_x is not None else 0.0,
             camera_y=request.camera_y if request.camera_y is not None else 0.0,
             camera_zoom=request.camera_zoom if request.camera_zoom is not None else 1.0,
+            camera_yaw=request.camera_yaw if request.camera_yaw is not None else 0.0,
+            camera_pitch=(
+                request.camera_pitch if request.camera_pitch is not None else 0.0
+            ),
             render_engine=request.render_engine,
             theme=request.theme,
             filters=dict(request.filters),
@@ -109,6 +115,8 @@ class GraphFakosViewerState:
             "camera_x": self.camera_x,
             "camera_y": self.camera_y,
             "camera_zoom": self.camera_zoom,
+            "camera_yaw": self.camera_yaw,
+            "camera_pitch": self.camera_pitch,
             "render_engine": self.render_engine,
             "theme": self.theme,
             "show_orphans": self.show_orphans,
@@ -161,6 +169,8 @@ class GraphFakosViewerState:
             "camera_x": self.camera_x,
             "camera_y": self.camera_y,
             "camera_zoom": self.camera_zoom,
+            "camera_yaw": self.camera_yaw,
+            "camera_pitch": self.camera_pitch,
             "render_engine": self.render_engine,
             "theme": self.theme,
             "filters": dict(self.filters),
@@ -216,6 +226,12 @@ class GraphFakosViewerState:
             camera_y=_float(payload.get("camera_y", 0.0), "viewer_state.camera_y"),
             camera_zoom=_float(
                 payload.get("camera_zoom", 1.0), "viewer_state.camera_zoom"
+            ),
+            camera_yaw=_float(
+                payload.get("camera_yaw", 0.0), "viewer_state.camera_yaw"
+            ),
+            camera_pitch=_float(
+                payload.get("camera_pitch", 0.0), "viewer_state.camera_pitch"
             ),
             render_engine=_string(
                 payload.get("render_engine", "svg"), "viewer_state.render_engine"
@@ -1270,6 +1286,8 @@ class GraphFakosRequest:
     camera_x: float | None = None
     camera_y: float | None = None
     camera_zoom: float | None = None
+    camera_yaw: float | None = None
+    camera_pitch: float | None = None
     render_engine: str = "svg"
     theme: str = "default"
     saved_view_id: str = ""
@@ -1320,6 +1338,8 @@ class GraphFakosRequest:
             camera_x=self.camera_x,
             camera_y=self.camera_y,
             camera_zoom=self.camera_zoom,
+            camera_yaw=self.camera_yaw,
+            camera_pitch=self.camera_pitch,
             render_engine=self.render_engine,
             theme=self.theme,
             saved_view_id=self.saved_view_id,
@@ -1371,6 +1391,8 @@ class GraphFakosRequest:
             "camera_x": self.camera_x,
             "camera_y": self.camera_y,
             "camera_zoom": self.camera_zoom,
+            "camera_yaw": self.camera_yaw,
+            "camera_pitch": self.camera_pitch,
             "render_engine": self.render_engine,
             "theme": self.theme,
             "saved_view_id": self.saved_view_id,
@@ -1452,6 +1474,10 @@ class GraphFakosRequest:
             camera_y=_float_or_none(payload.get("camera_y"), "request.camera_y"),
             camera_zoom=_float_or_none(
                 payload.get("camera_zoom"), "request.camera_zoom"
+            ),
+            camera_yaw=_float_or_none(payload.get("camera_yaw"), "request.camera_yaw"),
+            camera_pitch=_float_or_none(
+                payload.get("camera_pitch"), "request.camera_pitch"
             ),
             render_engine=_string(
                 payload.get("render_engine", "svg"), "request.render_engine"

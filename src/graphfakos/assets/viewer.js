@@ -5,11 +5,35 @@
     return Number.isFinite(parsed) ? parsed : fallback;
   };
   const clone = (value) => JSON.parse(JSON.stringify(value || {}));
+  const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    "\"": "&quot;",
+    "'": "&#39;",
+  })[char]);
   const splitList = (value) => String(value || "")
-    .split(",")
+    .split(/[,\s]+/)
     .map((item) => item.trim())
     .filter(Boolean);
   const workbookStorageKey = "graphfakos:viewer-workbook:v1";
+  const themeStorageKey = "graphfakos:viewer-theme:v1";
+  const safeLocalStorage = () => {
+    try {
+      return typeof window !== "undefined" ? window.localStorage : null;
+    } catch (_error) {
+      return null;
+    }
+  };
+  const readStoredTheme = () => {
+    const value = safeLocalStorage()?.getItem?.(themeStorageKey);
+    return ["default", "ink", "paper", "space"].includes(value) ? value : "";
+  };
+  const writeStoredTheme = (theme) => {
+    const storage = safeLocalStorage();
+    if (!storage?.setItem || !["default", "ink", "paper", "space"].includes(theme)) return;
+    storage.setItem(themeStorageKey, theme);
+  };
   const viewerContext = (state) => {
     const current = normalizeState(state);
     return {
@@ -22,6 +46,8 @@
         x: current.camera_x,
         y: current.camera_y,
         zoom: current.camera_zoom,
+        yaw: current.camera_yaw,
+        pitch: current.camera_pitch,
       },
       layout: current.layout,
       render_engine: current.render_engine,
@@ -45,7 +71,7 @@
     return {
       screen: context.query ? `${context.screen}: ${context.query}` : context.screen,
       selection,
-      camera: `x=${number(context.camera.x, 0).toFixed(1)}, y=${number(context.camera.y, 0).toFixed(1)}, zoom=${number(context.camera.zoom, 1).toFixed(2)}`,
+      camera: `x=${number(context.camera.x, 0).toFixed(1)}, y=${number(context.camera.y, 0).toFixed(1)}, zoom=${number(context.camera.zoom, 1).toFixed(2)}, yaw=${number(context.camera.yaw, 0).toFixed(1)}, pitch=${number(context.camera.pitch, 0).toFixed(1)}`,
       view: `${context.layout} / ${context.render_engine} / ${context.theme}`,
       filters,
     };
@@ -60,6 +86,8 @@
     camera_x: 0,
     camera_y: 0,
     camera_zoom: 1,
+    camera_yaw: 0,
+    camera_pitch: 0,
     render_engine: "svg",
     theme: "default",
     filters: {},
@@ -98,6 +126,8 @@
     next.camera_x = number(next.camera_x, 0);
     next.camera_y = number(next.camera_y, 0);
     next.camera_zoom = clamp(number(next.camera_zoom, 1), 0.35, 3);
+    next.camera_yaw = clamp(number(next.camera_yaw, 0), -180, 180);
+    next.camera_pitch = clamp(number(next.camera_pitch, 0), -72, 72);
     next.filters = clone(next.filters);
     next.selected_node_ids = Array.isArray(next.selected_node_ids) ? next.selected_node_ids.filter(Boolean) : [];
     next.expanded_groups = Array.isArray(next.expanded_groups) ? next.expanded_groups : [];
@@ -143,6 +173,13 @@
       const nodeId = command.target_id || payload.node_id;
       if (nodeId) next.pinned_positions[nodeId] = [number(payload.x, 0), number(payload.y, 0)];
     }
+    if (action === "pin-many") {
+      Object.entries(payload.positions || {}).forEach(([nodeId, position]) => {
+        if (Array.isArray(position) && position.length === 2) {
+          next.pinned_positions[nodeId] = [number(position[0], 0), number(position[1], 0)];
+        }
+      });
+    }
     if (action === "unpin-node") {
       const nodeId = command.target_id || payload.node_id;
       if (nodeId) delete next.pinned_positions[nodeId];
@@ -152,6 +189,8 @@
       next.camera_x = number(payload.x ?? payload.camera_x, next.camera_x);
       next.camera_y = number(payload.y ?? payload.camera_y, next.camera_y);
       next.camera_zoom = clamp(number(payload.zoom ?? payload.camera_zoom, next.camera_zoom), 0.35, 3);
+      next.camera_yaw = clamp(number(payload.yaw ?? payload.camera_yaw, next.camera_yaw), -180, 180);
+      next.camera_pitch = clamp(number(payload.pitch ?? payload.camera_pitch, next.camera_pitch), -72, 72);
     }
     if (action === "layout") next.layout = command.value || payload.layout || next.layout;
     if (action === "filter") {
@@ -170,6 +209,7 @@
         next.hidden_groups = [...hidden].sort();
       }
     }
+    if (action === "group-show-all") next.hidden_groups = [];
     if (action === "expand") {
       const group = command.target_id || payload.source_id;
       if (group && !next.expanded_groups.includes(group)) next.expanded_groups = [...next.expanded_groups, group].sort();
@@ -211,6 +251,8 @@
     put("camera_x", current.camera_x.toFixed(2));
     put("camera_y", current.camera_y.toFixed(2));
     put("camera_zoom", current.camera_zoom.toFixed(2));
+    put("camera_yaw", current.camera_yaw.toFixed(2));
+    put("camera_pitch", current.camera_pitch.toFixed(2));
     put("render_engine", current.render_engine);
     put("theme", current.theme);
     put("saved_view_id", current.saved_view_id);
@@ -302,6 +344,8 @@
     url.searchParams.set("camera_x", state.camera_x.toFixed(2));
     url.searchParams.set("camera_y", state.camera_y.toFixed(2));
     url.searchParams.set("camera_zoom", state.camera_zoom.toFixed(2));
+    url.searchParams.set("camera_yaw", state.camera_yaw.toFixed(2));
+    url.searchParams.set("camera_pitch", state.camera_pitch.toFixed(2));
     setUrlParam(url, "focus_node_id", state.selected_node_id);
     setUrlParam(url, "selected_node_ids", state.selected_node_ids);
     setUrlParam(url, "selected_edge_id", state.selected_edge_id);
@@ -361,6 +405,9 @@
     shell.dataset.cameraX = state.camera_x.toFixed(2);
     shell.dataset.cameraY = state.camera_y.toFixed(2);
     shell.dataset.cameraZoom = state.camera_zoom.toFixed(2);
+    shell.dataset.cameraYaw = state.camera_yaw.toFixed(2);
+    shell.dataset.cameraPitch = state.camera_pitch.toFixed(2);
+    apply3DProjection(shell, state);
     updateMinimapViewport(shell, state);
     updateSavedLink(shell.closest("graphfakos-viewer") || document, state);
   };
@@ -368,6 +415,109 @@
   const connectedEdges = (shell, nodeId) => [
     ...shell.querySelectorAll(`[data-source-id="${CSS.escape(nodeId)}"], [data-target-id="${CSS.escape(nodeId)}"]`),
   ];
+
+  const curvedEdgePath = (x1, y1, x2, y2, edgeId = "") => {
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const distance = Math.hypot(dx, dy) || 1;
+    const bendSign = [...String(edgeId)].reduce((total, char) => total + char.charCodeAt(0), 0) % 2 ? -1 : 1;
+    const bend = clamp(distance * 0.12, 10, 46) * bendSign;
+    const cx = (x1 + x2) / 2 - (dy / distance) * bend;
+    const cy = (y1 + y2) / 2 + (dx / distance) * bend;
+    return `M${x1.toFixed(1)},${y1.toFixed(1)} Q${cx.toFixed(1)},${cy.toFixed(1)} ${x2.toFixed(1)},${y2.toFixed(1)}`;
+  };
+
+  const shellViewport = (shell) => {
+    const viewBox = shell.querySelector(".gf-canvas")?.viewBox?.baseVal;
+    return {
+      width: viewBox?.width || 1280,
+      height: viewBox?.height || 720,
+    };
+  };
+
+  const is3DMode = (shell, state) => (
+    (state?.render_engine || shell?.dataset?.renderEngine || "") === "3d"
+  );
+
+  const nodeWorldPoint = (node) => ({
+    x: number(node.dataset.x, number(node.dataset.layoutX, 0)),
+    y: number(node.dataset.y, number(node.dataset.layoutY, 0)),
+    z: number(node.dataset.z, number(node.dataset.layoutZ, 0)),
+  });
+
+  const projectPoint3D = (point, state, viewport) => {
+    const centerX = viewport.width / 2;
+    const centerY = viewport.height / 2;
+    const yaw = number(state.camera_yaw, 0) * Math.PI / 180;
+    const pitch = number(state.camera_pitch, 0) * Math.PI / 180;
+    const dx = point.x - centerX;
+    const dy = point.y - centerY;
+    const dz = point.z;
+    const yawX = dx * Math.cos(yaw) - dz * Math.sin(yaw);
+    const yawZ = dx * Math.sin(yaw) + dz * Math.cos(yaw);
+    const pitchY = dy * Math.cos(pitch) - yawZ * Math.sin(pitch);
+    const pitchZ = dy * Math.sin(pitch) + yawZ * Math.cos(pitch);
+    const perspective = clamp(760 / (760 + pitchZ), 0.42, 1.7);
+    return {
+      x: centerX + yawX * perspective,
+      y: centerY + pitchY * perspective,
+      z: pitchZ,
+      scale: perspective,
+      opacity: clamp(0.5 + perspective * 0.42, 0.42, 1),
+    };
+  };
+
+  const apply3DProjection = (shell, state) => {
+    if (!is3DMode(shell, state)) {
+      shell.dataset.projection = "flat";
+      shell.querySelectorAll(".gf-node").forEach((node) => {
+        const x = number(node.dataset.x, 0);
+        const y = number(node.dataset.y, 0);
+        node.dataset.projectedX = x.toFixed(1);
+        node.dataset.projectedY = y.toFixed(1);
+        node.dataset.projectedZ = number(node.dataset.z, 0).toFixed(1);
+        node.dataset.depthScale = "1.00";
+        node.style.opacity = "";
+        node.setAttribute("transform", `translate(${x.toFixed(1)} ${y.toFixed(1)})`);
+      });
+      shell.querySelectorAll(".gf-edge").forEach((edge) => updateEdgeGeometry(edge));
+      return;
+    }
+    shell.dataset.projection = "perspective";
+    const viewport = shellViewport(shell);
+    const nodes = [...shell.querySelectorAll(".gf-node")];
+    nodes.forEach((node) => {
+      const projected = projectPoint3D(nodeWorldPoint(node), state, viewport);
+      node.dataset.projectedX = projected.x.toFixed(1);
+      node.dataset.projectedY = projected.y.toFixed(1);
+      node.dataset.projectedZ = projected.z.toFixed(1);
+      node.dataset.depthScale = projected.scale.toFixed(2);
+      node.style.opacity = projected.opacity.toFixed(2);
+      node.setAttribute(
+        "transform",
+        `translate(${projected.x.toFixed(1)} ${projected.y.toFixed(1)}) scale(${projected.scale.toFixed(3)})`,
+      );
+    });
+    shell.querySelectorAll(".gf-edge").forEach((edge) => updateEdgeGeometry(edge));
+  };
+
+  const updateEdgeGeometry = (edge) => {
+    const root = edge.closest?.(".gf-canvas-shell");
+    const source = root?.querySelector?.(`.gf-node[data-node-id="${CSS.escape(edge.dataset.sourceId || "")}"]`);
+    const target = root?.querySelector?.(`.gf-node[data-node-id="${CSS.escape(edge.dataset.targetId || "")}"]`);
+    const x1 = number(source?.dataset.projectedX, number(edge.dataset.sourceX, number(edge.getAttribute("x1"), 0)));
+    const y1 = number(source?.dataset.projectedY, number(edge.dataset.sourceY, number(edge.getAttribute("y1"), 0)));
+    const x2 = number(target?.dataset.projectedX, number(edge.dataset.targetX, number(edge.getAttribute("x2"), 0)));
+    const y2 = number(target?.dataset.projectedY, number(edge.dataset.targetY, number(edge.getAttribute("y2"), 0)));
+    if (edge.tagName?.toLowerCase() === "path") {
+      edge.setAttribute("d", curvedEdgePath(x1, y1, x2, y2, edge.dataset.edgeId || ""));
+      return;
+    }
+    edge.setAttribute("x1", x1.toFixed(1));
+    edge.setAttribute("y1", y1.toFixed(1));
+    edge.setAttribute("x2", x2.toFixed(1));
+    edge.setAttribute("y2", y2.toFixed(1));
+  };
 
   const applyNodePosition = (shell, nodeId, x, y, pinned = true) => {
     const node = shell.querySelector(`.gf-node[data-node-id="${CSS.escape(nodeId)}"]`);
@@ -380,13 +530,40 @@
     node.setAttribute("transform", `translate(${roundedX} ${roundedY})`);
     connectedEdges(shell, nodeId).forEach((edge) => {
       if (edge.dataset.sourceId === nodeId) {
-        edge.setAttribute("x1", roundedX);
-        edge.setAttribute("y1", roundedY);
+        edge.dataset.sourceX = roundedX;
+        edge.dataset.sourceY = roundedY;
       }
       if (edge.dataset.targetId === nodeId) {
-        edge.setAttribute("x2", roundedX);
-        edge.setAttribute("y2", roundedY);
+        edge.dataset.targetX = roundedX;
+        edge.dataset.targetY = roundedY;
       }
+      updateEdgeGeometry(edge);
+    });
+    const root = shell.closest?.("graphfakos-viewer");
+    if (root?.getState) apply3DProjection(shell, root.getState());
+  };
+
+  const clearConnectedEmphasis = (shell) => {
+    shell.querySelectorAll(".gf-node[data-neighbor='true']").forEach((node) => {
+      node.dataset.neighbor = "false";
+    });
+    shell.querySelectorAll(".gf-edge[data-stretched='true']").forEach((edge) => {
+      edge.dataset.stretched = "false";
+    });
+  };
+
+  const emphasizeConnectedEdges = (shell, nodeIds) => {
+    const ids = new Set(Array.isArray(nodeIds) ? nodeIds.filter(Boolean) : []);
+    if (!ids.size) return;
+    shell.querySelectorAll(".gf-edge").forEach((edge) => {
+      const connected = ids.has(edge.dataset.sourceId) || ids.has(edge.dataset.targetId);
+      edge.dataset.stretched = connected ? "true" : edge.dataset.stretched || "false";
+      if (!connected) return;
+      [edge.dataset.sourceId, edge.dataset.targetId].forEach((nodeId) => {
+        if (!nodeId || ids.has(nodeId)) return;
+        const neighbor = shell.querySelector(`.gf-node[data-node-id="${CSS.escape(nodeId)}"]`);
+        if (neighbor) neighbor.dataset.neighbor = "true";
+      });
     });
   };
 
@@ -409,18 +586,26 @@
     });
   };
 
-  const pointerPoint = (svg, event, state) => {
+  const svgPoint = (svg, event) => {
     const rect = svg.getBoundingClientRect();
     const viewBox = svg.viewBox?.baseVal;
     const width = viewBox?.width || 920;
     const height = viewBox?.height || 460;
     const originX = viewBox?.x || 0;
     const originY = viewBox?.y || 0;
-    const svgX = originX + ((event.clientX - rect.left) / Math.max(rect.width, 1)) * width;
-    const svgY = originY + ((event.clientY - rect.top) / Math.max(rect.height, 1)) * height;
     return {
-      x: (svgX - state.camera_x) / state.camera_zoom,
-      y: (svgY - state.camera_y) / state.camera_zoom,
+      x: originX + ((event.clientX - rect.left) / Math.max(rect.width, 1)) * width,
+      y: originY + ((event.clientY - rect.top) / Math.max(rect.height, 1)) * height,
+      width,
+      height,
+    };
+  };
+
+  const pointerPoint = (svg, event, state) => {
+    const point = svgPoint(svg, event);
+    return {
+      x: (point.x - state.camera_x) / state.camera_zoom,
+      y: (point.y - state.camera_y) / state.camera_zoom,
     };
   };
 
@@ -759,7 +944,13 @@
       if (!source || !target) return;
       context.beginPath();
       context.moveTo(source.x, source.y);
-      context.lineTo(target.x, target.y);
+      const dx = target.x - source.x;
+      const dy = target.y - source.y;
+      const distance = Math.hypot(dx, dy) || 1;
+      const bend = clamp(distance * 0.12, 10, 46);
+      const cx = (source.x + target.x) / 2 - (dy / distance) * bend;
+      const cy = (source.y + target.y) / 2 + (dx / distance) * bend;
+      context.quadraticCurveTo(cx, cy, target.x, target.y);
       context.strokeStyle = edge.dataset.selected === "true" ? "#f97316" : "rgba(62,74,92,0.34)";
       context.lineWidth = number(edge.dataset.edgeWidth, 1.4);
       context.globalAlpha = number(edge.dataset.edgeOpacity, 1);
@@ -768,7 +959,7 @@
     context.globalAlpha = 1;
     nodes.forEach((node) => {
       context.beginPath();
-      context.arc(node.x, node.y, Math.max(7, Math.min(18, 8 + node.degree * 2)), 0, Math.PI * 2);
+      context.arc(node.x, node.y, Math.max(3, Math.min(12, 4 + node.degree)), 0, Math.PI * 2);
       context.fillStyle = node.selected ? "#f97316" : node.kind === "provider" ? "#2563eb" : "#111827";
       context.fill();
       context.strokeStyle = "rgba(255,255,255,0.85)";
@@ -778,6 +969,80 @@
     context.restore();
   };
 
+  const nodeInspectPayload = (node) => ({
+    id: node?.dataset.nodeId || "",
+    label: node?.dataset.label || node?.dataset.nodeId || "Node",
+    kind: node?.dataset.kind || "node",
+    summary: node?.dataset.summary || "",
+    source: node?.dataset.source || "",
+    contentTitle: node?.dataset.contentTitle || node?.dataset.label || "Content",
+    contentPreview: node?.dataset.contentPreview || node?.dataset.summary || "",
+    degree: node?.dataset.degree || "0",
+    clusterId: node?.dataset.clusterId || "",
+    componentId: node?.dataset.componentId || "",
+    provenanceIds: splitList(node?.dataset.provenanceIds || ""),
+    citationIds: splitList(node?.dataset.citationIds || ""),
+    focusRoute: node?.dataset.focusRoute || "",
+    localRoute: node?.dataset.localRoute || "",
+    evidenceRoute: node?.dataset.evidenceRoute || "",
+  });
+
+  const setText = (root, selector, value) => {
+    const element = root.querySelector(selector);
+    if (element) element.textContent = value || "";
+  };
+
+  const propertiesMarkup = (payload) => [
+    ["id", payload.id],
+    ["source", payload.source],
+    ["kind", payload.kind],
+    ["cluster", payload.clusterId],
+    ["component", payload.componentId],
+    ["degree", payload.degree],
+    ["provenance", payload.provenanceIds.length],
+    ["citations", payload.citationIds.length],
+  ]
+    .filter(([, value]) => value !== undefined && value !== null && value !== "")
+    .map(([key, value]) => `<dt>${escapeHtml(key)}</dt><dd>${escapeHtml(String(value))}</dd>`)
+    .join("");
+
+  const openInspectOverlay = (root, node) => {
+    const overlay = root.querySelector("[data-gf-inspect-overlay]");
+    if (!overlay || !node) return;
+    const payload = nodeInspectPayload(node);
+    overlay.dataset.open = "true";
+    overlay.dataset.nodeId = payload.id;
+    setText(overlay, "[data-gf-inspect-kind]", payload.kind);
+    setText(overlay, "[data-gf-inspect-title]", payload.contentTitle || payload.label);
+    setText(overlay, "[data-gf-inspect-summary]", payload.summary);
+    setText(overlay, "[data-gf-inspect-content]", payload.contentPreview || payload.summary);
+    setText(
+      overlay,
+      "[data-gf-inspect-evidence]",
+      `${payload.provenanceIds.length} provenance item(s), ${payload.citationIds.length} citation(s).`,
+    );
+    const properties = overlay.querySelector("[data-gf-inspect-properties]");
+    if (properties) {
+      properties.innerHTML = propertiesMarkup(payload);
+      properties.dataset.propertiesJson = JSON.stringify(payload);
+    }
+    const targetInput = overlay.querySelector("[data-gf-inspect-target-id]");
+    if (targetInput) targetInput.value = payload.id;
+    const sourceInput = overlay.querySelector("[data-gf-inspect-source]");
+    if (sourceInput) sourceInput.value = payload.source;
+    overlay.querySelector("[data-gf-overlay-action='center']")?.setAttribute("data-route", payload.focusRoute);
+    overlay.querySelector("[data-gf-overlay-action='local']")?.setAttribute("data-route", payload.localRoute);
+    overlay.querySelector("[data-gf-overlay-action='evidence']")?.setAttribute("data-route", payload.evidenceRoute);
+    emit(root, "inspect-open", { node: payload, state: root.getState?.() || {} });
+  };
+
+  const closeInspectOverlay = (root) => {
+    const overlay = root.querySelector("[data-gf-inspect-overlay]");
+    if (!overlay) return;
+    overlay.dataset.open = "false";
+    emit(root, "inspect-close", { state: root.getState?.() || {} });
+  };
+
   class GraphFakosViewer extends (typeof HTMLElement === "undefined" ? class {} : HTMLElement) {
     #wired = false;
     #suppressNextClick = false;
@@ -785,9 +1050,18 @@
     connectedCallback() {
       this.graph = parseJsonAttribute(this, "data-graph-json", {});
       this.state = normalizeState(parseJsonAttribute(this, "data-state-json", {}));
+      const urlHasTheme = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("theme");
+      const storedTheme = readStoredTheme();
+      if (!urlHasTheme && storedTheme) this.state.theme = storedTheme;
+      writeStoredTheme(this.state.theme);
+      if (typeof document !== "undefined") document.body?.setAttribute?.("data-theme", this.state.theme);
       this.setAttribute("data-render-engine", this.state.render_engine);
       this.setAttribute("data-theme", this.state.theme);
       this.#wireFallbackDom();
+      this.querySelectorAll(".gf-canvas-shell").forEach((shell) => {
+        applyPinnedPositions(shell, this.state);
+        applyCamera(shell, this.state);
+      });
       updateSelectionStatus(this, this.state);
       updateWorkbenchForms(this, this.state);
       this.#renderWorkbook();
@@ -834,12 +1108,14 @@
           x: fitted.camera_x,
           y: fitted.camera_y,
           zoom: fitted.camera_zoom,
+          yaw: this.state.camera_yaw,
+          pitch: this.state.camera_pitch,
         },
       });
     }
 
     resetCamera() {
-      return this.dispatch({ name: "camera", payload: { x: 0, y: 0, zoom: 1 } });
+      return this.dispatch({ name: "camera", payload: { x: 0, y: 0, zoom: 1, yaw: 0, pitch: 0 } });
     }
 
     #handleCanvasKey(shell, event) {
@@ -849,6 +1125,14 @@
       const camera = {};
       if (key === "+" || key === "=") camera.zoom = this.state.camera_zoom * 1.18;
       if (key === "-") camera.zoom = this.state.camera_zoom / 1.18;
+      if (key === "q") {
+        if (this.state.render_engine === "3d") camera.yaw = this.state.camera_yaw - 8;
+        else camera.zoom = this.state.camera_zoom * 1.08;
+      }
+      if (key === "e") {
+        if (this.state.render_engine === "3d") camera.yaw = this.state.camera_yaw + 8;
+        else camera.zoom = this.state.camera_zoom / 1.08;
+      }
       if (key === "0") {
         event.preventDefault();
         this.resetCamera();
@@ -884,6 +1168,7 @@
       }
       const target = new URL(String(url), window.location.href);
       if (!isInternalRoute(target)) return false;
+      if (!target.searchParams.has("theme")) target.searchParams.set("theme", this.state.theme);
       emit(this, "route-loading", { route: routeFromUrl(target), state: this.getState() });
       try {
         const response = await fetch(routeFromUrl(target), {
@@ -1022,11 +1307,7 @@
     }
 
     #workbookStorage() {
-      try {
-        return typeof window !== "undefined" ? window.localStorage : null;
-      } catch (_error) {
-        return null;
-      }
+      return safeLocalStorage();
     }
 
     #setWorkbookStatus(message, state = "") {
@@ -1105,12 +1386,17 @@
 
     #applyState(action, previous) {
       this.setAttribute("data-state-json", JSON.stringify(this.state));
+      this.setAttribute("data-theme", this.state.theme);
+      this.setAttribute("data-render-engine", this.state.render_engine);
+      if (typeof document !== "undefined") document.body?.setAttribute?.("data-theme", this.state.theme);
+      writeStoredTheme(this.state.theme);
       this.querySelectorAll(".gf-canvas-shell").forEach((shell) => applyCamera(shell, this.state));
       this.querySelectorAll(".gf-canvas-shell").forEach((shell) => applyPinnedPositions(shell, this.state));
       this.querySelectorAll(".gf-node").forEach((node) => {
         node.dataset.selected = this.state.selected_node_ids.includes(node.dataset.nodeId) ? "true" : "false";
         node.dataset.pinned = this.state.pinned_positions[node.dataset.nodeId] ? "true" : node.dataset.pinned || "false";
         node.dataset.hidden = this.state.hidden_groups.includes(node.dataset.kind) ? "true" : "false";
+        node.dataset.neighbor = "false";
       });
       this.querySelectorAll(".gf-edge").forEach((edge) => {
         const selected = edge.dataset.edgeId === this.state.selected_edge_id;
@@ -1118,6 +1404,16 @@
         const target = this.querySelector(`.gf-node[data-node-id="${CSS.escape(edge.dataset.targetId || "")}"]`);
         edge.dataset.selected = selected ? "true" : "false";
         edge.dataset.hidden = source?.dataset.hidden === "true" || target?.dataset.hidden === "true" ? "true" : "false";
+        edge.dataset.stretched = "false";
+      });
+      this.querySelectorAll(".gf-canvas-shell").forEach((shell) => {
+        emphasizeConnectedEdges(shell, this.state.selected_node_ids || []);
+      });
+      this.querySelectorAll("[data-gf-group]").forEach((button) => {
+        const group = button.dataset.gfGroup || "";
+        const active = !this.state.hidden_groups.includes(group);
+        button.dataset.active = active ? "true" : "false";
+        button.title = `${active ? "Hide" : "Show"} ${group} nodes`;
       });
       updateSelectionStatus(this, this.state);
       updateWorkbenchForms(this, this.state);
@@ -1245,6 +1541,31 @@
         })),
         bounds,
       );
+      const clusterMembersFor = (node, point) => {
+        const clusterId = node?.dataset.clusterId || "";
+        if (!clusterId) return [];
+        return [...shell.querySelectorAll(`.gf-node[data-cluster-id="${CSS.escape(clusterId)}"]`)].map((member) => ({
+          nodeId: member.dataset.nodeId || "",
+          offsetX: point.x - number(member.dataset.x, 0),
+          offsetY: point.y - number(member.dataset.y, 0),
+        })).filter((member) => member.nodeId);
+      };
+      const nearestNodeAt = (point, maxDistance = 28) => {
+        let best = null;
+        let bestDistance = maxDistance;
+        shell.querySelectorAll(".gf-node").forEach((candidate) => {
+          if (candidate.dataset.hidden === "true") return;
+          const distance = Math.hypot(
+            point.x - number(candidate.dataset.projectedX, number(candidate.dataset.x, 0)),
+            point.y - number(candidate.dataset.projectedY, number(candidate.dataset.y, 0)),
+          );
+          if (distance <= bestDistance) {
+            best = candidate;
+            bestDistance = distance;
+          }
+        });
+        return best;
+      };
       const svgDelta = (event) => {
         const rect = svg.getBoundingClientRect();
         const viewBox = svg.viewBox?.baseVal;
@@ -1263,30 +1584,54 @@
         return drag.moved;
       };
       svg.addEventListener("click", (event) => {
-        if (!this.#suppressNextClick) return;
+        if (this.#suppressNextClick) {
+          event.preventDefault();
+          event.stopPropagation();
+          this.#suppressNextClick = false;
+          return;
+        }
+        const directNode = event.target?.closest?.(".gf-node");
+        if (directNode) return;
+        const node = nearestNodeAt(pointerPoint(svg, event, this.state));
+        if (!node) return;
         event.preventDefault();
         event.stopPropagation();
-        this.#suppressNextClick = false;
+        this.dispatch({
+          name: "select-node",
+          target_id: node.dataset.nodeId || "",
+          payload: { additive: event.shiftKey },
+        });
+        openInspectOverlay(this, node);
       }, true);
-      svg.addEventListener("pointerdown", (event) => {
+      const startDrag = (event, pointerCapture = false) => {
         if (event.button !== 0) return;
-        const node = event.target?.closest?.(".gf-node");
         const point = pointerPoint(svg, event, this.state);
+        const node = event.target?.closest?.(".gf-node") || nearestNodeAt(point);
+        const wantsClusterDrag = node && (event.altKey || node.dataset.kind === "cluster");
+        const clusterMembers = wantsClusterDrag ? clusterMembersFor(node, point) : [];
+        const backgroundDragType = this.state.render_engine === "3d" && !event.shiftKey && !event.altKey ? "orbit" : "pan";
+        clearConnectedEmphasis(shell);
         drag = {
-          type: node ? "node" : event.shiftKey ? "box" : "pan",
+          type: clusterMembers.length > 1 ? "cluster" : node ? "node" : event.shiftKey ? "box" : backgroundDragType,
           nodeId: node?.dataset.nodeId || "",
+          clusterId: node?.dataset.clusterId || "",
+          clusterMembers,
           startClientX: event.clientX,
           startClientY: event.clientY,
           startPoint: point,
           startCameraX: this.state.camera_x,
           startCameraY: this.state.camera_y,
+          startCameraYaw: this.state.camera_yaw,
+          startCameraPitch: this.state.camera_pitch,
           offsetX: node ? point.x - number(node.dataset.x, 0) : 0,
           offsetY: node ? point.y - number(node.dataset.y, 0) : 0,
           moved: false,
         };
-        svg.setPointerCapture?.(event.pointerId);
-      });
-      svg.addEventListener("pointermove", (event) => {
+        if (node) emphasizeConnectedEdges(shell, clusterMembers.length > 1 ? clusterMembers.map((member) => member.nodeId) : [drag.nodeId]);
+        if (pointerCapture && event.pointerId !== undefined) svg.setPointerCapture?.(event.pointerId);
+        event.preventDefault();
+      };
+      const moveDrag = (event) => {
         if (!drag || !markMoved(event)) return;
         event.preventDefault();
         const point = pointerPoint(svg, event, this.state);
@@ -1305,12 +1650,33 @@
           });
           return;
         }
+        if (drag.type === "orbit") {
+          const dx = event.clientX - drag.startClientX;
+          const dy = event.clientY - drag.startClientY;
+          this.dispatch({
+            name: "camera",
+            payload: {
+              yaw: drag.startCameraYaw + dx * 0.28,
+              pitch: drag.startCameraPitch - dy * 0.18,
+            },
+          });
+          return;
+        }
+        if (drag.type === "cluster") {
+          drag.clusterMembers.forEach((member) => {
+            applyNodePosition(shell, member.nodeId, point.x - member.offsetX, point.y - member.offsetY);
+          });
+          emphasizeConnectedEdges(shell, drag.clusterMembers.map((member) => member.nodeId));
+          drawCanvas(shell);
+          return;
+        }
         applyNodePosition(shell, drag.nodeId, point.x - drag.offsetX, point.y - drag.offsetY);
+        emphasizeConnectedEdges(shell, [drag.nodeId]);
         drawCanvas(shell);
-      });
+      };
       const finishDrag = (event) => {
         if (!drag) return;
-        svg.releasePointerCapture?.(event.pointerId);
+        if (event.pointerId !== undefined) svg.releasePointerCapture?.(event.pointerId);
         if (drag.type === "box" && drag.moved) {
           const point = pointerPoint(svg, event, this.state);
           this.dispatch({
@@ -1333,12 +1699,69 @@
               y: point.y - drag.offsetY,
             },
           });
+          this.dispatch({ name: "select-node", target_id: drag.nodeId });
+          openInspectOverlay(this, shell.querySelector(`.gf-node[data-node-id="${CSS.escape(drag.nodeId)}"]`));
+        }
+        if (drag.type === "cluster" && drag.moved) {
+          const point = pointerPoint(svg, event, this.state);
+          this.dispatch({
+            name: "pin-many",
+            target_id: drag.clusterId,
+            payload: {
+              positions: Object.fromEntries(drag.clusterMembers.map((member) => [
+                member.nodeId,
+                [point.x - member.offsetX, point.y - member.offsetY],
+              ])),
+            },
+          });
+          this.dispatch({
+            name: "select-many",
+            payload: { node_ids: drag.clusterMembers.map((member) => member.nodeId) },
+          });
+          openInspectOverlay(this, shell.querySelector(`.gf-node[data-node-id="${CSS.escape(drag.clusterMembers[0]?.nodeId || "")}"]`));
         }
         removeSelectionBox();
         drag = null;
       };
+      svg.addEventListener("pointerdown", (event) => startDrag(event, true));
+      svg.addEventListener("mousedown", (event) => {
+        if (!drag) startDrag(event, false);
+      });
+      svg.addEventListener("pointermove", moveDrag);
+      svg.addEventListener("mousemove", moveDrag);
       svg.addEventListener("pointerup", finishDrag);
       svg.addEventListener("pointercancel", finishDrag);
+      svg.addEventListener("mouseup", finishDrag);
+      svg.addEventListener("mouseleave", finishDrag);
+      svg.addEventListener("wheel", (event) => {
+        event.preventDefault();
+        const before = pointerPoint(svg, event, this.state);
+        const point = svgPoint(svg, event);
+        const zoom = clamp(this.state.camera_zoom * (event.deltaY < 0 ? 1.12 : 1 / 1.12), 0.35, 3);
+        this.dispatch({
+          name: "camera",
+          payload: {
+            x: point.x - before.x * zoom,
+            y: point.y - before.y * zoom,
+            zoom,
+          },
+        });
+      }, { passive: false });
+      svg.addEventListener("dblclick", (event) => {
+        const node = event.target?.closest?.(".gf-node");
+        if (!node) return;
+        event.preventDefault();
+        const point = svgPoint(svg, event);
+        const zoom = Math.max(this.state.camera_zoom, 1.25);
+        this.dispatch({
+          name: "camera",
+          payload: {
+            x: point.width / 2 - number(node.dataset.projectedX, number(node.dataset.x, 0)) * zoom,
+            y: point.height / 2 - number(node.dataset.projectedY, number(node.dataset.y, 0)) * zoom,
+            zoom,
+          },
+        });
+      });
     }
 
     #wireFallbackDom() {
@@ -1350,6 +1773,31 @@
         if (template) {
           event.preventDefault();
           applyCaptureTemplate(template.closest("[data-gf-knowledge-form]"), template);
+          return;
+        }
+        const inspectClose = event.target?.closest?.("[data-gf-inspect-close]");
+        if (inspectClose) {
+          event.preventDefault();
+          closeInspectOverlay(this);
+          return;
+        }
+        const overlayAction = event.target?.closest?.("[data-gf-overlay-action]");
+        if (overlayAction) {
+          event.preventDefault();
+          const action = overlayAction.dataset.gfOverlayAction || "";
+          const route = overlayAction.getAttribute("data-route") || "";
+          const overlay = overlayAction.closest("[data-gf-inspect-overlay]");
+          if (overlay) overlay.dataset.lastCommand = action;
+          if (route && action !== "draft_note") {
+            this.navigate(route);
+            return;
+          }
+          emit(this, "edit-command", {
+            action,
+            target_id: this.querySelector("[data-gf-inspect-target-id]")?.value || "",
+            note: this.querySelector("[data-gf-inspect-command] textarea")?.value || "",
+            state: this.getState(),
+          });
           return;
         }
         const link = event.target?.closest?.("a[href]");
@@ -1430,14 +1878,23 @@
       });
       this.#wireCommandPalette();
       this.querySelectorAll(".gf-node").forEach((node) => {
-        node.addEventListener("click", (event) => this.dispatch({
-          name: "select-node",
-          target_id: node.dataset.nodeId || "",
-          payload: { additive: event.shiftKey },
-        }));
+        node.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          this.dispatch({
+            name: "select-node",
+            target_id: node.dataset.nodeId || "",
+            payload: { additive: event.shiftKey },
+          });
+          openInspectOverlay(this, node);
+        });
       });
       this.querySelectorAll(".gf-edge").forEach((edge) => {
-        edge.addEventListener("click", () => this.dispatch({ name: "select-edge", target_id: edge.dataset.edgeId || "" }));
+        edge.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          this.dispatch({ name: "select-edge", target_id: edge.dataset.edgeId || "" });
+        });
       });
       this.querySelectorAll("[data-gf-minimap-node]").forEach((item) => {
         item.addEventListener("click", (event) => {
@@ -1452,6 +1909,9 @@
       });
       this.querySelectorAll("[data-gf-group]").forEach((button) => {
         button.addEventListener("click", () => this.dispatch({ name: "group-toggle", target_id: button.dataset.gfGroup || "" }));
+      });
+      this.querySelectorAll("[data-gf-group-show-all]").forEach((button) => {
+        button.addEventListener("click", () => this.dispatch({ name: "group-show-all" }));
       });
       this.querySelectorAll("[data-node-ref]").forEach((item) => {
         item.addEventListener("mouseenter", () => {
@@ -1474,11 +1934,13 @@
     reduce,
     eventName,
     fittedCameraState,
+    projectPoint3D,
     minimapViewportRect,
     keyboardShortcuts,
     isGraphSearchShortcut,
     selectionStatusText,
     selectedNodeIdsInBounds,
+    nodeInspectPayload,
     viewerContext,
     viewerContextRows,
     authoringDefaults,

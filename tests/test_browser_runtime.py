@@ -57,6 +57,8 @@ def test_packaged_viewer_runtime_reducer_runs_in_node() -> None:
     assert "curvedEdgePath" in viewer_runtime_script()
     assert "projectPoint3D" in viewer_runtime_script()
     assert "apply3DProjection" in viewer_runtime_script()
+    assert "detailMode" in viewer_runtime_script()
+    assert "applyDetailMode" in viewer_runtime_script()
     assert "camera_yaw" in viewer_runtime_script()
     assert "camera_pitch" in viewer_runtime_script()
     assert "pin-many" in viewer_runtime_script()
@@ -240,6 +242,18 @@ const projectedPoint = runtime.projectPoint3D(
   runtime.normalizeState({ render_engine: "3d", camera_yaw: 30, camera_pitch: -15 }),
   { width: 1280, height: 720 }
 );
+const overviewDetailMode = runtime.detailMode(
+  runtime.normalizeState({ camera_zoom: 0.5, label_density: 0.2 }),
+  240
+);
+const precisionDetailMode = runtime.detailMode(
+  runtime.normalizeState({ camera_zoom: 2.4, label_density: 0.2 }),
+  240
+);
+const smallGraphDetailMode = runtime.detailMode(
+  runtime.normalizeState({ camera_zoom: 0.5, label_density: 0.2 }),
+  24
+);
 const inspectPayload = runtime.nodeInspectPayload({
   dataset: {
     nodeId: "node:content",
@@ -275,6 +289,9 @@ process.stdout.write(JSON.stringify({
   workbookSlots,
   commandSummary,
   projectedPoint,
+  overviewDetailMode,
+  precisionDetailMode,
+  smallGraphDetailMode,
   inspectPayload,
   commandMatches: [
     runtime.commandPaletteActionMatches(commandActions[0], "local focus"),
@@ -397,6 +414,9 @@ process.stdout.write(JSON.stringify({
     assert payload["projectedPoint"]["x"] != 700
     assert payload["projectedPoint"]["y"] != 360
     assert payload["projectedPoint"]["scale"] > 0
+    assert payload["overviewDetailMode"] == "overview"
+    assert payload["precisionDetailMode"] == "precision"
+    assert payload["smallGraphDetailMode"] == "detail"
     assert payload["commandMatches"] == [True, True, False]
     assert payload["inspectPayload"]["id"] == "node:content"
     assert payload["inspectPayload"]["contentTitle"] == "Notebook entry"

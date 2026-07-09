@@ -85,6 +85,11 @@ def test_static_viewer_renders_graph_canvas_and_inspector() -> None:
     assert "Alt/Option-drag a node to move its cluster" in html
     assert "WASD or arrows move like a map" in html
     assert ".gf-shortcut-hint" in html
+    assert "data-detail-mode=" in html
+    assert "data-label-priority=" in html
+    assert "data-gf-detail-mode='true'" in html
+    assert ".gf-canvas-shell[data-detail-mode=\"overview\"]" in html
+    assert "Labels and edges become denser as you zoom in." in html
     assert "data-gf-live-selection='true'" in html
     assert "aria-live='polite'" in html
     assert ".gf-live-selection" in html

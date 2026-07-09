@@ -23,7 +23,7 @@ Open it in GraphFakos:
 ```bash
 cd ../graphfakos
 
-PYTHONPATH=src .venv/bin/python3.11 -m graphfakos.__main__ ui \
+graphfakos-ui \
   --provider-envelope ../workspace-tmp/pragmagraph-viewer-support/viewer-scale-200k.json \
   --render-engine 3d \
   --theme space \

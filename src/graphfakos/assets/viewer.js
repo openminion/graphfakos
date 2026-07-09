@@ -398,6 +398,24 @@
     viewport.dataset.cameraZoom = state.camera_zoom.toFixed(2);
   };
 
+  const detailMode = (state, visibleNodeCount = 0) => {
+    const current = normalizeState(state);
+    const count = number(visibleNodeCount, 0);
+    if (current.camera_zoom >= 2.1) return "precision";
+    if (current.camera_zoom >= 1.35 || count <= 48) return "detail";
+    if (current.camera_zoom >= 0.85 || current.label_density >= 0.62 || count <= 110) return "balanced";
+    return "overview";
+  };
+
+  const applyDetailMode = (shell, state) => {
+    const count = number(shell?.dataset?.visibleNodes, shell?.querySelectorAll?.(".gf-node")?.length || 0);
+    const mode = detailMode(state, count);
+    shell.dataset.detailMode = mode;
+    const status = shell.closest(".gf-canvas-panel")?.querySelector("[data-gf-detail-mode]");
+    if (status) status.textContent = `${mode.charAt(0).toUpperCase()}${mode.slice(1)} view`;
+    return mode;
+  };
+
   const applyCamera = (shell, state) => {
     const viewport = shell.querySelector(".gf-viewport");
     if (!viewport) return;
@@ -407,6 +425,7 @@
     shell.dataset.cameraZoom = state.camera_zoom.toFixed(2);
     shell.dataset.cameraYaw = state.camera_yaw.toFixed(2);
     shell.dataset.cameraPitch = state.camera_pitch.toFixed(2);
+    applyDetailMode(shell, state);
     apply3DProjection(shell, state);
     updateMinimapViewport(shell, state);
     updateSavedLink(shell.closest("graphfakos-viewer") || document, state);
@@ -1935,6 +1954,8 @@
     eventName,
     fittedCameraState,
     projectPoint3D,
+    detailMode,
+    applyDetailMode,
     minimapViewportRect,
     keyboardShortcuts,
     isGraphSearchShortcut,

@@ -5949,6 +5949,7 @@ def _graph_canvas(
     live_selection = _live_selection_status(graph, selected_node_ids, selected_edge_id)
     hidden_nodes = int(graph.stats.get("hidden_nodes", 0) or 0)
     hidden_edges = int(graph.stats.get("hidden_edges", 0) or 0)
+    detail_mode = _initial_detail_mode(request, len(graph.nodes))
     edge_lines = ""
     for edge in graph.edges:
         if edge.source_id not in positions or edge.target_id not in positions:
@@ -6009,8 +6010,16 @@ def _graph_canvas(
             else "false"
         )
         degree = degree_map.get(node.id, 0)
+        label_priority = _node_label_priority(
+            node,
+            index,
+            degree,
+            request,
+            len(graph.nodes),
+        )
         label = (
-            f"<text class='gf-node-label' y='{_node_label_y(index):.1f}' "
+            f"<text class='gf-node-label' data-label-priority='{escape(label_priority)}' "
+            f"y='{_node_label_y(index):.1f}' "
             f"text-anchor='middle'>{escape(_node_label(node))}</text>"
             if _should_show_label(node, index, degree, request, len(graph.nodes))
             else ""
@@ -6047,6 +6056,7 @@ def _graph_canvas(
             f"<g class='gf-node' data-kind='{escape(node.kind)}' data-selected='{selected}' "
             f"data-node-id='{escape(node.id)}' data-node-ref='{escape(node.id)}' "
             f"data-label='{escape(node.label)}' "
+            f"data-label-priority='{escape(label_priority)}' "
             f"data-summary='{escape(node.summary or node.source or node.id)}' "
             f"data-source='{escape(node.source)}' "
             f"data-content-title='{escape(content_title)}' "
@@ -6088,6 +6098,8 @@ def _graph_canvas(
         "<p class='gf-shortcut-hint'>Navigation: drag empty space to pan, scroll to zoom toward the cursor, "
         "Alt/Option-drag a node to move its cluster, WASD or arrows move like a map, "
         "Q/E nudges depth in 3D mode, 0 resets camera, F fullscreen, Delete clears selection.</p>"
+        f"<p class='gf-detail-status'><span data-gf-detail-mode='true'>{escape(detail_mode.title())} view</span>"
+        " Labels and edges become denser as you zoom in.</p>"
         f"<p class='gf-live-selection' data-gf-live-selection='true' aria-live='polite' "
         f"data-selected-count='{len(selected_node_ids)}' "
         f"data-edge-selected='{str(bool(selected_edge_id)).lower()}'>{escape(live_selection)}</p>"
@@ -6096,7 +6108,9 @@ def _graph_canvas(
         f"<div class='gf-canvas-grid'><div class='gf-canvas-shell' tabindex='0' "
         f"data-camera-x='{camera_x:.2f}' data-camera-y='{camera_y:.2f}' "
         f"data-camera-zoom='{camera_zoom:.2f}' data-camera-yaw='{camera_yaw:.2f}' "
-        f"data-camera-pitch='{camera_pitch:.2f}' data-render-engine='{escape(request.render_engine)}'>"
+        f"data-camera-pitch='{camera_pitch:.2f}' data-render-engine='{escape(request.render_engine)}' "
+        f"data-detail-mode='{escape(detail_mode)}' data-visible-nodes='{len(graph.nodes)}' "
+        f"data-label-density='{request.label_density:.2f}'>"
         f"{_canvas_renderer(graph, request)}"
         f"<svg class='gf-canvas' viewBox='0 0 {width} {height}' "
         "role='img' aria-label='GraphFakos graph canvas'>"
@@ -6302,6 +6316,40 @@ def _should_show_label(
     return index % cadence == 0
 
 
+def _node_label_priority(
+    node: GraphFakosNode,
+    index: int,
+    degree: int,
+    request: GraphFakosRequest,
+    visible_count: int,
+) -> str:
+    if node.id == request.focus_node_id or node.id in request.selected_node_ids:
+        return "focus"
+    if node.visual.pinned or node.id in request.pinned_positions:
+        return "focus"
+    if degree >= 6:
+        return "hub"
+    if visible_count <= 36:
+        return "local"
+    if degree >= 4:
+        return "bridge"
+    if index % 16 == 0:
+        return "landmark"
+    return "ambient"
+
+
+def _initial_detail_mode(request: GraphFakosRequest, visible_count: int) -> str:
+    zoom = request.camera_zoom if request.camera_zoom is not None else 1.0
+    density = _clamped(request.label_density, 0.0, 1.0)
+    if zoom >= 2.1:
+        return "precision"
+    if zoom >= 1.35 or visible_count <= 48:
+        return "detail"
+    if zoom >= 0.85 or density >= 0.62 or visible_count <= 110:
+        return "balanced"
+    return "overview"
+
+
 def _style_value(
     node: GraphFakosNode,
     style_field: str,
@@ -6483,16 +6531,16 @@ def _node_radius(
     degree: int = 0,
 ) -> int:
     scale = request.node_scale if request is not None else 1.0
-    base = 10 if node.score is None else max(8, min(18, int(8 + node.score * 10)))
+    base = 8 if node.score is None else max(5, min(14, int(5 + node.score * 8)))
     if request is not None and request.style_size_by == "degree":
-        base = max(base, 8 + min(degree, 8))
+        base = max(base, 6 + min(degree, 6))
     if (
         request is not None
         and request.style_size_by == "confidence"
         and node.confidence
     ):
-        base = max(base, int(8 + node.confidence * 10))
-    return max(4, min(30, int(base * _clamped(scale, 0.35, 2.2))))
+        base = max(base, int(6 + node.confidence * 8))
+    return max(3, min(24, int(base * _clamped(scale, 0.35, 2.2))))
 
 
 def _node_label(node: GraphFakosNode) -> str:
@@ -8662,6 +8710,22 @@ body.gf-page[data-theme="paper"] {
   font-size: 12px;
   margin: -4px 0 10px;
 }
+.gf-detail-status {
+  align-items: center;
+  color: var(--gf-muted);
+  display: inline-flex;
+  font-size: 12px;
+  gap: 8px;
+  margin: -2px 0 10px;
+}
+.gf-detail-status span {
+  background: color-mix(in srgb, var(--gf-accent-soft) 70%, transparent);
+  border: 1px solid color-mix(in srgb, var(--gf-accent) 24%, var(--gf-line));
+  border-radius: 999px;
+  color: var(--gf-accent);
+  font-weight: 900;
+  padding: 4px 8px;
+}
 .gf-live-selection {
   align-items: center;
   background: color-mix(in srgb, var(--gf-blue-soft) 58%, transparent);
@@ -8865,6 +8929,16 @@ body.gf-page[data-theme="space"] .gf-inspect-command textarea {
 .gf-edge[data-clutter="hidden"] {
   opacity: .08;
 }
+.gf-canvas-shell[data-detail-mode="overview"] .gf-edge:not([data-selected="true"]):not([data-stretched="true"]):not([data-path="true"]) {
+  opacity: .18;
+  stroke-width: .8;
+}
+.gf-canvas-shell[data-detail-mode="balanced"] .gf-edge:not([data-selected="true"]):not([data-stretched="true"]):not([data-path="true"]) {
+  opacity: .34;
+}
+.gf-canvas-shell[data-detail-mode="precision"] .gf-edge:not([data-selected="true"]):not([data-stretched="true"]):not([data-path="true"]) {
+  opacity: .46;
+}
 .gf-edge:hover {
   stroke: var(--gf-accent);
   stroke-width: 3;
@@ -8946,11 +9020,34 @@ body.gf-page[data-theme="space"] .gf-inspect-command textarea {
   fill: var(--gf-ink);
   font-size: 10px;
   font-weight: 700;
+  opacity: .88;
   paint-order: stroke;
   stroke: #fbfcfa;
   stroke-width: 5px;
   stroke-linejoin: round;
+  transition: font-size .16s ease, opacity .16s ease;
   pointer-events: none;
+}
+.gf-canvas-shell[data-detail-mode="overview"] .gf-node-label {
+  opacity: 0;
+}
+.gf-canvas-shell[data-detail-mode="overview"] .gf-node[data-label-priority="focus"] .gf-node-label,
+.gf-canvas-shell[data-detail-mode="overview"] .gf-node[data-label-priority="hub"] .gf-node-label,
+.gf-canvas-shell[data-detail-mode="overview"] .gf-node[data-selected="true"] .gf-node-label,
+.gf-canvas-shell[data-detail-mode="overview"] .gf-node[data-neighbor="true"] .gf-node-label,
+.gf-canvas-shell[data-detail-mode="overview"] .gf-node:hover .gf-node-label {
+  opacity: .96;
+}
+.gf-canvas-shell[data-detail-mode="balanced"] .gf-node[data-label-priority="ambient"] .gf-node-label,
+.gf-canvas-shell[data-detail-mode="balanced"] .gf-node[data-label-priority="landmark"] .gf-node-label {
+  opacity: .28;
+}
+.gf-canvas-shell[data-detail-mode="detail"] .gf-node[data-label-priority="ambient"] .gf-node-label {
+  opacity: .52;
+}
+.gf-canvas-shell[data-detail-mode="precision"] .gf-node-label {
+  font-size: 9px;
+  opacity: .94;
 }
 body.gf-page[data-theme="space"] .gf-node text {
   fill: #f4f8ff;

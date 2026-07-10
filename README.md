@@ -16,7 +16,7 @@
 </p>
 
 <p align="center">
-  <a href="https://pypi.org/project/graphfakos/"><img alt="PyPI" src="https://img.shields.io/badge/pypi-v0.0.5rc1-3775A9"></a>
+  <a href="https://pypi.org/project/graphfakos/"><img alt="PyPI" src="https://img.shields.io/badge/pypi-v0.0.5-3775A9"></a>
   <a href="https://pypi.org/project/graphfakos/"><img alt="Python" src="https://img.shields.io/pypi/pyversions/graphfakos?cacheSeconds=300"></a>
   <a href="https://github.com/openminion/graphfakos/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-blue"></a>
   <img alt="Status" src="https://img.shields.io/badge/status-publish--ready%20alpha-5B8DEF">
@@ -38,7 +38,7 @@ builder or memory store.
 
 ## Initial Release Status
 
-GraphFakos is a `0.0.5rc1` semantic-alpha release intended for local package
+GraphFakos is a `0.0.5` semantic-alpha release intended for local package
 integrations, adapter development, and visual graph inspection.
 The stable package contract is the provider-neutral DTO model,
 `GraphFakosProvider`, static HTML export, local preview serving, console

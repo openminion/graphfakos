@@ -19,8 +19,16 @@ def test_packaged_viewer_runtime_reducer_runs_in_node() -> None:
     assert "target_node_id" in viewer_runtime_script()
     assert "splitList" in viewer_runtime_script()
     assert "pointerdown" in viewer_runtime_script()
+    assert "mousedown" in viewer_runtime_script()
+    assert "wheel" in viewer_runtime_script()
+    assert "dblclick" in viewer_runtime_script()
     assert "data-gf-pin='reset'" in viewer_runtime_script()
     assert "gf-selection-box" in viewer_runtime_script()
+    assert "nodeInspectPayload" in viewer_runtime_script()
+    assert "inspect-open" in viewer_runtime_script()
+    assert "edit-command" in viewer_runtime_script()
+    assert "draft_note" in viewer_runtime_script()
+    assert "lastCommand" in viewer_runtime_script()
     assert "contextmenu" in viewer_runtime_script()
     assert "surface-menu" in viewer_runtime_script()
     assert "Copy node ID" in viewer_runtime_script()
@@ -45,6 +53,16 @@ def test_packaged_viewer_runtime_reducer_runs_in_node() -> None:
     assert "workbookSlotPayload" in viewer_runtime_script()
     assert "workbook-saved" in viewer_runtime_script()
     assert "graphfakos:viewer-workbook:v1" in viewer_runtime_script()
+    assert "graphfakos:viewer-theme:v1" in viewer_runtime_script()
+    assert "curvedEdgePath" in viewer_runtime_script()
+    assert "projectPoint3D" in viewer_runtime_script()
+    assert "apply3DProjection" in viewer_runtime_script()
+    assert "detailMode" in viewer_runtime_script()
+    assert "applyDetailMode" in viewer_runtime_script()
+    assert "camera_yaw" in viewer_runtime_script()
+    assert "camera_pitch" in viewer_runtime_script()
+    assert "pin-many" in viewer_runtime_script()
+    assert "group-show-all" in viewer_runtime_script()
     assert "commandPaletteActionMatches" in viewer_runtime_script()
     assert "command-palette-filtered" in viewer_runtime_script()
     script = (
@@ -66,7 +84,20 @@ state = runtime.reduce(state, { name: "select-node", target_id: "memory:operator
 state = runtime.reduce(state, { name: "pin-node", target_id: "provider:third-party", payload: { x: 320, y: 180 } });
 const pinnedState = runtime.reduce(state, { name: "pin-node", target_id: "memory:operator-preference", payload: { x: 100, y: 80 } });
 const resetState = runtime.reduce(pinnedState, { name: "reset-pins" });
-state = runtime.reduce(state, { name: "camera", payload: { x: 8, y: -2, zoom: 1.25 } });
+const clusterPinnedState = runtime.reduce(resetState, {
+  name: "pin-many",
+  payload: {
+    positions: {
+      "node:cluster-a": [11, 22],
+      "node:cluster-b": [33, 44]
+    }
+  }
+});
+const restoredGroupsState = runtime.reduce(
+  runtime.reduce(state, { name: "group-toggle", target_id: "memory" }),
+  { name: "group-show-all" }
+);
+state = runtime.reduce(state, { name: "camera", payload: { x: 8, y: -2, zoom: 1.25, yaw: 16, pitch: -12 } });
 state = runtime.reduce(state, { name: "group-toggle", target_id: "provider" });
 state = runtime.reduce(state, { name: "filter", target_id: "node_kind", payload: { value: "memory" } });
 const bounded = runtime.selectedNodeIdsInBounds(
@@ -123,6 +154,8 @@ const viewerContext = runtime.viewerContext(runtime.normalizeState({
   camera_x: 8,
   camera_y: -2,
   camera_zoom: 1.25,
+  camera_yaw: 16,
+  camera_pitch: -12,
   render_engine: "canvas",
   theme: "ink",
   saved_view_id: "ops-review",
@@ -138,6 +171,8 @@ const viewerContextRows = runtime.viewerContextRows(
     camera_x: 8,
     camera_y: -2,
     camera_zoom: 1.25,
+    camera_yaw: 16,
+    camera_pitch: -12,
     render_engine: "canvas",
     theme: "ink",
     filters: { node_kind: "memory" }
@@ -165,6 +200,8 @@ const savedRoute = runtime.savedViewRoute(runtime.normalizeState({
   camera_x: 8,
   camera_y: -2,
   camera_zoom: 1.25,
+  camera_yaw: 16,
+  camera_pitch: -12,
   render_engine: "canvas",
   theme: "ink",
   saved_view_id: "ops-review",
@@ -180,6 +217,8 @@ const workbookSlot = runtime.workbookSlotPayload(
     camera_x: 8,
     camera_y: -2,
     camera_zoom: 1.25,
+    camera_yaw: 16,
+    camera_pitch: -12,
     render_engine: "canvas",
     theme: "ink",
     filters: { node_kind: "memory" }
@@ -198,9 +237,42 @@ const commandActions = [
   { id: "evidence", label: "Evidence review", summary: "Show provenance", group: "review", route: "/explore?query=has%3Aprovenance" }
 ];
 const commandSummary = runtime.commandPaletteFilterSummary(commandActions, "author capture");
+const projectedPoint = runtime.projectPoint3D(
+  { x: 700, y: 360, z: 120 },
+  runtime.normalizeState({ render_engine: "3d", camera_yaw: 30, camera_pitch: -15 }),
+  { width: 1280, height: 720 }
+);
+const overviewDetailMode = runtime.detailMode(
+  runtime.normalizeState({ camera_zoom: 0.5, label_density: 0.2 }),
+  240
+);
+const precisionDetailMode = runtime.detailMode(
+  runtime.normalizeState({ camera_zoom: 2.4, label_density: 0.2 }),
+  240
+);
+const smallGraphDetailMode = runtime.detailMode(
+  runtime.normalizeState({ camera_zoom: 0.5, label_density: 0.2 }),
+  24
+);
+const inspectPayload = runtime.nodeInspectPayload({
+  dataset: {
+    nodeId: "node:content",
+    label: "Content Node",
+    kind: "note",
+    summary: "Rendered summary",
+    source: "demo",
+    contentTitle: "Notebook entry",
+    contentPreview: "Actual note text",
+    provenanceIds: "prov:a prov:b",
+    citationIds: "cite:a",
+    focusRoute: "/explore?focus_node_id=node%3Acontent"
+  }
+});
 process.stdout.write(JSON.stringify({
   state,
   resetState,
+  clusterPinnedState,
+  restoredGroupsState,
   bounded,
   emptyStatus,
   selectedStatus,
@@ -216,6 +288,11 @@ process.stdout.write(JSON.stringify({
   workbookSlot,
   workbookSlots,
   commandSummary,
+  projectedPoint,
+  overviewDetailMode,
+  precisionDetailMode,
+  smallGraphDetailMode,
+  inspectPayload,
   commandMatches: [
     runtime.commandPaletteActionMatches(commandActions[0], "local focus"),
     runtime.commandPaletteActionMatches(commandActions[1], "author capture"),
@@ -249,6 +326,11 @@ process.stdout.write(JSON.stringify({
     ]
     assert payload["state"]["pinned_positions"]["provider:third-party"] == [320, 180]
     assert payload["resetState"]["pinned_positions"] == {}
+    assert payload["clusterPinnedState"]["pinned_positions"] == {
+        "node:cluster-a": [11, 22],
+        "node:cluster-b": [33, 44],
+    }
+    assert payload["restoredGroupsState"]["hidden_groups"] == []
     assert payload["bounded"] == ["inside:a", "inside:b"]
     assert payload["emptyStatus"] == (
         "No selected graph items. Shift-click nodes or Shift-drag canvas to select several."
@@ -286,7 +368,7 @@ process.stdout.write(JSON.stringify({
         "selected_node_id": "node:b",
         "selected_node_ids": ["node:a", "node:b"],
         "selected_edge_id": "edge:ab",
-        "camera": {"x": 8, "y": -2, "zoom": 1.25},
+        "camera": {"x": 8, "y": -2, "zoom": 1.25, "yaw": 16, "pitch": -12},
         "layout": "force",
         "render_engine": "canvas",
         "theme": "ink",
@@ -296,7 +378,7 @@ process.stdout.write(JSON.stringify({
     assert payload["viewerContextRows"] == {
         "screen": "neighborhood: kind:memory",
         "selection": "connects",
-        "camera": "x=8.0, y=-2.0, zoom=1.25",
+        "camera": "x=8.0, y=-2.0, zoom=1.25, yaw=16.0, pitch=-12.0",
         "view": "force / canvas / ink",
         "filters": "node_kind=memory",
     }
@@ -312,6 +394,8 @@ process.stdout.write(JSON.stringify({
     assert "selected_node_ids=node%3Aa%2Cnode%3Ab" in payload["savedRoute"]
     assert "selected_edge_id=edge%3Aab" in payload["savedRoute"]
     assert "camera_zoom=1.25" in payload["savedRoute"]
+    assert "camera_yaw=16.00" in payload["savedRoute"]
+    assert "camera_pitch=-12.00" in payload["savedRoute"]
     assert "render_engine=canvas" in payload["savedRoute"]
     assert "hidden_groups=provider" in payload["savedRoute"]
     assert "pinned_positions=" in payload["savedRoute"]
@@ -327,7 +411,17 @@ process.stdout.write(JSON.stringify({
         "first_action_id": "capture",
         "first_route": "/explore#capture-knowledge",
     }
+    assert payload["projectedPoint"]["x"] != 700
+    assert payload["projectedPoint"]["y"] != 360
+    assert payload["projectedPoint"]["scale"] > 0
+    assert payload["overviewDetailMode"] == "overview"
+    assert payload["precisionDetailMode"] == "precision"
+    assert payload["smallGraphDetailMode"] == "detail"
     assert payload["commandMatches"] == [True, True, False]
+    assert payload["inspectPayload"]["id"] == "node:content"
+    assert payload["inspectPayload"]["contentTitle"] == "Notebook entry"
+    assert payload["inspectPayload"]["contentPreview"] == "Actual note text"
+    assert payload["inspectPayload"]["provenanceIds"] == ["prov:a", "prov:b"]
     assert payload["searchShortcuts"] == [True, True, True, False]
     assert {item["key"] for item in payload["shortcuts"]} >= {
         "/ or Ctrl/Meta+K",
@@ -339,6 +433,8 @@ process.stdout.write(JSON.stringify({
     assert payload["state"]["camera_x"] == 8
     assert payload["state"]["camera_y"] == -2
     assert payload["state"]["camera_zoom"] == 1.25
+    assert payload["state"]["camera_yaw"] == 16
+    assert payload["state"]["camera_pitch"] == -12
     assert payload["state"]["render_engine"] == "canvas"
     assert payload["state"]["theme"] == "ink"
     assert payload["state"]["show_orphans"] is False

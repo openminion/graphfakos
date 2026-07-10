@@ -210,6 +210,8 @@ def test_viewer_route_helpers_are_public_and_stable() -> None:
         camera_x=11.25,
         camera_y=-3.5,
         camera_zoom=1.3,
+        camera_yaw=18.0,
+        camera_pitch=-9.0,
         center_force=0.0,
         label_density=0.0,
     )
@@ -226,6 +228,8 @@ def test_viewer_route_helpers_are_public_and_stable() -> None:
             "camera_x": ["11.25"],
             "camera_y": ["-3.5"],
             "camera_zoom": ["1.3"],
+            "camera_yaw": ["18"],
+            "camera_pitch": ["-9"],
             "center_force": ["0"],
             "label_density": ["0"],
         },
@@ -239,6 +243,8 @@ def test_viewer_route_helpers_are_public_and_stable() -> None:
     assert parsed.camera_x == 11.25
     assert parsed.camera_y == -3.5
     assert parsed.camera_zoom == 1.3
+    assert parsed.camera_yaw == 18.0
+    assert parsed.camera_pitch == -9.0
     assert parsed.center_force == 0.0
     assert parsed.label_density == 0.0
     assert "center_force=0.0" in route
@@ -255,6 +261,8 @@ def test_dynamic_viewer_contracts_round_trip() -> None:
         camera_x=4.5,
         camera_y=-2.0,
         camera_zoom=1.4,
+        camera_yaw=24.0,
+        camera_pitch=-16.0,
         selected_node_ids=("provider:third-party", "memory:operator-preference"),
         center_force=0.02,
         repel_force=1.4,
@@ -306,6 +314,8 @@ def test_dynamic_viewer_contracts_round_trip() -> None:
     )
     assert rebuilt_state.pinned_positions["provider:third-party"] == (320.0, 180.0)
     assert rebuilt_state.style_color_by == "component"
+    assert rebuilt_state.camera_yaw == 24.0
+    assert rebuilt_state.camera_pitch == -16.0
     assert rebuilt_state.timeline_playback == "step"
     assert rebuilt_state.pivot_mode == "evidence_bundle"
     assert rebuilt_state.to_route_query()["node_kind"] == "provider"
@@ -313,6 +323,7 @@ def test_dynamic_viewer_contracts_round_trip() -> None:
         "value": "provider"
     }
     assert GraphFakosViewerEvent.from_dict(event.to_dict()).state.camera_zoom == 1.4
+    assert GraphFakosViewerEvent.from_dict(event.to_dict()).state.camera_yaw == 24.0
     assert GraphFakosExpansionRequest.from_dict(expansion.to_dict()).depth == 2
     assert "node color provider: #0f766e" in theme.caption()
 
@@ -426,9 +437,10 @@ def test_build_graph_replay_bundle_uses_provider_neutral_state() -> None:
 
 
 def test_renderer_selection_contract_rejects_unsupported_engines() -> None:
-    assert SUPPORTED_RENDER_ENGINES == ("svg", "canvas")
+    assert SUPPORTED_RENDER_ENGINES == ("svg", "canvas", "3d")
     assert validate_render_engine("svg") == "svg"
     assert validate_render_engine("canvas") == "canvas"
+    assert validate_render_engine("3d") == "3d"
 
     with pytest.raises(ValueError, match="unsupported GraphFakos render engine"):
         validate_render_engine("webgl")

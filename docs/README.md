@@ -8,6 +8,7 @@ Start with:
 - [Artifact interchange](artifact-interchange.md)
 - [Source tree owner map](source-tree-owner-map.md)
 - [UI contracts](ui-contracts.md)
+- [Provider envelope](provider-envelope.md)
 - [Custom provider example](custom-provider-example.md)
 - [API compatibility](../API_COMPATIBILITY.md)
 - [Release process](../RELEASING.md)
@@ -143,6 +144,23 @@ Core-feature scenario map:
 - `budget`: render-limit behavior, summarized hidden nodes, show-more route.
 - `islands`: provider-status diagnostics for disconnected components.
 - `agent-memory`: graph-side knowledge capture beside an agent/memory graph.
+
+Provider-envelope scale preview:
+
+```bash
+graphfakos-ui \
+  --provider-envelope ../workspace-tmp/pragmagraph-viewer-support/viewer-scale-200k.json \
+  --render-engine 3d \
+  --theme space \
+  --layout grouped \
+  --render-limit 240 \
+  --serve \
+  --open
+```
+
+Use this path for PragmaGraph-generated 200k and 1m viewer envelopes. See
+[Provider envelope](provider-envelope.md) for the boundary and exact handoff
+flow.
 
 To test the capture loop, run `make preview-demo`, enter a note in
 `Capture Knowledge`, and submit it. `DemoGraphProvider` stores captures in

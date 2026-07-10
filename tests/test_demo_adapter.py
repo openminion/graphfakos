@@ -230,10 +230,10 @@ def test_core_demo_force_layouts_keep_path_and_islands_readable() -> None:
     _assert_positions_in_canvas(path_positions)
     _assert_positions_in_canvas(islands_positions)
     _assert_positions_in_canvas(memory_positions)
-    assert _distance(path_positions["provider:entry"], (460.0, 230.0)) <= 0.1
+    assert _distance(path_positions["provider:entry"], (640.0, 360.0)) <= 0.1
     assert _closest_node_distance(path_positions) >= 100.0
     assert _closest_node_distance(islands_positions) >= 90.0
-    assert _distance(memory_positions["agent:codex"], (460.0, 230.0)) <= 0.1
+    assert _distance(memory_positions["agent:codex"], (640.0, 360.0)) <= 0.1
 
 
 def test_demo_facets_and_islands_exercise_provider_status() -> None:
@@ -265,8 +265,8 @@ def _node_positions(html: str) -> dict[str, tuple[float, float]]:
 
 def _assert_positions_in_canvas(positions: dict[str, tuple[float, float]]) -> None:
     assert positions
-    assert all(46.0 <= x <= 874.0 for x, _y in positions.values())
-    assert all(46.0 <= y <= 414.0 for _x, y in positions.values())
+    assert all(46.0 <= x <= 1234.0 for x, _y in positions.values())
+    assert all(46.0 <= y <= 674.0 for _x, y in positions.values())
 
 
 def _position_spread(

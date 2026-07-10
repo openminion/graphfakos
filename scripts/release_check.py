@@ -54,6 +54,7 @@ def _assert_package_docs_shape(root: Path) -> None:
         root / "docs" / "README.md",
         root / "docs" / "artifact-interchange.md",
         root / "docs" / "custom-provider-example.md",
+        root / "docs" / "provider-envelope.md",
         root / "docs" / "source-tree-owner-map.md",
         root / "docs" / "ui-contracts.md",
         root / "src" / "graphfakos" / "artifacts.py",

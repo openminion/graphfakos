@@ -12,6 +12,7 @@ from graphfakos import (
     render_graph_markdown_report,
     render_static_html,
 )
+from graphfakos.browser import viewer_runtime_script
 from graphfakos.testing import assert_graph_dot_contract, assert_graph_viewer_contract
 
 
@@ -81,13 +82,38 @@ def test_static_viewer_renders_graph_canvas_and_inspector() -> None:
     assert "data-layout-x=" in html
     assert "Shift-drag empty canvas to box-select nodes" in html
     assert "right-click or press Shift+F10" in html
-    assert "Keyboard: +/- zoom, arrows or WASD pan" in html
+    assert "Alt/Option-drag a node to move its cluster" in html
+    assert "WASD or arrows move like a map" in html
     assert ".gf-shortcut-hint" in html
+    assert "data-detail-mode=" in html
+    assert "data-label-priority=" in html
+    assert "data-gf-detail-mode='true'" in html
+    assert '.gf-canvas-shell[data-detail-mode="overview"]' in html
+    assert "Labels and edges become denser as you zoom in." in html
     assert "data-gf-live-selection='true'" in html
     assert "aria-live='polite'" in html
     assert ".gf-live-selection" in html
     assert "data-gf-graph-item='node'" in html
     assert "data-gf-graph-item='edge'" in html
+    assert "<path class='gf-edge'" in html
+    assert "data-source-x=" in html
+    assert "data-target-x=" in html
+    assert "data-z=" in html
+    assert "data-layout-z=" in html
+    assert "data-camera-yaw=" in html
+    assert "data-camera-pitch=" in html
+    assert "data-render-engine=" in html
+    assert "data-cluster-id=" in html
+    assert "data-content-preview=" in html
+    assert "data-gf-inspect-overlay='true'" in html
+    assert "data-gf-inspect-command='true'" in html
+    assert "data-gf-overlay-action='draft_note'" in html
+    assert "lastCommand" in viewer_runtime_script()
+    assert "data-gf-inspect-content='true'" in html
+    assert "data-gf-inspect-properties='true'" in html
+    assert ".gf-inspect-overlay" in html
+    assert '.gf-edge[data-stretched="true"]' in html
+    assert '.gf-node[data-neighbor="true"]' in html
     assert "Press Shift+F10 for actions." in html
     assert ".gf-graph-item-link:focus-visible" in html
     assert "data-focus-route=" in html
@@ -99,6 +125,9 @@ def test_static_viewer_renders_graph_canvas_and_inspector() -> None:
     assert "data-kind-route=" in html
     assert ".gf-surface-menu" in html
     assert ".gf-selection-box" in html
+    assert "data-gf-theme-toggle='true'" in html
+    assert "data-gf-group-show-all='true'" in html
+    assert "Show all" in html
     assert "<graphfakos-viewer" in html
     assert "data-state-json=" in html
     assert 'customElements.define("graphfakos-viewer"' in html

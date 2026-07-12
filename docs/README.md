@@ -8,7 +8,9 @@ Start with:
 - [Artifact interchange](artifact-interchange.md)
 - [Source tree owner map](source-tree-owner-map.md)
 - [UI contracts](ui-contracts.md)
+- [Viewer accessibility matrix](accessibility.md)
 - [Provider envelope](provider-envelope.md)
+- [Live graph sessions](live-sessions.md)
 - [Custom provider example](custom-provider-example.md)
 - [API compatibility](../API_COMPATIBILITY.md)
 - [Release process](../RELEASING.md)
@@ -30,14 +32,14 @@ viewer contract tests belong here.
 
 ## Viewer Surface
 
-The workbench is dependency-free static HTML with local-server routing and
-progressive client-side enhancement. Without JavaScript, exported files still
-render the static SVG graph, route links, filters, inspectors, and reports.
-When JavaScript is available, the same SVG gains camera controls, dragging,
-group toggles, keyboard shortcuts, minimap orientation, and saved-view links.
-The browser behavior is packaged as a reusable `assets/viewer.js` runtime and
-mounted through a framework-neutral `<graphfakos-viewer>` custom element, so
-host packages can embed the viewer without copying GraphFakos HTML.
+The workbench is portable HTML with local-server routing and package-owned
+client-side enhancement. Without JavaScript, exported files still render the
+static SVG graph, route links, filters, inspectors, and reports. With WebGL,
+stable `render_engine=3d` mounts the bundled 3d-force-graph/Three.js scene while
+retaining SVG as the structured fallback. The browser behavior is packaged in
+`assets/viewer.js` and `assets/renderer-3d.js` and mounted through a framework-
+neutral `<graphfakos-viewer>` custom element, so host packages can embed the
+viewer without copying GraphFakos HTML or loading a CDN.
 
 It supports:
 
@@ -53,8 +55,8 @@ It supports:
   expansion-request, knowledge-capture, saved-view, saved-query, graph-action,
   action-status, graph-analytics, replay-bundle, and theme DTOs,
 - package-owned browser runtime helpers through `viewer_runtime_script()`,
-- an SVG renderer contract with clear rejection for unsupported future engines,
-  plus route-preserved renderer/theme state for host workbenches,
+- true WebGL 3D, canvas, and SVG fallback contracts with route-preserved
+  renderer/theme state for host workbenches,
 - public query syntax guidance for `kind:`, `tag:`, `source:`, `edge:`,
   `id:`, `label:`, `summary:`, `has:`, quoted phrases, `score>=`, and
   `time>=` tokens,
@@ -161,6 +163,18 @@ graphfakos-ui \
 Use this path for PragmaGraph-generated 200k and 1m viewer envelopes. See
 [Provider envelope](provider-envelope.md) for the boundary and exact handoff
 flow.
+
+Generate package-owned benchmark envelopes and run the real-browser matrix:
+
+```bash
+make web-install web-build
+make benchmark-fixtures
+make browser-e2e
+```
+
+The 1M fixture models 1,000 clusters of 1,000 nodes each. The browser receives
+aggregate cluster records, omitted counts, edge bundles, and expansion cursors;
+it does not allocate or claim to draw one million raw WebGL objects.
 
 To test the capture loop, run `make preview-demo`, enter a note in
 `Capture Knowledge`, and submit it. `DemoGraphProvider` stores captures in

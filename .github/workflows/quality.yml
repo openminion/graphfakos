@@ -103,5 +103,13 @@ jobs:
       - name: Run browser runtime harness
         run: make browser-test
 
+      - name: Install browser assets and Chromium
+        run: |
+          make web-install
+          cd web && npx playwright install --with-deps chromium
+
+      - name: Run real-browser viewer smoke
+        run: make browser-e2e
+
       - name: Run release smoke
         run: make release-check

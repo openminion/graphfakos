@@ -14,6 +14,7 @@ from .models import (
     GraphFakosKnowledgeCapture,
     GraphFakosRequest,
 )
+from .live import GraphFakosLiveProvider
 
 
 @runtime_checkable
@@ -259,6 +260,7 @@ __all__ = [
     "GraphFakosComparisonProvider",
     "GraphFakosGraphActionProvider",
     "GraphFakosKnowledgeCaptureProvider",
+    "GraphFakosLiveProvider",
     "GraphFakosOverlayProvider",
     "GraphFakosProvider",
     "load_comparison_graph",

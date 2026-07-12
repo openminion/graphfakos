@@ -90,6 +90,7 @@
     camera_pitch: 0,
     render_engine: "svg",
     theme: "default",
+    scene_level: "overview",
     filters: {},
     expanded_groups: [],
     hidden_groups: [],
@@ -119,6 +120,10 @@
     timeline_playback: "stopped",
     pivot_node_id: "",
     pivot_mode: "",
+    live_status: "idle",
+    live_revision: "",
+    live_cursor: "",
+    applied_patch_ids: [],
   };
 
   const normalizeState = (state) => {
@@ -130,6 +135,7 @@
     next.camera_pitch = clamp(number(next.camera_pitch, 0), -72, 72);
     next.filters = clone(next.filters);
     next.selected_node_ids = Array.isArray(next.selected_node_ids) ? next.selected_node_ids.filter(Boolean) : [];
+    next.applied_patch_ids = Array.isArray(next.applied_patch_ids) ? next.applied_patch_ids.filter(Boolean) : [];
     next.expanded_groups = Array.isArray(next.expanded_groups) ? next.expanded_groups : [];
     next.hidden_groups = Array.isArray(next.hidden_groups) ? next.hidden_groups : [];
     next.pinned_positions = clone(next.pinned_positions);
@@ -218,6 +224,67 @@
   };
 
   const eventName = (name) => `graphfakos:${name}`;
+
+  const applyGraphPatch = (graph, state, patch) => {
+    const currentGraph = clone(graph);
+    const currentState = normalizeState(state);
+    if (!patch?.patch_id || !Array.isArray(patch.operations)) throw new Error("invalid graph patch");
+    if (currentState.applied_patch_ids.includes(patch.patch_id)) {
+      return { graph: currentGraph, state: currentState, applied: false };
+    }
+    const baseRevision = patch.base_revision?.value || "";
+    if (currentState.live_revision && baseRevision !== currentState.live_revision) {
+      throw new Error(`patch base revision ${baseRevision} does not match ${currentState.live_revision}`);
+    }
+    let nextGraph = currentGraph;
+    let nodes = new Map((nextGraph.nodes || []).map((node) => [node.id, clone(node)]));
+    let edges = new Map((nextGraph.edges || []).map((edge) => [edge.id, clone(edge)]));
+    let providerPayload = clone(nextGraph.provider_payload);
+    for (const operation of patch.operations) {
+      if (operation.kind === "snapshot_reset") {
+        if (!operation.graph) throw new Error("snapshot reset requires graph");
+        nextGraph = clone(operation.graph);
+        nodes = new Map((nextGraph.nodes || []).map((node) => [node.id, node]));
+        edges = new Map((nextGraph.edges || []).map((edge) => [edge.id, edge]));
+        providerPayload = clone(nextGraph.provider_payload);
+      } else if (operation.kind === "node_upsert") {
+        if (!operation.node?.id) throw new Error("node upsert requires node");
+        nodes.set(operation.node.id, clone(operation.node));
+      } else if (operation.kind === "node_delete") {
+        const incident = [...edges.values()].filter((edge) => [edge.source_id, edge.target_id].includes(operation.target_id));
+        if (incident.length && !operation.cascade) throw new Error("node delete requires explicit cascade");
+        incident.forEach((edge) => edges.delete(edge.id));
+        nodes.delete(operation.target_id);
+      } else if (operation.kind === "edge_upsert") {
+        if (!operation.edge?.id) throw new Error("edge upsert requires edge");
+        if (!nodes.has(operation.edge.source_id) || !nodes.has(operation.edge.target_id)) throw new Error("edge upsert references a missing endpoint");
+        edges.set(operation.edge.id, clone(operation.edge));
+      } else if (operation.kind === "edge_delete") {
+        edges.delete(operation.target_id);
+      } else if (operation.kind === "graph_metadata_merge") {
+        providerPayload = { ...providerPayload, ...clone(operation.metadata) };
+      } else if (operation.kind === "graph_metadata_replace") {
+        providerPayload = clone(operation.metadata);
+      } else {
+        throw new Error(`unsupported patch operation: ${operation.kind}`);
+      }
+    }
+    nextGraph = { ...nextGraph, nodes: [...nodes.values()], edges: [...edges.values()], provider_payload: providerPayload };
+    const nextState = normalizeState({
+      ...currentState,
+      live_status: "live",
+      live_revision: patch.result_revision?.value || "",
+      live_cursor: patch.cursor?.value || "",
+      applied_patch_ids: [...currentState.applied_patch_ids, patch.patch_id],
+    });
+    if (nextState.selected_node_id && !nodes.has(nextState.selected_node_id)) nextState.selected_node_id = null;
+    nextState.selected_node_ids = nextState.selected_node_ids.filter((nodeId) => nodes.has(nodeId));
+    if (nextState.selected_edge_id && !edges.has(nextState.selected_edge_id)) nextState.selected_edge_id = null;
+    Object.keys(nextState.pinned_positions).forEach((nodeId) => {
+      if (!nodes.has(nodeId)) delete nextState.pinned_positions[nodeId];
+    });
+    return { graph: nextGraph, state: nextState, applied: true };
+  };
 
   const parseJsonAttribute = (element, name, fallback) => {
     try {
@@ -407,10 +474,23 @@
     return "overview";
   };
 
+  const sceneLevel = (state, visibleNodeCount = 0, previous = "") => {
+    const current = normalizeState(state);
+    const count = number(visibleNodeCount, 0);
+    const zoom = current.camera_zoom;
+    if (previous === "local" && zoom >= 1.75) return "local";
+    if (previous === "cluster" && zoom >= 0.72 && zoom < 2.15) return "cluster";
+    if (zoom >= 2.0 || count <= 48) return "local";
+    if (zoom >= 0.82 || count <= 240) return "cluster";
+    return "overview";
+  };
+
   const applyDetailMode = (shell, state) => {
     const count = number(shell?.dataset?.visibleNodes, shell?.querySelectorAll?.(".gf-node")?.length || 0);
     const mode = detailMode(state, count);
+    const level = sceneLevel(state, count, shell.dataset.sceneLevel || state.scene_level);
     shell.dataset.detailMode = mode;
+    shell.dataset.sceneLevel = level;
     const status = shell.closest(".gf-canvas-panel")?.querySelector("[data-gf-detail-mode]");
     if (status) status.textContent = `${mode.charAt(0).toUpperCase()}${mode.slice(1)} view`;
     return mode;
@@ -1062,9 +1142,60 @@
     emit(root, "inspect-close", { state: root.getState?.() || {} });
   };
 
+  const webglSceneFromShell = (shell, state) => ({
+    theme: state.theme,
+    sceneLevel: state.scene_level || shell.dataset.detailMode || "overview",
+    nodes: [...shell.querySelectorAll(".gf-node")].map((node) => ({
+      id: node.dataset.nodeId || "",
+      label: node.dataset.label || node.dataset.nodeId || "Node",
+      kind: node.dataset.kind || "node",
+      clusterId: node.dataset.clusterId || node.dataset.kind || "",
+      degree: number(node.dataset.degree, 0),
+      priority: node.dataset.labelPriority || "ambient",
+      selected: state.selected_node_ids.includes(node.dataset.nodeId || ""),
+      hidden: state.hidden_groups.includes(node.dataset.kind || ""),
+    })),
+    links: [...shell.querySelectorAll(".gf-edge")].map((edge) => ({
+      id: edge.dataset.edgeId || "",
+      sourceId: edge.dataset.sourceId || "",
+      targetId: edge.dataset.targetId || "",
+      kind: edge.dataset.kind || "edge",
+      selected: edge.dataset.edgeId === state.selected_edge_id,
+      hidden: edge.dataset.hidden === "true",
+    })),
+  });
+
+  const webglSceneFromGraph = (graph, state) => ({
+    theme: state.theme,
+    sceneLevel: state.scene_level || "overview",
+    nodes: (graph.nodes || []).map((node) => ({
+      id: node.id,
+      label: node.label || node.id,
+      kind: node.kind || "node",
+      clusterId: node.provider_payload?.cluster_id || node.visual?.group || node.kind || "",
+      degree: 0,
+      priority: state.selected_node_ids.includes(node.id) ? "focus" : "ambient",
+      selected: state.selected_node_ids.includes(node.id),
+      hidden: state.hidden_groups.includes(node.kind || ""),
+    })),
+    links: (graph.edges || []).map((edge) => ({
+      id: edge.id,
+      sourceId: edge.source_id,
+      targetId: edge.target_id,
+      kind: edge.kind || "edge",
+      selected: edge.id === state.selected_edge_id,
+      hidden: false,
+    })),
+  });
+
   class GraphFakosViewer extends (typeof HTMLElement === "undefined" ? class {} : HTMLElement) {
     #wired = false;
     #suppressNextClick = false;
+    #webglRenderers = new Map();
+    #undoStack = [];
+    #redoStack = [];
+    #liveSource = null;
+    #liveUrl = "/api/live";
 
     connectedCallback() {
       this.graph = parseJsonAttribute(this, "data-graph-json", {});
@@ -1076,7 +1207,20 @@
       if (typeof document !== "undefined") document.body?.setAttribute?.("data-theme", this.state.theme);
       this.setAttribute("data-render-engine", this.state.render_engine);
       this.setAttribute("data-theme", this.state.theme);
+      const navToggle = typeof document !== "undefined"
+        ? document.querySelector("[data-gf-nav-toggle]")
+        : null;
+      if (navToggle && !navToggle.dataset.gfWired) {
+        navToggle.dataset.gfWired = "true";
+        navToggle.addEventListener("click", () => {
+          const shell = navToggle.closest(".gf-shell");
+          const collapsed = shell?.dataset.navCollapsed !== "true";
+          if (shell) shell.dataset.navCollapsed = collapsed ? "true" : "false";
+          navToggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
+        });
+      }
       this.#wireFallbackDom();
+      this.querySelector("[data-gf-live-resync]")?.addEventListener("click", () => this.resyncLiveSession());
       this.querySelectorAll(".gf-canvas-shell").forEach((shell) => {
         applyPinnedPositions(shell, this.state);
         applyCamera(shell, this.state);
@@ -1085,7 +1229,67 @@
       updateWorkbenchForms(this, this.state);
       this.#renderWorkbook();
       this.querySelectorAll(".gf-canvas-shell").forEach((shell) => drawCanvas(shell));
+      this.#mountWebGLScenes();
       emit(this, "ready", { state: this.getState(), graph: this.graph });
+    }
+
+    disconnectedCallback() {
+      this.#liveSource?.close?.();
+      this.#liveSource = null;
+      this.#destroyWebGLScenes();
+    }
+
+    #mountWebGLScenes() {
+      if (this.state.render_engine !== "3d") return;
+      this.querySelectorAll("[data-gf-webgl-surface]").forEach((surface) => {
+        const shell = surface.closest(".gf-canvas-shell");
+        if (!shell || this.#webglRenderers.has(shell)) return;
+        try {
+          const renderer = globalThis.GraphFakos3D?.mount?.(
+            surface,
+            webglSceneFromShell(shell, this.state),
+            {
+              onSelect: (item, event) => {
+                this.dispatch({
+                  name: "select-node",
+                  target_id: item.id,
+                  payload: { additive: Boolean(event?.shiftKey) },
+                });
+                const node = shell.querySelector(`.gf-node[data-node-id="${CSS.escape(item.id)}"]`);
+                if (node) openInspectOverlay(this, node);
+              },
+              onPin: (item) => this.dispatch({
+                name: "pin-node",
+                target_id: item.id,
+                payload: { x: item.x, y: item.y },
+              }),
+              onClusterMove: (positions) => this.dispatch({
+                name: "pin-many",
+                payload: { positions },
+              }),
+            },
+          );
+          if (!renderer) throw new Error("3D renderer did not mount");
+          this.#webglRenderers.set(shell, renderer);
+          shell.dataset.webglReady = "true";
+          shell.dataset.webglFallback = "false";
+          emit(this, "renderer-ready", { backend: "webgl", state: this.getState() });
+        } catch (error) {
+          shell.dataset.webglReady = "false";
+          shell.dataset.webglFallback = "true";
+          surface.setAttribute("aria-hidden", "true");
+          emit(this, "renderer-fallback", {
+            backend: "svg",
+            reason: String(error?.message || error),
+            state: this.getState(),
+          });
+        }
+      });
+    }
+
+    #destroyWebGLScenes() {
+      this.#webglRenderers.forEach((renderer) => renderer.destroy?.());
+      this.#webglRenderers.clear();
     }
 
     loadGraph(graph) {
@@ -1093,10 +1297,105 @@
       emit(this, "graph-loaded", { state: this.getState(), graph: this.graph });
     }
 
+    applyLivePatch(patch) {
+      const result = applyGraphPatch(this.graph, this.state, patch);
+      if (!result.applied) return result;
+      this.graph = result.graph;
+      this.state = result.state;
+      const scene = webglSceneFromGraph(this.graph, this.state);
+      this.#webglRenderers.forEach((renderer) => renderer.update?.(scene));
+      updateSelectionStatus(this, this.state);
+      this.setLiveStatus("live", "Live graph is current.");
+      emit(this, "live-patch", { patch, graph: this.graph, state: this.getState() });
+      return result;
+    }
+
+    setLiveStatus(status, message = "") {
+      this.state = normalizeState({ ...this.state, live_status: status });
+      this.dataset.liveStatus = status;
+      const region = this.querySelector("[data-gf-live-status]");
+      if (region) {
+        region.dataset.state = status;
+        region.textContent = message || `Live updates: ${status}.`;
+      }
+      const resync = this.querySelector("[data-gf-live-resync]");
+      if (resync) resync.hidden = status !== "resync_required";
+      emit(this, "live-status", { status, message, state: this.getState() });
+    }
+
+    connectLiveSession(url = "/api/live") {
+      if (typeof EventSource !== "function") {
+        this.setLiveStatus("error", "Live updates are unavailable in this browser.");
+        return false;
+      }
+      this.#liveSource?.close?.();
+      this.#liveUrl = url;
+      this.setLiveStatus("connecting", "Connecting to live graph updates...");
+      const source = new EventSource(url);
+      this.#liveSource = source;
+      source.addEventListener("graphfakos.patch", (event) => {
+        try {
+          this.applyLivePatch(JSON.parse(event.data));
+          this.setLiveStatus("live", "Live graph is current.");
+        } catch (error) {
+          this.setLiveStatus("error", error?.message || String(error));
+        }
+      });
+      source.addEventListener("graphfakos.heartbeat", () => this.setLiveStatus("live", "Live graph is current."));
+      source.addEventListener("graphfakos.stale", () => {
+        this.setLiveStatus("stale", "Live graph data is stale; refresh or resync before acting.");
+      });
+      source.addEventListener("graphfakos.resync_required", (event) => {
+        this.setLiveStatus("resync_required", "Live history expired. Reload to resync.");
+        emit(this, "live-resync-required", { payload: JSON.parse(event.data || "{}"), state: this.getState() });
+      });
+      source.onerror = () => this.setLiveStatus("reconnecting", "Live connection interrupted; reconnecting...");
+      return true;
+    }
+
+    resyncLiveSession() {
+      this.#liveSource?.close?.();
+      this.state = normalizeState({
+        ...this.state,
+        live_cursor: "",
+        live_revision: "",
+        applied_patch_ids: [],
+      });
+      return this.connectLiveSession(this.#liveUrl);
+    }
+
     dispatch(command) {
       const previous = this.getState();
+      const action = command?.name || "";
+      if (action === "undo") return this.#undo();
+      if (action === "redo") return this.#redo();
       this.state = reduce(this.state, command);
-      this.#applyState(command?.name || "state", previous);
+      if (!new Set(["camera", "state"]).has(action) && JSON.stringify(previous) !== JSON.stringify(this.state)) {
+        this.#undoStack.push(previous);
+        this.#undoStack = this.#undoStack.slice(-50);
+        this.#redoStack = [];
+      }
+      this.#applyState(action || "state", previous);
+      return this.getState();
+    }
+
+    #undo() {
+      const previous = this.#undoStack.pop();
+      if (!previous) return this.getState();
+      this.#redoStack.push(this.getState());
+      const current = this.getState();
+      this.state = normalizeState(previous);
+      this.#applyState("undo", current);
+      return this.getState();
+    }
+
+    #redo() {
+      const next = this.#redoStack.pop();
+      if (!next) return this.getState();
+      this.#undoStack.push(this.getState());
+      const current = this.getState();
+      this.state = normalizeState(next);
+      this.#applyState("redo", current);
       return this.getState();
     }
 
@@ -1120,6 +1419,11 @@
     fitSelection(shell = null) {
       const targetShell = shell || this.querySelector(".gf-canvas-shell");
       if (!targetShell) return this.resetCamera();
+      const renderer = this.#webglRenderers.get(targetShell);
+      if (renderer) {
+        renderer.fit?.();
+        return this.getState();
+      }
       const fitted = fittedCameraState(this.state, fitNodesFromShell(targetShell, this.state), viewportSize(targetShell));
       return this.dispatch({
         name: "camera",
@@ -1134,6 +1438,7 @@
     }
 
     resetCamera() {
+      this.#webglRenderers.forEach((renderer) => renderer.reset?.());
       return this.dispatch({ name: "camera", payload: { x: 0, y: 0, zoom: 1, yaw: 0, pitch: 0 } });
     }
 
@@ -1170,6 +1475,11 @@
         closeSurfaceMenus(document);
         return;
       }
+      if ((event.ctrlKey || event.metaKey) && key === "z") {
+        event.preventDefault();
+        this.dispatch({ name: event.shiftKey ? "redo" : "undo" });
+        return;
+      }
       if (key === "Delete" || key === "Backspace") {
         event.preventDefault();
         this.dispatch({ name: "clear-selection" });
@@ -1203,6 +1513,9 @@
         const next = doc.querySelector("graphfakos-viewer");
         if (!next) throw new Error("route fragment did not include graphfakos-viewer");
         this.replaceWith(next);
+        const nextTheme = next.getState?.().theme || target.searchParams.get("theme") || this.state.theme;
+        document.body?.setAttribute?.("data-theme", nextTheme);
+        writeStoredTheme(nextTheme);
         if (options.push !== false && window.history?.pushState) {
           window.history.pushState({ graphfakos: true }, "", routeFromUrl(target));
         }
@@ -1400,6 +1713,7 @@
     }
 
     destroy() {
+      this.#destroyWebGLScenes();
       this.replaceWith(...this.childNodes);
     }
 
@@ -1437,6 +1751,15 @@
       updateSelectionStatus(this, this.state);
       updateWorkbenchForms(this, this.state);
       this.querySelectorAll(".gf-canvas-shell").forEach((shell) => drawCanvas(shell));
+      this.#webglRenderers.forEach((renderer, shell) => {
+        renderer.update?.(webglSceneFromShell(shell, this.state));
+      });
+      this.querySelectorAll("[data-gf-history='undo']").forEach((button) => {
+        button.disabled = this.#undoStack.length === 0;
+      });
+      this.querySelectorAll("[data-gf-history='redo']").forEach((button) => {
+        button.disabled = this.#redoStack.length === 0;
+      });
       emit(this, action, { previous, state: this.getState() });
     }
 
@@ -1819,6 +2142,17 @@
           });
           return;
         }
+        const themeToggle = event.target?.closest?.("[data-gf-theme-toggle]");
+        if (themeToggle) {
+          event.preventDefault();
+          const target = new URL(themeToggle.getAttribute("href"), window.location.href);
+          const theme = target.searchParams.get("theme") || "default";
+          this.state = normalizeState({ ...this.state, theme });
+          document.body?.setAttribute?.("data-theme", theme);
+          writeStoredTheme(theme);
+          this.navigate(target);
+          return;
+        }
         const link = event.target?.closest?.("a[href]");
         if (!link || event.defaultPrevented || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
         const target = new URL(link.getAttribute("href"), window.location.href);
@@ -1889,6 +2223,16 @@
       this.querySelectorAll("[data-gf-pin='reset']").forEach((button) => {
         button.addEventListener("click", () => this.dispatch({ name: "reset-pins" }));
       });
+      this.querySelectorAll("[data-gf-layout-reset]").forEach((button) => {
+        button.addEventListener("click", () => {
+          this.#webglRenderers.forEach((renderer) => renderer.resetLayout?.());
+          this.dispatch({ name: "reset-pins" });
+          emit(this, "layout-reset", { state: this.getState() });
+        });
+      });
+      this.querySelectorAll("[data-gf-history]").forEach((button) => {
+        button.addEventListener("click", () => this.dispatch({ name: button.dataset.gfHistory || "" }));
+      });
       this.querySelectorAll("[data-gf-workbook-action]").forEach((button) => {
         button.addEventListener("click", () => {
           if (button.dataset.gfWorkbookAction === "save") this.#saveWorkbookSlot();
@@ -1955,6 +2299,7 @@
     fittedCameraState,
     projectPoint3D,
     detailMode,
+    sceneLevel,
     applyDetailMode,
     minimapViewportRect,
     keyboardShortcuts,
@@ -1971,6 +2316,7 @@
     savedViewRoute,
     workbookSlotPayload,
     workbookSlotsFromStorage,
+    applyGraphPatch,
   };
   if (typeof window !== "undefined") window.GraphFakosViewerRuntime = runtime;
   if (typeof globalThis !== "undefined") globalThis.GraphFakosViewerRuntime = runtime;

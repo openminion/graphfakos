@@ -7,6 +7,58 @@ import subprocess
 from graphfakos.browser import viewer_runtime_script
 
 
+def test_packaged_runtime_applies_live_patches_without_resetting_view_state() -> None:
+    node = shutil.which("node")
+    assert node is not None, "Node.js is required for the browser runtime harness"
+    script = (
+        viewer_runtime_script()
+        + """
+const runtime = globalThis.GraphFakosViewerRuntime;
+const graph = {
+  nodes: [{ id: "a", label: "A", kind: "item" }],
+  edges: [],
+  provider_payload: {}
+};
+const state = runtime.normalizeState({
+  camera_x: 12,
+  camera_y: -4,
+  camera_zoom: 1.5,
+  filters: { kind: "item" },
+  selected_node_id: "a",
+  selected_node_ids: ["a"],
+  live_revision: "0"
+});
+const patch = {
+  patch_id: "patch-1",
+  base_revision: { value: "0" },
+  result_revision: { value: "1" },
+  cursor: { value: "cursor-1" },
+  operations: [
+    { kind: "node_upsert", node: { id: "b", label: "B", kind: "item" } },
+    { kind: "edge_upsert", edge: { id: "ab", source_id: "a", target_id: "b", kind: "related" } }
+  ]
+};
+const result = runtime.applyGraphPatch(graph, state, patch);
+const duplicate = runtime.applyGraphPatch(result.graph, result.state, patch);
+console.log(JSON.stringify({ result, duplicate }));
+"""
+    )
+    completed = subprocess.run(
+        [node, "-e", script],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    payload = json.loads(completed.stdout)
+
+    assert [node["id"] for node in payload["result"]["graph"]["nodes"]] == ["a", "b"]
+    assert payload["result"]["graph"]["edges"][0]["id"] == "ab"
+    assert payload["result"]["state"]["camera_x"] == 12
+    assert payload["result"]["state"]["filters"] == {"kind": "item"}
+    assert payload["result"]["state"]["live_revision"] == "1"
+    assert payload["duplicate"]["applied"] is False
+
+
 def test_packaged_viewer_runtime_reducer_runs_in_node() -> None:
     node = shutil.which("node")
     assert node is not None, "Node.js is required for the browser runtime harness"

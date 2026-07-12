@@ -2,15 +2,26 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+import ipaddress
 import json
-from typing import Callable
+from threading import Lock
+from typing import Callable, Mapping
 from urllib.parse import parse_qs, urlparse
 import webbrowser
 
+from .live import (
+    GraphFakosGraphPatch,
+    GraphFakosLiveProvider,
+    GraphFakosLiveSessionCursor,
+    GraphFakosLiveSessionDiagnostics,
+    GraphFakosLiveSessionRequest,
+)
+
 RenderPath = Callable[[str, dict[str, list[str]]], str]
 ActionHandler = Callable[[str, dict[str, object]], dict[str, object]]
+RequestAuthorizer = Callable[[str, str, Mapping[str, str]], bool]
 _MAX_ACTION_BYTES = 1024 * 1024
 _VIEWER_CONTEXT_FIELD = "viewer_context"
 
@@ -33,6 +44,36 @@ class LocalViewerServerResult:
 
 class LocalViewerHttpServer(ThreadingHTTPServer):
     preview_url: str
+    live_provider: GraphFakosLiveProvider | None
+    max_live_clients: int
+    _live_clients: int
+    _live_lock: Lock
+    authorization_rejections: int
+    origin_rejections: int
+
+    def acquire_live_client(self) -> bool:
+        with self._live_lock:
+            if self._live_clients >= self.max_live_clients:
+                return False
+            self._live_clients += 1
+            return True
+
+    def release_live_client(self) -> None:
+        with self._live_lock:
+            self._live_clients = max(0, self._live_clients - 1)
+
+    def live_diagnostics(self) -> GraphFakosLiveSessionDiagnostics:
+        provider_diagnostics = getattr(self.live_provider, "diagnostics", None)
+        if callable(provider_diagnostics):
+            diagnostics = provider_diagnostics()
+        else:
+            diagnostics = GraphFakosLiveSessionDiagnostics()
+        return replace(
+            diagnostics,
+            connection_count=self._live_clients,
+            authorization_rejection_count=self.authorization_rejections,
+            origin_rejection_count=self.origin_rejections,
+        )
 
 
 def make_local_viewer_server(
@@ -43,7 +84,20 @@ def make_local_viewer_server(
     default_path: str = "/explore",
     host: str = "127.0.0.1",
     port: int = 8767,
+    live_provider: GraphFakosLiveProvider | None = None,
+    allow_remote: bool = False,
+    authorize_request: RequestAuthorizer | None = None,
+    allowed_origins: tuple[str, ...] = (),
+    max_live_clients: int = 16,
 ) -> LocalViewerHttpServer:
+    _validate_server_exposure(
+        host=host,
+        allow_remote=allow_remote,
+        authorize_request=authorize_request,
+        allowed_origins=allowed_origins,
+        max_live_clients=max_live_clients,
+    )
+
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:
             if self.path == "/favicon.ico":
@@ -52,6 +106,9 @@ def make_local_viewer_server(
                 return
             parsed = urlparse(self.path)
             query = parse_qs(parsed.query)
+            if parsed.path == "/api/live":
+                self._send_live_event(query)
+                return
             route = parsed.path
             if parsed.query:
                 route = f"{route}?{parsed.query}"
@@ -86,6 +143,8 @@ def make_local_viewer_server(
 
         def do_POST(self) -> None:
             parsed = urlparse(self.path)
+            if not self._request_allowed(parsed.path):
+                return
             if handle_action is None:
                 self._send_json(
                     501,
@@ -133,6 +192,71 @@ def make_local_viewer_server(
                 self.end_headers()
                 return
             self._send_json(200, result)
+
+        def _send_live_event(self, query: dict[str, list[str]]) -> None:
+            if live_provider is None:
+                self._send_json(501, {"ok": False, "error": "live mode is unavailable"})
+                return
+            if not self._request_allowed("/api/live"):
+                return
+            if not self.server.acquire_live_client():
+                self._send_json(
+                    429, {"ok": False, "error": "live client limit reached"}
+                )
+                return
+            try:
+                cursor_value = self.headers.get("Last-Event-ID", "")
+                if not cursor_value:
+                    cursor_value = (query.get("cursor") or [""])[-1]
+                request = GraphFakosLiveSessionRequest(
+                    session_id=(query.get("session_id") or ["local"])[-1],
+                    cursor=(
+                        GraphFakosLiveSessionCursor(cursor_value)
+                        if cursor_value
+                        else None
+                    ),
+                )
+                live_provider.open_live_session(request)
+                event = live_provider.load_patch(request)
+                event_name = (
+                    "graphfakos.patch"
+                    if isinstance(event, GraphFakosGraphPatch)
+                    else f"graphfakos.{event.status}"
+                )
+                lines = [f"event: {event_name}"]
+                if isinstance(event, GraphFakosGraphPatch):
+                    lines.append(f"id: {event.cursor.value}")
+                lines.append(f"data: {json.dumps(event.to_dict(), sort_keys=True)}")
+                body = ("\n".join(lines) + "\n\n").encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Connection", "close")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+            finally:
+                self.server.release_live_client()
+
+        def _request_allowed(self, path: str) -> bool:
+            origin = self.headers.get("Origin", "")
+            if not _origin_allowed(
+                origin, self.headers.get("Host", ""), allowed_origins
+            ):
+                self.server.origin_rejections += 1
+                self._send_json(403, {"ok": False, "error": "origin is not allowed"})
+                return False
+            if authorize_request is not None and not authorize_request(
+                self.command,
+                path,
+                {key: value for key, value in self.headers.items()},
+            ):
+                self.server.authorization_rejections += 1
+                self._send_json(
+                    403, {"ok": False, "error": "request is not authorized"}
+                )
+                return False
+            return True
 
         def _send_json(self, status: int, payload: dict[str, object]) -> None:
             body = json.dumps(payload, sort_keys=True).encode("utf-8")
@@ -190,6 +314,12 @@ def make_local_viewer_server(
             return
 
     server = LocalViewerHttpServer((host, port), Handler)
+    server.live_provider = live_provider
+    server.max_live_clients = max_live_clients
+    server._live_clients = 0
+    server._live_lock = Lock()
+    server.authorization_rejections = 0
+    server.origin_rejections = 0
     bound_host, bound_port = server.server_address
     server.preview_url = f"http://{bound_host}:{bound_port}{default_path}"
     return server
@@ -233,6 +363,11 @@ def serve_local_viewer(
     host: str = "127.0.0.1",
     port: int = 8767,
     open_browser: bool = False,
+    live_provider: GraphFakosLiveProvider | None = None,
+    allow_remote: bool = False,
+    authorize_request: RequestAuthorizer | None = None,
+    allowed_origins: tuple[str, ...] = (),
+    max_live_clients: int = 16,
 ) -> LocalViewerServerResult:
     server = make_local_viewer_server(
         render_path=render_path,
@@ -241,6 +376,11 @@ def serve_local_viewer(
         default_path=default_path,
         host=host,
         port=port,
+        live_provider=live_provider,
+        allow_remote=allow_remote,
+        authorize_request=authorize_request,
+        allowed_origins=allowed_origins,
+        max_live_clients=max_live_clients,
     )
     opened = webbrowser.open(server.preview_url) if open_browser else False
     print(f"Serving GraphFakos viewer at {server.preview_url}")
@@ -259,10 +399,42 @@ def serve_local_viewer(
     )
 
 
+def _validate_server_exposure(
+    *,
+    host: str,
+    allow_remote: bool,
+    authorize_request: RequestAuthorizer | None,
+    allowed_origins: tuple[str, ...],
+    max_live_clients: int,
+) -> None:
+    if max_live_clients <= 0:
+        raise ValueError("max_live_clients must be positive")
+    if "*" in allowed_origins:
+        raise ValueError("wildcard origins are not allowed")
+    try:
+        loopback = ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        loopback = host == "localhost"
+    if loopback:
+        return
+    if not allow_remote:
+        raise ValueError("non-loopback bind requires explicit allow_remote=True")
+    if authorize_request is None:
+        raise ValueError("non-loopback bind requires a request authorization hook")
+
+
+def _origin_allowed(origin: str, host: str, allowed_origins: tuple[str, ...]) -> bool:
+    if not origin:
+        return True
+    same_origin = {f"http://{host}", f"https://{host}"}
+    return origin in same_origin or origin in allowed_origins
+
+
 __all__ = [
     "LocalViewerHttpServer",
     "LocalViewerServerResult",
     "ActionHandler",
+    "RequestAuthorizer",
     "RenderPath",
     "make_local_viewer_server",
     "serve_local_viewer",

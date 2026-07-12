@@ -18,6 +18,7 @@ def test_python_m_graphfakos_smoke_json() -> None:
     assert payload["semantic_contract"] is True
     assert payload["openminion_imports"] is False
     assert "graphfakos.artifacts" in payload["stable_import_roots"]
+    assert "graphfakos.live" in payload["stable_import_roots"]
 
 
 def test_python_m_graphfakos_ui_preview_writes_html(tmp_path) -> None:

@@ -11,6 +11,7 @@ def test_graphfakos_package_imports() -> None:
     import graphfakos.adapters
     import graphfakos.browser
     import graphfakos.contracts
+    import graphfakos.live
     import graphfakos.models
     import graphfakos.provider
     import graphfakos.render
@@ -26,12 +27,18 @@ def test_graphfakos_package_imports() -> None:
     assert "graphfakos.browser" in graphfakos.STABLE_IMPORT_ROOTS
     assert "graphfakos.models" in graphfakos.STABLE_IMPORT_ROOTS
     assert "graphfakos.contracts" in graphfakos.STABLE_IMPORT_ROOTS
+    assert "graphfakos.live" in graphfakos.STABLE_IMPORT_ROOTS
     assert "graphfakos.render" in graphfakos.STABLE_IMPORT_ROOTS
     assert "graphfakos.renderers" in graphfakos.STABLE_IMPORT_ROOTS
     assert "GraphFakosDiagnostics" in graphfakos.__all__
     assert "DemoGraphProvider" in graphfakos.__all__
     assert "DEMO_SCENARIOS" in graphfakos.__all__
     assert "GraphFakosViewerState" in graphfakos.__all__
+    assert "GraphFakosGraphPatch" in graphfakos.__all__
+    assert "GraphFakosLiveProvider" in graphfakos.__all__
+    assert "GraphFakosLiveReplayBundle" in graphfakos.__all__
+    assert "RequestAuthorizer" in graphfakos.__all__
+    assert "apply_graph_patch" in graphfakos.__all__
     assert "GraphFakosKnowledgeCapture" in graphfakos.__all__
     assert "GraphFakosKnowledgeCaptureProvider" in graphfakos.__all__
     assert "FileGraphProvider" in graphfakos.__all__

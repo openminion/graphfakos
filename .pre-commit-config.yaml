@@ -5,9 +5,9 @@ repos:
     rev: v6.0.0
     hooks:
       - id: trailing-whitespace
-        exclude: "^(artifacts/|validation-report\\.json$)"
+        exclude: "^(artifacts/|src/graphfakos/assets/renderer-3d\\.js$|validation-report\\.json$)"
       - id: end-of-file-fixer
-        exclude: "^(artifacts/|validation-report\\.json$)"
+        exclude: "^(artifacts/|src/graphfakos/assets/renderer-3d\\.js$|validation-report\\.json$)"
       - id: check-yaml
         args: [--allow-multiple-documents]
       - id: check-toml

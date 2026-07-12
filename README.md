@@ -144,6 +144,8 @@ python3.11 -m pip install -e .
 - JSON, Markdown, DOT, and replay-bundle exports for CI proof, issue
   attachments, exact-state replay, and package-local review flows
 - a local HTTP preview server for interactive package development
+- provider-neutral live patches, resumable cursors, deterministic replay, and a
+  secured loopback-first SSE reference endpoint
 - a fake fixture provider for tests and third-party adapter examples
 - shared test assertions for graph viewer contracts
 
@@ -188,7 +190,12 @@ should stay thin:
 - `pragmagraph-ui` maps source/document/code graph snapshots into
   GraphFakos DTOs through PragmaGraph's adapter, then calls the shared viewer.
 - future packages should implement a `GraphFakosProvider` adapter instead of
-  copying viewer HTML, local-server behavior, navigation screens, or tests.
+copying viewer HTML, local-server behavior, navigation screens, or tests.
+
+Providers that need incremental updates may additionally implement
+`GraphFakosLiveProvider`. See the
+[live-session guide](https://github.com/openminion/graphfakos/blob/main/docs/live-sessions.md)
+for patch, revision, replay, browser, and local-server security contracts.
 
 This keeps the visual workbench consistent while preserving each package's own
 storage, trust, freshness, and lifecycle semantics.
@@ -200,6 +207,11 @@ Launch the reusable dynamic viewer in a browser:
 ```bash
 make preview
 ```
+
+The stable `render_engine=3d` mode uses a package-owned WebGL bundle with an
+SVG accessibility/no-WebGL fallback. Rebuild and test the pinned browser asset
+with `make web-install web-build browser-e2e`; installed wheels do not require
+Node or a CDN.
 
 `make preview` serves the viewer at a local HTTP URL and opens the browser. It
 does not require a generated HTML file. In server mode, GraphFakos serves a

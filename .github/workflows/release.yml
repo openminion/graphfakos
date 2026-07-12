@@ -45,6 +45,9 @@ jobs:
       - name: Run browser runtime harness
         run: make browser-test
 
+      - name: Build pinned browser assets
+        run: make web-install web-build
+
       - name: Run release check
         run: make release-check
 

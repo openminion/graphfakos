@@ -24,7 +24,7 @@ GraphFakos owns the reusable viewer layer:
 12. framework-neutral `<graphfakos-viewer>` mounting behavior,
 13. reusable viewer state, command, event, expansion, knowledge-capture, and
     theme DTOs,
-14. packaged browser runtime assets,
+14. packaged browser runtime and true-3D renderer assets,
 15. reusable viewer test assertions.
 
 Provider packages own their data semantics and adapter mapping. They should not
@@ -145,13 +145,21 @@ Knowledge capture follows the same boundary. GraphFakos may render a
 local preview mode, but the provider or host owns persistence, worker queues,
 fact extraction, memory promotion, source ingestion, and graph rebuild policy.
 
-The static baseline renderer is `svg`. The dynamic runtime also accepts `3d` as
-a package-local projected SVG interaction mode with yaw/pitch camera state,
-orbit gestures, perspective scaling, and route/export persistence. `canvas` and
-WebGL-backed renderers remain future backend targets behind the same
-provider-neutral state contract; unsupported render engines should fail clearly
-through the public renderer validation helper rather than silently changing DTO
-behavior.
+The static baseline renderer is `svg`. The stable public `3d` value selects the
+package-owned `3d-force-graph`/Three.js WebGL backend when WebGL is available.
+The same SVG stays mounted as the structured accessibility and no-WebGL
+fallback. Node is a pinned build/test dependency only; installed wheels serve
+the generated renderer asset locally without a CDN. `canvas` remains a
+progressive 2D backend behind the same provider-neutral state contract.
+Unsupported render engines fail through the public renderer validation helper
+rather than silently changing DTO behavior.
+
+Semantic LOD extends `GraphFakosViewerState.scene_level` with `overview`,
+`cluster`, and `local` values. Expansion pagination extends the existing
+`GraphFakosExpansionRequest.cursor`; it is deliberately distinct from provider
+live-session revision or reconnect cursors. Provider envelopes retain raw,
+visible, omitted, cluster, and bundle counts while renderer diagnostics report
+the independently drawn count.
 
 ## Scalable Graph Interaction Contract
 
@@ -180,10 +188,11 @@ curved, bundled, alpha-scaled, or aggregate edge rendering over straight-line
 clutter. Providers remain responsible for graph truth; GraphFakos only renders
 the provider-neutral DTOs and emits provider-neutral commands.
 
-`3d` navigation is a progressive enhancement over the same SVG fallback. Empty
-canvas drag orbits the projected scene, Shift/Alt-drag pans, scroll zooms toward
-the cursor, `W/A/S/D` moves through the scene, `Q/E` adjusts yaw, and
-double-click centers a node. Saved routes and exported viewer state must carry
+`3d` navigation is a true WebGL enhancement over the same SVG fallback. Empty
+canvas drag orbits the scene, right-drag pans, scroll zooms, node drag pins a
+viewer-local position, and the visible non-drag controls provide fit, reset,
+pin reset, undo, redo, fullscreen, and theme switching. Saved routes and
+exported viewer state carry
 `camera_yaw` and `camera_pitch` in addition to `camera_x`, `camera_y`, and
 `camera_zoom`. Static export may render the same graph without live orbit, but
 it must remain readable and provider-neutral.

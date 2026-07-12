@@ -298,7 +298,9 @@ def test_dynamic_viewer_contracts_round_trip() -> None:
         target_id="node_kind",
         payload={"value": "provider"},
     )
-    expansion = GraphFakosExpansionRequest(source_id="provider:third-party", depth=2)
+    expansion = GraphFakosExpansionRequest(
+        source_id="provider:third-party", depth=2, cursor="expand:provider:2"
+    )
     theme = GraphFakosTheme(
         id="review",
         label="Review",
@@ -325,6 +327,10 @@ def test_dynamic_viewer_contracts_round_trip() -> None:
     assert GraphFakosViewerEvent.from_dict(event.to_dict()).state.camera_zoom == 1.4
     assert GraphFakosViewerEvent.from_dict(event.to_dict()).state.camera_yaw == 24.0
     assert GraphFakosExpansionRequest.from_dict(expansion.to_dict()).depth == 2
+    assert (
+        GraphFakosExpansionRequest.from_dict(expansion.to_dict()).cursor
+        == "expand:provider:2"
+    )
     assert "node color provider: #0f766e" in theme.caption()
 
 

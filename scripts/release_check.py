@@ -54,14 +54,17 @@ def _assert_package_docs_shape(root: Path) -> None:
         root / "docs" / "README.md",
         root / "docs" / "artifact-interchange.md",
         root / "docs" / "custom-provider-example.md",
+        root / "docs" / "live-sessions.md",
         root / "docs" / "provider-envelope.md",
         root / "docs" / "source-tree-owner-map.md",
         root / "docs" / "ui-contracts.md",
         root / "src" / "graphfakos" / "artifacts.py",
         root / "src" / "graphfakos" / "__init__.py",
         root / "src" / "graphfakos" / "assets" / "viewer.js",
+        root / "src" / "graphfakos" / "assets" / "renderer-3d.js",
         root / "src" / "graphfakos" / "browser.py",
         root / "src" / "graphfakos" / "contracts.py",
+        root / "src" / "graphfakos" / "live.py",
         root / "src" / "graphfakos" / "models.py",
         root / "src" / "graphfakos" / "provider.py",
         root / "src" / "graphfakos" / "render.py",
@@ -171,6 +174,8 @@ def main(argv: list[str] | None = None) -> int:
                         "from importlib.resources import files; "
                         "from graphfakos import GraphFakosGraph, "
                         "GraphFakosDiagnostics, GraphFakosProvider, "
+                        "GraphFakosGraphPatch, GraphFakosLiveProvider, "
+                        "GraphFakosLiveReplayBundle, apply_graph_patch, "
                         "GraphPreviewOutputPaths, "
                         "DemoGraphProvider, FileGraphProvider, FixtureGraphProvider, "
                         "build_graph_report, build_graph_diff, "
@@ -186,6 +191,8 @@ def main(argv: list[str] | None = None) -> int:
                         "render_graph_viewer, write_provider_graph_artifact; "
                         "assert files('graphfakos').joinpath('py.typed').is_file(); "
                         "assert files('graphfakos').joinpath('assets', 'viewer.js').is_file(); "
+                        "assert files('graphfakos').joinpath('assets', 'renderer-3d.js').is_file(); "
+                        "assert files('graphfakos').joinpath('assets', 'renderer-3d.js').stat().st_size > 1000000; "
                         "assert len(DemoGraphProvider('dense').load_graph(GraphFakosRequest()).nodes) == 36; "
                         "assert 'graphfakos-viewer' in viewer_runtime_script()"
                     ),

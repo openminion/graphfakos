@@ -8,7 +8,7 @@ PRE_COMMIT := $(PYTHON) -m pre_commit
 PYTEST := $(PYTHON) -m pytest
 RUFF := $(PYTHON) -m ruff
 
-.PHONY: help venv dev-install hooks-install hooks-run preview preview-demo preview-dense preview-timeline preview-warnings preview-path preview-provenance preview-workbench preview-budget preview-islands preview-html clean-preview fix format format-check lint test browser-test check release-check
+.PHONY: help venv dev-install hooks-install hooks-run web-install web-build benchmark-fixtures preview preview-demo preview-dense preview-timeline preview-warnings preview-path preview-provenance preview-workbench preview-budget preview-islands preview-html clean-preview fix format format-check lint test browser-test browser-e2e check release-check
 
 help:
 	@printf '%s\n' \
@@ -34,6 +34,7 @@ help:
 		'  make lint          Run Ruff lint' \
 		'  make test          Run package pytest suite' \
 		'  make browser-test  Run browser runtime pytest coverage' \
+		'  make browser-e2e   Run the pinned real-browser viewer smoke' \
 		'  make check         Run format-check, lint, and test' \
 		'  make release-check Run package release smoke'
 
@@ -113,6 +114,18 @@ test: $(DEV_STAMP)
 
 browser-test: $(DEV_STAMP)
 	PYTHONPATH="$(REPO_ROOT)/src" $(PYTEST) -q "$(REPO_ROOT)/tests/test_browser_runtime.py"
+
+web-install:
+	cd "$(REPO_ROOT)/web" && npm ci
+
+web-build:
+	cd "$(REPO_ROOT)/web" && npm run build
+
+benchmark-fixtures: $(DEV_STAMP)
+	cd "$(REPO_ROOT)/web" && npm run fixtures
+
+browser-e2e: $(DEV_STAMP)
+	cd "$(REPO_ROOT)/web" && npm test
 
 check: format-check lint test
 

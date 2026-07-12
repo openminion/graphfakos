@@ -1,11 +1,17 @@
 include LICENSE
 include NOTICE
+include THIRD_PARTY_NOTICES.md
 include CODE_OF_CONDUCT.md
 include CODE_QUALITY.md
 include CONTRIBUTING.md
 include SECURITY.md
 include SUPPORT.md
 recursive-include scripts *.py
+include web/package.json
+include web/package-lock.json
+include web/playwright.config.js
+recursive-include web/src *.js
+recursive-include web/tests *.js
 recursive-include docs *.md
 include API_COMPATIBILITY.md
 include README.md

@@ -6,6 +6,26 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Literal, cast
 
+from ._model_values import (
+    _bool,
+    _float,
+    _float_or_none,
+    _int,
+    _int_or_none,
+    _json_compatible_dict,
+    _mapping,
+    _mapping_list,
+    _object_dict,
+    _position_dict,
+    _required_string,
+    _string,
+    _string_dict,
+    _string_or_none,
+    _string_tuple,
+    _string_tuple_dict,
+    _tag_tuple,
+)
+
 GraphFakosScreen = Literal[
     "explore",
     "neighborhood",
@@ -32,6 +52,7 @@ class GraphFakosViewerState:
     camera_pitch: float = 0.0
     render_engine: str = "svg"
     theme: str = "default"
+    scene_level: str = "overview"
     filters: dict[str, str] = field(default_factory=dict)
     expanded_groups: tuple[str, ...] = ()
     hidden_groups: tuple[str, ...] = ()
@@ -79,6 +100,7 @@ class GraphFakosViewerState:
             ),
             render_engine=request.render_engine,
             theme=request.theme,
+            scene_level="overview",
             filters=dict(request.filters),
             saved_view_id=request.saved_view_id,
             show_orphans=request.show_orphans,
@@ -119,6 +141,7 @@ class GraphFakosViewerState:
             "camera_pitch": self.camera_pitch,
             "render_engine": self.render_engine,
             "theme": self.theme,
+            "scene_level": self.scene_level,
             "show_orphans": self.show_orphans,
             "show_neighbor_links": self.show_neighbor_links,
             "edge_clutter": self.edge_clutter,
@@ -173,6 +196,7 @@ class GraphFakosViewerState:
             "camera_pitch": self.camera_pitch,
             "render_engine": self.render_engine,
             "theme": self.theme,
+            "scene_level": self.scene_level,
             "filters": dict(self.filters),
             "expanded_groups": list(self.expanded_groups),
             "hidden_groups": list(self.hidden_groups),
@@ -237,6 +261,9 @@ class GraphFakosViewerState:
                 payload.get("render_engine", "svg"), "viewer_state.render_engine"
             ),
             theme=_string(payload.get("theme", "default"), "viewer_state.theme"),
+            scene_level=_string(
+                payload.get("scene_level", "overview"), "viewer_state.scene_level"
+            ),
             filters=_string_dict(payload.get("filters", {}), "viewer_state.filters"),
             expanded_groups=_string_tuple(
                 payload.get("expanded_groups", ()),
@@ -391,14 +418,18 @@ class GraphFakosExpansionRequest:
     depth: int = 1
     edge_kind: str = ""
     node_kind: str = ""
+    cursor: str = ""
 
     def to_dict(self) -> dict[str, object]:
-        return {
+        payload = {
             "source_id": self.source_id,
             "depth": self.depth,
             "edge_kind": self.edge_kind,
             "node_kind": self.node_kind,
         }
+        if self.cursor:
+            payload["cursor"] = self.cursor
+        return payload
 
     @classmethod
     def from_dict(cls, payload: Mapping[str, object]) -> GraphFakosExpansionRequest:
@@ -413,6 +444,7 @@ class GraphFakosExpansionRequest:
             node_kind=_string(
                 payload.get("node_kind", ""), "expansion_request.node_kind"
             ),
+            cursor=_string(payload.get("cursor", ""), "expansion_request.cursor"),
         )
 
 
@@ -1556,152 +1588,6 @@ class GraphFakosRequest:
             ),
             pivot_mode=_string(payload.get("pivot_mode", ""), "request.pivot_mode"),
         )
-
-
-def _mapping(value: object, field_name: str) -> Mapping[str, object]:
-    if isinstance(value, Mapping):
-        return cast(Mapping[str, object], value)
-    raise TypeError(f"{field_name} must be a mapping")
-
-
-def _mapping_list(value: object, field_name: str) -> tuple[Mapping[str, object], ...]:
-    if isinstance(value, list):
-        return tuple(_mapping(item, field_name) for item in value)
-    if isinstance(value, tuple):
-        return tuple(_mapping(item, field_name) for item in value)
-    raise TypeError(f"{field_name} must be a list of mappings")
-
-
-def _required_string(
-    payload: Mapping[str, object],
-    key: str,
-    field_name: str,
-) -> str:
-    value = payload.get(key)
-    if not isinstance(value, str) or not value:
-        raise ValueError(f"{field_name} must be a non-empty string")
-    return value
-
-
-def _string(value: object, field_name: str) -> str:
-    if isinstance(value, str):
-        return value
-    raise TypeError(f"{field_name} must be a string")
-
-
-def _string_or_none(value: object, field_name: str) -> str | None:
-    if value is None:
-        return None
-    return _string(value, field_name)
-
-
-def _bool(value: object, field_name: str) -> bool:
-    if isinstance(value, bool):
-        return value
-    raise TypeError(f"{field_name} must be a bool")
-
-
-def _int(value: object, field_name: str) -> int:
-    if isinstance(value, bool) or not isinstance(value, int):
-        raise TypeError(f"{field_name} must be an int")
-    return value
-
-
-def _int_or_none(value: object, field_name: str) -> int | None:
-    if value is None:
-        return None
-    return _int(value, field_name)
-
-
-def _float(value: object, field_name: str) -> float:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise TypeError(f"{field_name} must be numeric")
-    return float(value)
-
-
-def _float_or_none(value: object, field_name: str) -> float | None:
-    if value is None:
-        return None
-    return _float(value, field_name)
-
-
-def _string_tuple(value: object, field_name: str) -> tuple[str, ...]:
-    if isinstance(value, (list, tuple)):
-        items: list[str] = []
-        for item in value:
-            if not isinstance(item, str):
-                raise TypeError(f"{field_name} must contain only strings")
-            items.append(item)
-        return tuple(items)
-    raise TypeError(f"{field_name} must be a list of strings")
-
-
-def _tag_tuple(value: object, field_name: str) -> tuple[str, ...]:
-    if isinstance(value, str):
-        return tuple(item.strip() for item in value.split(",") if item.strip())
-    return _string_tuple(value, field_name)
-
-
-def _string_dict(value: object, field_name: str) -> dict[str, str]:
-    mapping = _mapping(value, field_name)
-    parsed: dict[str, str] = {}
-    for key, item in mapping.items():
-        if not isinstance(key, str) or not isinstance(item, str):
-            raise TypeError(f"{field_name} must map strings to strings")
-        parsed[key] = item
-    return parsed
-
-
-def _string_tuple_dict(value: object, field_name: str) -> dict[str, tuple[str, ...]]:
-    mapping = _mapping(value, field_name)
-    parsed: dict[str, tuple[str, ...]] = {}
-    for key, item in mapping.items():
-        if not isinstance(key, str):
-            raise TypeError(f"{field_name} must use string keys")
-        parsed[key] = _string_tuple(item, f"{field_name}.{key}")
-    return parsed
-
-
-def _position_dict(value: object, field_name: str) -> dict[str, tuple[float, float]]:
-    mapping = _mapping(value, field_name)
-    parsed: dict[str, tuple[float, float]] = {}
-    for key, item in mapping.items():
-        if not isinstance(key, str):
-            raise TypeError(f"{field_name} must use string keys")
-        if not isinstance(item, (list, tuple)) or len(item) != 2:
-            raise TypeError(f"{field_name}.{key} must be a two-item coordinate")
-        parsed[key] = (
-            _float(item[0], f"{field_name}.{key}.x"),
-            _float(item[1], f"{field_name}.{key}.y"),
-        )
-    return parsed
-
-
-def _object_dict(value: object, field_name: str) -> dict[str, object]:
-    mapping = _mapping(value, field_name)
-    parsed: dict[str, object] = {}
-    for key, item in mapping.items():
-        if not isinstance(key, str):
-            raise TypeError(f"{field_name} must use string keys")
-        parsed[key] = item
-    return parsed
-
-
-def _json_compatible_dict(value: Mapping[str, object]) -> dict[str, object]:
-    return {key: _json_compatible(item) for key, item in value.items()}
-
-
-def _json_compatible(value: object) -> object:
-    if isinstance(value, Mapping):
-        return {
-            str(key): _json_compatible(item)
-            for key, item in cast(Mapping[object, object], value).items()
-        }
-    if isinstance(value, tuple):
-        return [_json_compatible(item) for item in value]
-    if isinstance(value, list):
-        return [_json_compatible(item) for item in value]
-    return value
 
 
 __all__ = [

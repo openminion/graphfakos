@@ -13,4 +13,13 @@ def viewer_runtime_script() -> str:
     )
 
 
-__all__ = ["viewer_runtime_script"]
+@lru_cache(maxsize=1)
+def viewer_renderer_script() -> str:
+    return (
+        files("graphfakos")
+        .joinpath("assets", "renderer-3d.js")
+        .read_text(encoding="utf-8")
+    )
+
+
+__all__ = ["viewer_renderer_script", "viewer_runtime_script"]

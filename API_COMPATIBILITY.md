@@ -14,6 +14,7 @@ intentionally small and centered on provider-neutral graph viewing.
 - `graphfakos.render`
 - `graphfakos.renderers`
 - `graphfakos.server`
+- `graphfakos.live`
 - `graphfakos.static`
 - `graphfakos.testing`
 - `graphfakos.ui`
@@ -44,6 +45,8 @@ release note says otherwise:
 - report helper names in `graphfakos.static` / `graphfakos.render`
 - console script names
 - local preview server helper names and same-origin fragment response behavior
+- typed live patch/revision/cursor/status/replay contracts and atomic patch
+  application helpers
 - local preview action handler helper shape and `POST /api/knowledge` JSON
   behavior
 - screen manifest helper names

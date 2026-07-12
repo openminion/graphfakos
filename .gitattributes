@@ -1,0 +1,2 @@
+# Generated bundle contains upstream shader/source strings with significant whitespace.
+src/graphfakos/assets/renderer-3d.js whitespace=-trailing-space,-space-before-tab

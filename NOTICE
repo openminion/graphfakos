@@ -18,3 +18,6 @@ GraphFakos and related package identities have no official token, coin, NFT,
 airdrop, staking program, treasury product, or investment offering. Any use of
 these identities to market or imply a crypto asset, fundraising scheme, or
 investment opportunity is unauthorized and should be treated as a scam.
+
+The packaged browser renderer includes MIT-licensed 3d-force-graph 1.80.0 and
+Three.js 0.185.1. See THIRD_PARTY_NOTICES.md for the pinned asset inventory.

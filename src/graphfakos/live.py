@@ -9,6 +9,7 @@ import json
 from threading import Lock
 from typing import Literal, Protocol, cast, runtime_checkable
 
+from ._model_values import _bool, _mapping, _object_dict, _string
 from .models import GraphFakosEdge, GraphFakosGraph, GraphFakosNode
 
 GraphFakosPatchOperationKind = Literal[
@@ -196,12 +197,30 @@ class GraphFakosGraphPatch:
 class GraphFakosLiveSessionRequest:
     session_id: str
     cursor: GraphFakosLiveSessionCursor | None = None
+    schema_version: str = "graphfakos.live-request.v1"
+
+    def __post_init__(self) -> None:
+        if not self.session_id.strip():
+            raise ValueError("session_id must not be empty")
 
     def to_dict(self) -> dict[str, object]:
         return {
+            "schema_version": self.schema_version,
             "session_id": self.session_id,
             "cursor": self.cursor.to_dict() if self.cursor is not None else None,
         }
+
+    @classmethod
+    def from_dict(cls, payload: Mapping[str, object]) -> GraphFakosLiveSessionRequest:
+        return cls(
+            schema_version=_required_string(
+                payload, "schema_version", "live_request.schema_version"
+            ),
+            session_id=_required_string(
+                payload, "session_id", "live_request.session_id"
+            ),
+            cursor=_optional_cursor(payload.get("cursor"), "live_request.cursor"),
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -210,6 +229,7 @@ class GraphFakosLiveSessionStatus:
     revision: GraphFakosGraphRevision
     cursor: GraphFakosLiveSessionCursor | None = None
     message: str = ""
+    schema_version: str = "graphfakos.live-status.v1"
 
     def __post_init__(self) -> None:
         if self.status not in _STATUS_KINDS:
@@ -217,11 +237,26 @@ class GraphFakosLiveSessionStatus:
 
     def to_dict(self) -> dict[str, object]:
         return {
+            "schema_version": self.schema_version,
             "status": self.status,
             "revision": self.revision.to_dict(),
             "cursor": self.cursor.to_dict() if self.cursor is not None else None,
             "message": self.message,
         }
+
+    @classmethod
+    def from_dict(cls, payload: Mapping[str, object]) -> GraphFakosLiveSessionStatus:
+        return cls(
+            schema_version=_required_string(
+                payload, "schema_version", "live_status.schema_version"
+            ),
+            status=_status_kind(payload.get("status")),
+            revision=GraphFakosGraphRevision.from_dict(
+                _mapping(payload.get("revision"), "live_status.revision")
+            ),
+            cursor=_optional_cursor(payload.get("cursor"), "live_status.cursor"),
+            message=_optional_string(payload.get("message"), "live_status.message"),
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -235,9 +270,34 @@ class GraphFakosLiveSessionDiagnostics:
     resync_count: int = 0
     authorization_rejection_count: int = 0
     origin_rejection_count: int = 0
+    schema_version: str = "graphfakos.live-diagnostics.v1"
+
+    def __post_init__(self) -> None:
+        for name in self.__dataclass_fields__:
+            if name in {"last_revision", "schema_version"}:
+                continue
+            _nonnegative_int(getattr(self, name), f"live_diagnostics.{name}")
 
     def to_dict(self) -> dict[str, object]:
         return {name: getattr(self, name) for name in self.__dataclass_fields__}
+
+    @classmethod
+    def from_dict(
+        cls, payload: Mapping[str, object]
+    ) -> GraphFakosLiveSessionDiagnostics:
+        return cls(
+            schema_version=_required_string(
+                payload, "schema_version", "live_diagnostics.schema_version"
+            ),
+            last_revision=_optional_string(
+                payload.get("last_revision"), "live_diagnostics.last_revision"
+            ),
+            **{
+                name: _nonnegative_int(payload.get(name), f"live_diagnostics.{name}")
+                for name in cls.__dataclass_fields__
+                if name not in {"last_revision", "schema_version"}
+            },
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -507,22 +567,13 @@ def _required_string(payload: Mapping[str, object], key: str, label: str) -> str
 def _optional_string(value: object, label: str) -> str:
     if value is None:
         return ""
-    if not isinstance(value, str):
-        raise TypeError(f"{label} must be a string")
-    return value
+    return _string(value, label)
 
 
-def _mapping(value: object, label: str) -> Mapping[str, object]:
-    if not isinstance(value, Mapping):
-        raise TypeError(f"{label} must be an object")
-    return value
-
-
-def _object_dict(value: object, label: str) -> dict[str, object]:
-    mapping = _mapping(value, label)
-    result = dict(mapping)
-    _ensure_json(result, label)
-    return result
+def _optional_cursor(value: object, label: str) -> GraphFakosLiveSessionCursor | None:
+    if value is None:
+        return None
+    return GraphFakosLiveSessionCursor.from_dict(_mapping(value, label))
 
 
 def _ensure_json(value: object, label: str) -> None:
@@ -532,9 +583,9 @@ def _ensure_json(value: object, label: str) -> None:
         raise TypeError(f"{label} must be JSON-compatible") from exc
 
 
-def _bool(value: object, label: str) -> bool:
-    if not isinstance(value, bool):
-        raise TypeError(f"{label} must be a boolean")
+def _nonnegative_int(value: object, label: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ValueError(f"{label} must be a non-negative integer")
     return value
 
 
@@ -542,6 +593,12 @@ def _operation_kind(value: object) -> GraphFakosPatchOperationKind:
     if not isinstance(value, str) or value not in _OPERATION_KINDS:
         raise ValueError(f"unsupported patch operation kind: {value!r}")
     return cast(GraphFakosPatchOperationKind, value)
+
+
+def _status_kind(value: object) -> GraphFakosLiveStatusKind:
+    if not isinstance(value, str) or value not in _STATUS_KINDS:
+        raise ValueError(f"unsupported live status: {value!r}")
+    return cast(GraphFakosLiveStatusKind, value)
 
 
 __all__ = [

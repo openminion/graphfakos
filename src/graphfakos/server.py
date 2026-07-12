@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import ipaddress
 import json
@@ -68,13 +68,11 @@ class LocalViewerHttpServer(ThreadingHTTPServer):
             diagnostics = provider_diagnostics()
         else:
             diagnostics = GraphFakosLiveSessionDiagnostics()
-        return GraphFakosLiveSessionDiagnostics(
-            **{
-                **diagnostics.to_dict(),
-                "connection_count": self._live_clients,
-                "authorization_rejection_count": self.authorization_rejections,
-                "origin_rejection_count": self.origin_rejections,
-            }
+        return replace(
+            diagnostics,
+            connection_count=self._live_clients,
+            authorization_rejection_count=self.authorization_rejections,
+            origin_rejection_count=self.origin_rejections,
         )
 
 

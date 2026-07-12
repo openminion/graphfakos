@@ -7,6 +7,7 @@ import importlib
 import json
 from typing import Any
 
+from . import PACKAGE_STATUS, STABLE_IMPORT_ROOTS, __version__
 from .adapters import (
     DEMO_SCENARIOS,
     DemoGraphProvider,
@@ -49,25 +50,11 @@ _SCREENS: tuple[GraphFakosScreen, ...] = (
 def smoke_payload() -> dict[str, object]:
     return {
         "package": "graphfakos",
-        "version": "0.0.5",
-        "status": "semantic-alpha",
+        "version": __version__,
+        "status": PACKAGE_STATUS,
         "semantic_contract": True,
         "openminion_imports": False,
-        "stable_import_roots": [
-            "graphfakos",
-            "graphfakos.artifacts",
-            "graphfakos.adapters",
-            "graphfakos.browser",
-            "graphfakos.contracts",
-            "graphfakos.models",
-            "graphfakos.provider",
-            "graphfakos.render",
-            "graphfakos.renderers",
-            "graphfakos.server",
-            "graphfakos.static",
-            "graphfakos.testing",
-            "graphfakos.ui",
-        ],
+        "stable_import_roots": list(STABLE_IMPORT_ROOTS),
     }
 
 

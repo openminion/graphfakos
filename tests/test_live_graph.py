@@ -11,10 +11,23 @@ from graphfakos.live import (
     GraphFakosLiveGraphState,
     GraphFakosLiveReplayBundle,
     GraphFakosLiveSessionCursor,
+    GraphFakosLiveSessionDiagnostics,
     GraphFakosLiveSessionRequest,
+    GraphFakosLiveSessionStatus,
+    GraphFakosLiveStatusKind,
     GraphFakosPatchOperation,
     InMemoryGraphFakosLiveProvider,
     apply_graph_patch,
+)
+
+_LIVE_STATUSES = (
+    "connecting",
+    "live",
+    "heartbeat",
+    "stale",
+    "resync_required",
+    "closed",
+    "error",
 )
 
 
@@ -62,6 +75,62 @@ def test_live_patch_dtos_round_trip_all_operation_kinds() -> None:
     )
 
     assert GraphFakosGraphPatch.from_dict(patch.to_dict()) == patch
+
+
+@pytest.mark.parametrize("status", _LIVE_STATUSES)
+def test_live_request_status_and_diagnostics_round_trip(
+    status: GraphFakosLiveStatusKind,
+) -> None:
+    cursor = GraphFakosLiveSessionCursor("cursor-1")
+    request = GraphFakosLiveSessionRequest(session_id="session-1", cursor=cursor)
+    session_status = GraphFakosLiveSessionStatus(
+        status=status,
+        revision=GraphFakosGraphRevision("1"),
+        cursor=cursor,
+        message="state",
+    )
+    diagnostics = GraphFakosLiveSessionDiagnostics(
+        connection_count=1,
+        queue_depth=2,
+        last_revision="1",
+        reconnect_count=3,
+        rejected_patch_count=4,
+        overflow_count=5,
+        resync_count=6,
+        authorization_rejection_count=7,
+        origin_rejection_count=8,
+    )
+
+    assert GraphFakosLiveSessionRequest.from_dict(request.to_dict()) == request
+    assert (
+        GraphFakosLiveSessionStatus.from_dict(session_status.to_dict())
+        == session_status
+    )
+    assert (
+        GraphFakosLiveSessionDiagnostics.from_dict(diagnostics.to_dict()) == diagnostics
+    )
+
+
+def test_live_session_dtos_reject_invalid_state() -> None:
+    with pytest.raises(ValueError, match="session_id"):
+        GraphFakosLiveSessionRequest(session_id="")
+    with pytest.raises(ValueError, match="unsupported live status"):
+        GraphFakosLiveSessionStatus.from_dict(
+            {
+                "schema_version": "graphfakos.live-status.v1",
+                "status": "unknown",
+                "revision": {"value": "1"},
+                "cursor": None,
+                "message": "",
+            }
+        )
+    with pytest.raises(ValueError, match="non-negative integer"):
+        GraphFakosLiveSessionDiagnostics.from_dict(
+            {
+                **GraphFakosLiveSessionDiagnostics().to_dict(),
+                "queue_depth": -1,
+            }
+        )
 
 
 def test_patch_application_is_atomic_ordered_and_idempotent() -> None:

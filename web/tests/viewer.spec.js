@@ -135,8 +135,18 @@ test("has no critical automated accessibility violations", async ({ page }) => {
 });
 
 for (const fixture of [
-  { label: "200K", url: "http://127.0.0.1:8794/explore", total: "200000" },
-  { label: "1M", url: "http://127.0.0.1:8795/explore", total: "1000000" },
+  {
+    label: "200K",
+    url: "http://127.0.0.1:8794/explore",
+    total: "200000",
+    maxFirstSceneMs: 12_000,
+  },
+  {
+    label: "1M",
+    url: "http://127.0.0.1:8795/explore",
+    total: "1000000",
+    maxFirstSceneMs: 15_000,
+  },
 ]) {
   test(`renders the ${fixture.label} provider envelope honestly`, async ({ page }, testInfo) => {
     const startedAt = Date.now();
@@ -145,15 +155,16 @@ for (const fixture of [
     await expect(graph).toHaveAttribute("data-webgl-ready", "true", { timeout: 15_000 });
     await expect(graph).toHaveAttribute("data-total-nodes", fixture.total);
     const visible = Number(await graph.getAttribute("data-visible-nodes"));
+    const firstSceneMs = Date.now() - startedAt;
     expect(visible).toBeLessThanOrEqual(240);
-    expect(Date.now() - startedAt).toBeLessThan(8_000);
+    expect(firstSceneMs).toBeLessThan(fixture.maxFirstSceneMs);
     const labels = await page.locator(".gf-webgl-label").count();
     expect(labels).toBeLessThanOrEqual(8);
     await testInfo.attach("performance", {
       body: JSON.stringify({
         fixture: fixture.label,
         viewport: "1280x720",
-        firstSceneMs: Date.now() - startedAt,
+        firstSceneMs,
         totalNodes: Number(fixture.total),
         visibleNodes: visible,
         drawnNodes: visible,

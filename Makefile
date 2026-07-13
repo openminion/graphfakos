@@ -8,7 +8,7 @@ PRE_COMMIT := $(PYTHON) -m pre_commit
 PYTEST := $(PYTHON) -m pytest
 RUFF := $(PYTHON) -m ruff
 
-.PHONY: help venv dev-install hooks-install hooks-run web-install web-build benchmark-fixtures preview preview-demo preview-dense preview-timeline preview-warnings preview-path preview-provenance preview-workbench preview-budget preview-islands preview-html clean-preview fix format format-check lint test browser-test browser-e2e check release-check
+.PHONY: help venv dev-install hooks-install hooks-run web-install web-build benchmark-fixtures preview preview-demo preview-dense preview-timeline preview-warnings preview-path preview-provenance preview-workbench preview-budget preview-islands preview-html clean-preview fix format format-check lint validate-patterns loc-check method-loc-check helper-duplicates-check path-structure-check filename-underscore-check broad-exception-check type-ignore-check public-surface-check test browser-test browser-e2e check release-check
 
 help:
 	@printf '%s\n' \
@@ -32,6 +32,8 @@ help:
 		'  make format        Run Ruff formatter' \
 		'  make format-check  Check formatting without changing files' \
 		'  make lint          Run Ruff lint' \
+		'  make validate-patterns Run repo structure and complexity ratchets' \
+		'  make loc-check     Enforce source file LOC ratchets' \
 		'  make test          Run package pytest suite' \
 		'  make browser-test  Run browser runtime pytest coverage' \
 		'  make browser-e2e   Run the pinned real-browser viewer smoke' \
@@ -109,6 +111,32 @@ format-check: $(DEV_STAMP)
 lint: $(DEV_STAMP)
 	$(RUFF) check "$(REPO_ROOT)"
 
+loc-check: $(DEV_STAMP)
+	$(PYTHON) "$(REPO_ROOT)/scripts/validate/max_file_loc.py"
+
+method-loc-check: $(DEV_STAMP)
+	$(PYTHON) "$(REPO_ROOT)/scripts/validate/method_loc.py"
+
+helper-duplicates-check: $(DEV_STAMP)
+	$(PYTHON) "$(REPO_ROOT)/scripts/validate/helper_duplicates.py"
+
+path-structure-check: $(DEV_STAMP)
+	$(PYTHON) "$(REPO_ROOT)/scripts/validate/path_structure_hygiene.py"
+
+filename-underscore-check: $(DEV_STAMP)
+	$(PYTHON) "$(REPO_ROOT)/scripts/validate/filename_underscore_hygiene.py"
+
+broad-exception-check: $(DEV_STAMP)
+	$(PYTHON) "$(REPO_ROOT)/scripts/validate/broad_exception.py"
+
+type-ignore-check: $(DEV_STAMP)
+	$(PYTHON) "$(REPO_ROOT)/scripts/validate/type_ignore_hygiene.py"
+
+public-surface-check: $(DEV_STAMP)
+	$(PYTHON) "$(REPO_ROOT)/scripts/validate/public_surface.py"
+
+validate-patterns: loc-check method-loc-check helper-duplicates-check path-structure-check filename-underscore-check broad-exception-check type-ignore-check public-surface-check
+
 test: $(DEV_STAMP)
 	PYTHONPATH="$(REPO_ROOT)/src" $(PYTEST) -q "$(REPO_ROOT)/tests"
 
@@ -127,7 +155,7 @@ benchmark-fixtures: $(DEV_STAMP)
 browser-e2e: $(DEV_STAMP)
 	cd "$(REPO_ROOT)/web" && npm test
 
-check: format-check lint test
+check: format-check lint validate-patterns test
 
 release-check: $(DEV_STAMP)
 	cd "$(REPO_ROOT)" && $(PYTHON) scripts/release_check.py

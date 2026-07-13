@@ -1,0 +1,8 @@
+# Files above the max-file-LOC ceiling are pinned here and may only shrink.
+# Format: path<TAB>loc<TAB>reason
+src/graphfakos/models.py	1616	public DTO module needs a follow-up split without breaking imports
+src/graphfakos/ui/app.py	1234	viewer facade recently split from a larger app surface
+src/graphfakos/ui/viewer/analysis.py	1171	analysis panel owner still needs a focused follow-up split
+src/graphfakos/ui/viewer/canvas.py	1148	canvas rendering owner still needs a focused follow-up split
+src/graphfakos/ui/viewer/discovery.py	1355	discovery and dense-navigation owner still needs a focused follow-up split
+src/graphfakos/ui/viewer/styles.py	1715	theme stylesheet owner still needs a focused follow-up split

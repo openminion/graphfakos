@@ -1,0 +1,4 @@
+# Broad exception handlers are pinned here and may only shrink.
+# Format: path<TAB>total<TAB>silent_pass<TAB>reason
+src/graphfakos/cli.py	2	0	CLI preview catches provider and preview rendering failures for user-facing errors
+src/graphfakos/server.py	1	0	local preview server converts request failures into HTTP 500 responses

@@ -1,0 +1,5 @@
+# Duplicate private helpers are pinned here and may only shrink.
+# Format: directory<TAB>function<TAB>comma-separated-files<TAB>reason
+src/graphfakos	_required_string	src/graphfakos/_model_values.py,src/graphfakos/live.py	shared validation helper candidate
+src/graphfakos/adapters	_citations	src/graphfakos/adapters/demo_scenarios.py,src/graphfakos/adapters/provider_envelope.py	adapter citation shaping candidate
+src/graphfakos/adapters	_provenance	src/graphfakos/adapters/demo_scenarios.py,src/graphfakos/adapters/provider_envelope.py	adapter provenance shaping candidate

@@ -75,6 +75,12 @@ Before closing work, run the package gates from `graphfakos/`:
 make check
 ```
 
+`make check` includes `make validate-patterns`, which runs the package-local
+complexity, structure, broad-exception, type-ignore, duplicate-helper,
+filename, and public-surface guards. Baselines under `scripts/baselines/` are
+ratchets: existing debt may only shrink, and new drift must either be fixed or
+added with an explicit reason.
+
 If your change affects packaging or public release shape, also run:
 
 ```bash

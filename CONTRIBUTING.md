@@ -41,6 +41,8 @@ graphfakos/
 ├── tests/                      # package tests and contract fixtures
 ├── docs/                       # public package-local docs
 ├── pyproject.toml
+├── scripts/validate/           # package-local code-quality validators
+├── scripts/baselines/          # ratchet baselines consumed by validators
 └── scripts/release_check.py    # package release smoke
 ```
 
@@ -76,6 +78,9 @@ make test
 
 # Full local quality gate
 make check
+
+# Structure and complexity ratchets only
+make validate-patterns
 
 # Release/install smoke
 make release-check

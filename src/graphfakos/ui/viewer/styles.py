@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from graphfakos.ui.viewer.surface_styles import SURFACE_STYLE
+
 _STYLE = """
 <style>
 :root {
@@ -16,6 +18,8 @@ _STYLE = """
   --gf-accent-soft: #ddf0eb;
   --gf-blue: #345c8c;
   --gf-blue-soft: #e2eaf6;
+  --gf-canvas-bg: #eef4f2;
+  --gf-font-body: "Avenir Next", "Segoe UI", sans-serif;
 }
 * { box-sizing: border-box; }
 body.gf-page {
@@ -37,6 +41,7 @@ body.gf-page[data-theme="ink"] {
   --gf-accent-soft: #17382f;
   --gf-blue: #9ec4ff;
   --gf-blue-soft: #172b46;
+  --gf-canvas-bg: #101713;
   color-scheme: dark;
 }
 body.gf-page[data-theme="space"] {
@@ -50,6 +55,7 @@ body.gf-page[data-theme="space"] {
   --gf-accent-soft: #0b3444;
   --gf-blue: #a998ff;
   --gf-blue-soft: #201a50;
+  --gf-canvas-bg: #070d24;
   color-scheme: dark;
 }
 body.gf-page[data-theme="paper"] {
@@ -63,14 +69,15 @@ body.gf-page[data-theme="paper"] {
   --gf-accent-soft: #f1ddbf;
   --gf-blue: #596f95;
   --gf-blue-soft: #dee5f1;
+  --gf-canvas-bg: #fffaf0;
 }
 .gf-shell {
   min-height: 100vh;
   display: grid;
-  grid-template-columns: 224px minmax(0, 1fr);
+  grid-template-columns: 188px minmax(0, 1fr);
 }
 .gf-shell[data-nav-collapsed="true"] {
-  grid-template-columns: 68px minmax(0, 1fr);
+  grid-template-columns: 58px minmax(0, 1fr);
 }
 .gf-nav {
   border-right: 1px solid var(--gf-line);
@@ -141,7 +148,7 @@ body.gf-page[data-theme="paper"] {
 }
 .gf-content {
   min-width: 0;
-  padding: 16px 18px 22px;
+  padding: 10px 12px 18px;
 }
 .gf-header {
   display: grid;
@@ -392,8 +399,8 @@ body.gf-page[data-theme="paper"] {
   color: var(--gf-ink);
   font: inherit;
   font-weight: 700;
-  min-height: 34px;
-  padding: 6px 10px;
+  min-height: 30px;
+  padding: 4px 9px;
 }
 .gf-command-bar button {
   border-color: var(--gf-accent);
@@ -409,11 +416,6 @@ body.gf-page[data-theme="paper"] {
   padding: 6px 9px;
   white-space: nowrap;
 }
-.gf-canvas-tools {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
 .gf-tool-link,
 .gf-inline-link,
 .gf-route-chip {
@@ -426,10 +428,6 @@ body.gf-page[data-theme="paper"] {
   background: var(--gf-panel);
   font-size: 13px;
   font-weight: 700;
-}
-.gf-theme-toggle {
-  border-color: color-mix(in srgb, var(--gf-blue) 45%, var(--gf-line));
-  background: color-mix(in srgb, var(--gf-blue-soft) 76%, transparent);
 }
 .gf-lens-grid {
   display: flex;
@@ -966,16 +964,6 @@ body.gf-page[data-theme="paper"] {
   height: 100% !important;
   width: 100% !important;
 }
-.gf-webgl-label {
-  background: color-mix(in srgb, var(--gf-canvas-bg) 86%, transparent);
-  border: 1px solid color-mix(in srgb, var(--gf-accent) 28%, transparent);
-  border-radius: 999px;
-  color: var(--gf-ink);
-  font: 700 11px/1.2 var(--gf-font-body);
-  padding: 3px 7px;
-  pointer-events: none;
-  white-space: nowrap;
-}
 .gf-canvas-shell[data-webgl-ready="true"] > .gf-canvas {
   opacity: 0;
   pointer-events: none;
@@ -1053,8 +1041,9 @@ body.gf-page[data-theme="paper"] {
 }
 .gf-canvas {
   width: 100%;
-  height: min(74vh, 820px);
-  min-height: 560px;
+  height: calc(100dvh - 188px);
+  max-height: 960px;
+  min-height: 600px;
   border: 1px solid var(--gf-line);
   border-radius: 18px;
   background:
@@ -1124,8 +1113,10 @@ body.gf-page[data-theme="space"] .gf-node[data-kind="document"] polygon {
   box-shadow: 0 18px 46px rgb(20 29 44 / 18%);
   display: none;
   gap: 10px;
-  max-width: min(380px, calc(100% - 32px));
-  padding: 14px;
+  max-height: min(70dvh, 680px);
+  max-width: min(360px, calc(100% - 32px));
+  overflow: auto;
+  padding: 12px;
   position: absolute;
   right: 18px;
   bottom: 110px;
@@ -1150,6 +1141,8 @@ body.gf-page[data-theme="space"] .gf-node[data-kind="document"] polygon {
   text-transform: uppercase;
 }
 .gf-inspect-overlay h3 {
+  font-size: 18px;
+  letter-spacing: -.02em;
   margin: 0;
 }
 .gf-inspect-overlay p {
@@ -1457,9 +1450,12 @@ body.gf-page[data-theme="space"] .gf-node text {
   position: absolute;
   right: 14px;
   top: 14px;
-  width: 148px;
+  opacity: .72;
+  transition: opacity .18s ease;
+  width: 132px;
   z-index: 3;
 }
+.gf-minimap:hover { opacity: 1; }
 .gf-minimap-heading {
   color: var(--gf-muted);
   font-size: 12px;
@@ -1503,10 +1499,13 @@ body.gf-page[data-theme="space"] .gf-node text {
   stroke-width: 2;
 }
 .gf-group-controls {
+  align-items: center;
+  border-top: 1px solid var(--gf-line);
   display: flex;
   justify-content: space-between;
   gap: 10px;
-  margin-top: 10px;
+  margin-top: 8px;
+  padding-top: 8px;
   flex-wrap: wrap;
 }
 .gf-group-controls button,
@@ -1519,7 +1518,7 @@ body.gf-page[data-theme="space"] .gf-node text {
   font-size: 12px;
   font-weight: 700;
   margin: 0 4px 4px 0;
-  padding: 5px 9px;
+  padding: 4px 8px;
 }
 .gf-group-controls [data-gf-group-show-all] {
   border-color: color-mix(in srgb, var(--gf-accent) 38%, var(--gf-line));
@@ -1709,7 +1708,7 @@ a {
 
 def viewer_styles() -> str:
     """Return the complete self-contained viewer stylesheet."""
-    return _STYLE
+    return _STYLE.replace("</style>", f"{SURFACE_STYLE}</style>")
 
 
 __all__ = ["viewer_styles"]

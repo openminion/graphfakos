@@ -37,6 +37,7 @@ from graphfakos.ui.viewer.routing import (
     _route_href,
     state_hidden_inputs as _state_hidden_inputs,
 )
+from graphfakos.ui.viewer.surface_controls import canvas_toolbar, display_controls
 
 _MINIMAP_WIDTH = 180
 _MINIMAP_HEIGHT = 90
@@ -205,15 +206,14 @@ def _graph_canvas(
         graph.stats.get("raw_edge_count", len(graph.edges)) or len(graph.edges)
     )
     available_nodes = len(graph.nodes) + hidden_nodes
-    available_edges = len(graph.edges) + hidden_edges
     return (
         "<section class='gf-panel gf-canvas-panel'><div class='gf-panel-heading'>"
         "<h3>Graph Canvas</h3>"
-        f"{_canvas_toolbar(request)}</div>"
+        f"{canvas_toolbar(request)}</div>"
         f"{_graph_search_panel(graph, request)}"
         "<div class='gf-scene-status'>"
-        f"<span data-gf-scene-counts='true'>Total {total_nodes:,}/{total_edges:,} · "
-        f"available {available_nodes:,}/{available_edges:,} · drawn {len(graph.nodes):,}/{len(graph.edges):,}</span>"
+        f"<span data-gf-scene-counts='true'>{len(graph.nodes):,} of {total_nodes:,} nodes · "
+        f"{len(graph.edges):,} of {total_edges:,} links</span>"
         f"<span class='gf-detail-status'><strong data-gf-detail-mode='true'>{escape(detail_mode.title())} view</strong>"
         " Labels and edges become denser as you zoom in.</span></div>"
         "<details class='gf-canvas-help'><summary>Navigation help</summary>"
@@ -225,7 +225,8 @@ def _graph_canvas(
         "Alt/Option-drag a node to move its cluster, WASD or arrows move like a map, "
         "Q/E nudges depth in 3D mode, 0 resets camera, F fullscreen, Delete clears selection.</p>"
         f"{_renderer_notice(request)}</details>"
-        f"<div class='gf-canvas-grid'><div class='gf-canvas-shell' tabindex='0' "
+        f"<div class='gf-canvas-grid'>{display_controls(request)}"
+        "<div class='gf-canvas-shell' tabindex='0' "
         f"data-camera-x='{camera_x:.2f}' data-camera-y='{camera_y:.2f}' "
         f"data-camera-zoom='{camera_zoom:.2f}' data-camera-yaw='{camera_yaw:.2f}' "
         f"data-camera-pitch='{camera_pitch:.2f}' data-render-engine='{escape(request.render_engine)}' "
@@ -288,40 +289,6 @@ def _live_selection_status(
     return (
         " ".join(parts)
         or "No selected graph items. Shift-click nodes or Shift-drag canvas to select several."
-    )
-
-
-def _canvas_toolbar(request: GraphFakosRequest) -> str:
-    saved_route = _route_href(
-        request,
-        overrides={
-            "camera_x": request.camera_x,
-            "camera_y": request.camera_y,
-            "camera_zoom": request.camera_zoom,
-            "camera_yaw": request.camera_yaw,
-            "camera_pitch": request.camera_pitch,
-        },
-    )
-    clear_pins_route = _route_href(request, overrides={"pinned_positions": None})
-    next_theme = "default" if request.theme == "space" else "space"
-    theme_label = "Light" if request.theme == "space" else "Space"
-    theme_route = _route_href(request, overrides={"theme": next_theme})
-    return (
-        "<div class='gf-canvas-tools' aria-label='Graph camera controls'>"
-        "<button type='button' data-gf-camera='zoom-in' title='Zoom in' aria-label='Zoom in'>+</button>"
-        "<button type='button' data-gf-camera='zoom-out' title='Zoom out' aria-label='Zoom out'>-</button>"
-        "<button type='button' data-gf-camera='fit' title='Fit selected or visible graph' "
-        "aria-label='Fit selected or visible graph'>Fit</button>"
-        "<button type='button' data-gf-camera='reset' title='Reset camera' aria-label='Reset camera'>Reset</button>"
-        "<button type='button' data-gf-layout-reset='true' title='Reset graph formation' aria-label='Reset graph formation'>Layout</button>"
-        "<button type='button' data-gf-history='undo' title='Undo scene change' aria-label='Undo scene change' disabled>Undo</button>"
-        "<button type='button' data-gf-history='redo' title='Redo scene change' aria-label='Redo scene change' disabled>Redo</button>"
-        "<button type='button' data-gf-camera='fullscreen' title='Fullscreen' aria-label='Fullscreen'>Full</button>"
-        "<button type='button' data-gf-pin='reset' title='Clear pinned node positions' aria-label='Clear pinned node positions'>Clear Pins</button>"
-        f"<a class='gf-tool-link gf-theme-toggle' data-gf-theme-toggle='true' href='{escape(theme_route)}'>{theme_label}</a>"
-        f"<a class='gf-tool-link' href='{escape(clear_pins_route)}'>Clear pins</a>"
-        f"<a class='gf-tool-link' data-gf-save-view='true' href='{escape(saved_route)}'>Saved view</a>"
-        "</div>"
     )
 
 

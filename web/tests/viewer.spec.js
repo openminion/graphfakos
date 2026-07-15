@@ -65,6 +65,23 @@ test("preserves selection and reversible scene changes", async ({ page }) => {
   await page.locator(".gf-canvas-shell").press("ControlOrMeta+z");
 });
 
+test("keeps Obsidian-style display controls on the graph surface", async ({ page }) => {
+  await page.goto("/explore");
+  await expect(page.locator(".gf-canvas-shell")).toHaveAttribute("data-webgl-ready", "true");
+  const display = page.locator("[data-gf-display-dock]");
+  await expect(display).toBeVisible();
+  await display.locator(":scope > summary").click();
+
+  const nodeScale = display.locator("[data-gf-scene-control='node_scale']");
+  await nodeScale.press("ArrowLeft");
+  await display.locator("[data-gf-scene-level='cluster']").click();
+
+  const state = await page.locator("graphfakos-viewer").evaluate((viewer) => viewer.getState());
+  expect(state.node_scale).toBeLessThan(1);
+  expect(state.scene_level).toBe("cluster");
+  await expect(display.locator("[data-gf-scene-level='cluster']")).toHaveAttribute("data-active", "true");
+});
+
 test("applies live patches without replacing viewer state", async ({ page }) => {
   await page.goto("/explore");
   await expect(page.locator(".gf-canvas-shell")).toHaveAttribute("data-webgl-ready", "true");

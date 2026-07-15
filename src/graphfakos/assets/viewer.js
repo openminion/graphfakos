@@ -199,6 +199,15 @@
       next.camera_pitch = clamp(number(payload.pitch ?? payload.camera_pitch, next.camera_pitch), -72, 72);
     }
     if (action === "layout") next.layout = command.value || payload.layout || next.layout;
+    if (action === "scene-setting") {
+      const key = payload.key || command.target_id;
+      if (key === "node_scale") next.node_scale = clamp(number(payload.value, next.node_scale), 0.35, 2.2);
+      if (key === "edge_opacity") next.edge_opacity = clamp(number(payload.value, next.edge_opacity), 0.15, 1);
+      if (key === "label_density") next.label_density = clamp(number(payload.value, next.label_density), 0, 1);
+    }
+    if (action === "scene-level" && ["overview", "cluster", "local"].includes(payload.value)) {
+      next.scene_level = payload.value;
+    }
     if (action === "filter") {
       const key = payload.key || command.target_id;
       if (key) {
@@ -1142,9 +1151,16 @@
     emit(root, "inspect-close", { state: root.getState?.() || {} });
   };
 
-  const webglSceneFromShell = (shell, state) => ({
+  const webglDisplayState = (state, sceneLevel) => ({
     theme: state.theme,
-    sceneLevel: state.scene_level || shell.dataset.detailMode || "overview",
+    sceneLevel,
+    nodeScale: state.node_scale,
+    edgeOpacity: state.edge_opacity,
+    labelDensity: state.label_density,
+  });
+
+  const webglSceneFromShell = (shell, state) => ({
+    ...webglDisplayState(state, state.scene_level || shell.dataset.detailMode || "overview"),
     nodes: [...shell.querySelectorAll(".gf-node")].map((node) => ({
       id: node.dataset.nodeId || "",
       label: node.dataset.label || node.dataset.nodeId || "Node",
@@ -1166,8 +1182,7 @@
   });
 
   const webglSceneFromGraph = (graph, state) => ({
-    theme: state.theme,
-    sceneLevel: state.scene_level || "overview",
+    ...webglDisplayState(state, state.scene_level || "overview"),
     nodes: (graph.nodes || []).map((node) => ({
       id: node.id,
       label: node.label || node.id,
@@ -1760,6 +1775,13 @@
       this.querySelectorAll("[data-gf-history='redo']").forEach((button) => {
         button.disabled = this.#redoStack.length === 0;
       });
+      this.querySelectorAll("[data-gf-scene-control]").forEach((control) => {
+        const key = control.dataset.gfSceneControl || "";
+        if (key && key in this.state) control.value = String(this.state[key]);
+      });
+      this.querySelectorAll("[data-gf-scene-level]").forEach((button) => {
+        button.dataset.active = button.dataset.gfSceneLevel === this.state.scene_level ? "true" : "false";
+      });
       emit(this, action, { previous, state: this.getState() });
     }
 
@@ -2219,6 +2241,21 @@
           if (action === "reset") this.resetCamera();
           if (action === "fullscreen") this.querySelector(".gf-canvas-shell")?.requestFullscreen?.();
         });
+      });
+      this.querySelectorAll("[data-gf-scene-control]").forEach((control) => {
+        control.addEventListener("input", () => this.dispatch({
+          name: "scene-setting",
+          payload: {
+            key: control.dataset.gfSceneControl || "",
+            value: control.value,
+          },
+        }));
+      });
+      this.querySelectorAll("[data-gf-scene-level]").forEach((button) => {
+        button.addEventListener("click", () => this.dispatch({
+          name: "scene-level",
+          payload: { value: button.dataset.gfSceneLevel || "overview" },
+        }));
       });
       this.querySelectorAll("[data-gf-pin='reset']").forEach((button) => {
         button.addEventListener("click", () => this.dispatch({ name: "reset-pins" }));

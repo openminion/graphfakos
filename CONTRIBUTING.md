@@ -10,7 +10,11 @@ Read these docs before coding:
 2. [API_COMPATIBILITY.md](./API_COMPATIBILITY.md)
 3. [docs/README.md](./docs/README.md)
 4. [docs/source-tree-owner-map.md](./docs/source-tree-owner-map.md)
-5. [RELEASING.md](./RELEASING.md) when the work affects packaging or release
+5. [docs/engineering-patterns.md](./docs/engineering-patterns.md)
+6. [docs/code-quality-enforcement.md](./docs/code-quality-enforcement.md)
+7. [docs/cleanup-workflow.md](./docs/cleanup-workflow.md) for cleanup,
+   simplification, or maintainability work
+8. [RELEASING.md](./RELEASING.md) when the work affects packaging or release
    behavior
 
 Treat the package README and API compatibility policy as the stable public

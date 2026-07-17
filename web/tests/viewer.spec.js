@@ -1,5 +1,29 @@
 import { expect, test } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
+import { shapeLinks } from "../src/link-shape.js";
+
+test("shapes natural curves and separates parallel links", () => {
+  const nodes = [
+    { id: "a", clusterId: "alpha" },
+    { id: "b", clusterId: "alpha" },
+    { id: "c", clusterId: "beta" },
+  ];
+  const links = [
+    { id: "parallel:a", sourceId: "a", targetId: "b" },
+    { id: "parallel:b", sourceId: "a", targetId: "b" },
+    { id: "cross", sourceId: "a", targetId: "c" },
+    { id: "loop", sourceId: "a", targetId: "a" },
+  ];
+
+  const shaped = shapeLinks(nodes, links);
+  const byId = new Map(shaped.map((link) => [link.id, link]));
+  expect(byId.get("parallel:a").curvature).toBeLessThan(0);
+  expect(byId.get("parallel:b").curvature).toBeGreaterThan(0);
+  expect(byId.get("parallel:a").curveRotation).toBe(byId.get("parallel:b").curveRotation);
+  expect(Math.abs(byId.get("cross").curvature)).toBeLessThan(Math.abs(byId.get("parallel:a").curvature));
+  expect(Math.abs(byId.get("loop").curvature)).toBeGreaterThan(0.5);
+  expect(shapeLinks(nodes, links)).toEqual(shaped);
+});
 
 test("mounts and navigates the packaged 3D graph", async ({ page }, testInfo) => {
   const startedAt = Date.now();

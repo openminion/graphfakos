@@ -1,5 +1,6 @@
 import ForceGraph3D from "3d-force-graph";
 import { CSS2DRenderer, CSS2DObject } from "three/addons/renderers/CSS2DRenderer.js";
+import { shapeLinks, stableHash } from "./link-shape.js";
 
 const colorByKind = {
   artifact: "#ff936b",
@@ -8,15 +9,6 @@ const colorByKind = {
   provider: "#5de1e6",
   warning: "#ff6b7a",
 };
-
-function hash(value) {
-  let result = 2166136261;
-  for (const character of String(value)) {
-    result ^= character.charCodeAt(0);
-    result = Math.imul(result, 16777619);
-  }
-  return result >>> 0;
-}
 
 function clusterCenters(nodes) {
   const clusterIds = [...new Set(nodes.map((node) => node.clusterId || node.kind || "unclustered"))].sort();
@@ -35,7 +27,7 @@ function clusterCenters(nodes) {
 }
 
 function seededPosition(id, clusterId, centers) {
-  const nodeHash = hash(id);
+  const nodeHash = stableHash(id);
   const center = centers.get(clusterId || "unclustered") || { x: 0, y: 0, z: 0 };
   const localAngle = (nodeHash % 360) * (Math.PI / 180);
   const localRadius = 24 + (nodeHash % 64);
@@ -172,11 +164,7 @@ function mount(element, scene, callbacks = {}) {
     ...node,
     ...seededPosition(node.id, node.clusterId || node.kind, centers),
   }));
-  let links = scene.links.map((link) => ({
-    ...link,
-    source: link.sourceId,
-    target: link.targetId,
-  }));
+  let links = shapeLinks(nodes, scene.links);
   let activeScene = scene;
   let hoveredNodeId = "";
   let visibleLabelIds = labelIds(nodes, activeScene);
@@ -263,8 +251,8 @@ function mount(element, scene, callbacks = {}) {
     .linkOpacity((scene.sceneLevel === "overview" ? 0.24 : 0.34) * (scene.edgeOpacity || 1))
     .linkVisibility((link) => !activeScene.links.find((item) => item.id === link.id)?.hidden)
     .linkWidth((link) => (link.selected ? 2.1 : linkTouchesFocus(link) ? 1.15 : 0.32))
-    .linkCurvature((link) => ((hash(link.id) % 11) - 5) * 0.018)
-    .linkCurveRotation((link) => (hash(`${link.id}:rotation`) % 628) / 100)
+    .linkCurvature("curvature")
+    .linkCurveRotation("curveRotation")
     .warmupTicks(reducedMotion ? 0 : 72)
     .cooldownTicks(reducedMotion ? 0 : 120)
     .d3AlphaDecay(0.035)
@@ -357,11 +345,7 @@ function mount(element, scene, callbacks = {}) {
           ...node,
           ...(positions.get(node.id) || seededPosition(node.id, node.clusterId || node.kind, centers)),
         }));
-        links = nextScene.links.map((link) => ({
-          ...link,
-          source: link.sourceId,
-          target: link.targetId,
-        }));
+        links = shapeLinks(nodes, nextScene.links);
         graph.graphData({ nodes, links });
         graph.d3Force("cluster", clusterForce(nodes, centers));
         if (!reducedMotion) graph.d3ReheatSimulation();

@@ -524,15 +524,21 @@
     ...shell.querySelectorAll(`[data-source-id="${CSS.escape(nodeId)}"], [data-target-id="${CSS.escape(nodeId)}"]`),
   ];
 
-  const curvedEdgePath = (x1, y1, x2, y2, edgeId = "") => {
+  const curvedEdgeControl = (x1, y1, x2, y2, edgeId = "") => {
     const dx = x2 - x1;
     const dy = y2 - y1;
     const distance = Math.hypot(dx, dy) || 1;
     const bendSign = [...String(edgeId)].reduce((total, char) => total + char.charCodeAt(0), 0) % 2 ? -1 : 1;
-    const bend = clamp(distance * 0.12, 10, 46) * bendSign;
-    const cx = (x1 + x2) / 2 - (dy / distance) * bend;
-    const cy = (y1 + y2) / 2 + (dx / distance) * bend;
-    return `M${x1.toFixed(1)},${y1.toFixed(1)} Q${cx.toFixed(1)},${cy.toFixed(1)} ${x2.toFixed(1)},${y2.toFixed(1)}`;
+    const bend = clamp(distance * 0.18, 14, 72) * bendSign;
+    return {
+      x: (x1 + x2) / 2 - (dy / distance) * bend,
+      y: (y1 + y2) / 2 + (dx / distance) * bend,
+    };
+  };
+
+  const curvedEdgePath = (x1, y1, x2, y2, edgeId = "") => {
+    const control = curvedEdgeControl(x1, y1, x2, y2, edgeId);
+    return `M${x1.toFixed(1)},${y1.toFixed(1)} Q${control.x.toFixed(1)},${control.y.toFixed(1)} ${x2.toFixed(1)},${y2.toFixed(1)}`;
   };
 
   const shellViewport = (shell) => {
@@ -1052,13 +1058,8 @@
       if (!source || !target) return;
       context.beginPath();
       context.moveTo(source.x, source.y);
-      const dx = target.x - source.x;
-      const dy = target.y - source.y;
-      const distance = Math.hypot(dx, dy) || 1;
-      const bend = clamp(distance * 0.12, 10, 46);
-      const cx = (source.x + target.x) / 2 - (dy / distance) * bend;
-      const cy = (source.y + target.y) / 2 + (dx / distance) * bend;
-      context.quadraticCurveTo(cx, cy, target.x, target.y);
+      const control = curvedEdgeControl(source.x, source.y, target.x, target.y, edge.dataset.edgeId || "");
+      context.quadraticCurveTo(control.x, control.y, target.x, target.y);
       context.strokeStyle = edge.dataset.selected === "true" ? "#f97316" : "rgba(62,74,92,0.34)";
       context.lineWidth = number(edge.dataset.edgeWidth, 1.4);
       context.globalAlpha = number(edge.dataset.edgeOpacity, 1);

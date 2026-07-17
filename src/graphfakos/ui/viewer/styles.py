@@ -1203,8 +1203,8 @@ body.gf-page[data-theme="space"] .gf-inspect-command textarea {
 .gf-canvas defs path {
   fill: #768078;
 }
-.gf-edge {
-  fill: none;
+.gf-edge { fill: none;
+  stroke-linecap: round; stroke-linejoin: round;
   stroke: #9ea9a2;
   stroke-width: 1.5;
   transition: stroke .16s ease, stroke-width .16s ease, opacity .16s ease;

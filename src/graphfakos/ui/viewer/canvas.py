@@ -374,7 +374,7 @@ def _curved_edge_path(x1: float, y1: float, x2: float, y2: float, edge_id: str) 
     dy = y2 - y1
     distance = sqrt(dx * dx + dy * dy) or 1.0
     bend_sign = -1 if sum(ord(char) for char in edge_id) % 2 else 1
-    bend = min(46.0, max(10.0, distance * 0.12)) * bend_sign
+    bend = min(72.0, max(14.0, distance * 0.18)) * bend_sign
     control_x = (x1 + x2) / 2 - dy / distance * bend
     control_y = (y1 + y2) / 2 + dx / distance * bend
     return f"M{x1:.1f},{y1:.1f} Q{control_x:.1f},{control_y:.1f} {x2:.1f},{y2:.1f}"

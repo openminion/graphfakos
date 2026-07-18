@@ -204,6 +204,12 @@ def test_static_viewer_renders_competitive_workbench_controls() -> None:
     assert "Canvas renderer is enabled" in html
     assert "data-gf-canvas='true'" in html
     assert "data-gf-canvas-payload='true'" in html
+    assert "data-gf-display-dock='true'" in html
+    assert "data-gf-scene-control='node_scale'" in html
+    assert "data-gf-scene-control='label_density'" in html
+    assert "data-gf-scene-control='edge_opacity'" in html
+    assert "data-gf-scene-level='overview'" in html
+    assert "aria-label='More graph controls'" in html
     assert "Visual Legend" in html
     assert "data-gf-canvas-legend-panel='true'" in html
     assert "data-gf-canvas-legend='true'" in html

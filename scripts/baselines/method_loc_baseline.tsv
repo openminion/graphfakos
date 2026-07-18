@@ -1,0 +1,15 @@
+# Functions above the method LOC ceiling are pinned here and may only shrink.
+# Format: path<TAB>qualname<TAB>loc<TAB>reason
+src/graphfakos/adapters/demo.py	build_demo_graph	102	demo graph builder still needs a focused fixture-data split
+src/graphfakos/adapters/demo_scenarios.py	_agent_memory_graph	107	scenario generator still needs a focused data-shape split
+src/graphfakos/adapters/demo_scenarios.py	_workbench_mixed_graph	161	scenario generator still needs a focused data-shape split
+src/graphfakos/adapters/fixture.py	build_fixture_graph	181	fixture graph builder still needs a focused parsing split
+src/graphfakos/cli.py	ui_preview_main	118	CLI preview entrypoint still owns option mapping and dispatch
+src/graphfakos/models.py	GraphFakosRequest.from_dict	129	DTO parser still needs a focused field-group split
+src/graphfakos/models.py	GraphFakosViewerState.from_dict	126	DTO parser still needs a focused field-group split
+src/graphfakos/server.py	make_local_viewer_server	249	local preview server still needs handler extraction
+src/graphfakos/ui/viewer/analysis.py	_display_recipes_payload	103	viewer payload builder still needs a focused recipe split
+src/graphfakos/ui/viewer/canvas.py	_graph_canvas	216	canvas renderer still needs control/layout extraction
+src/graphfakos/ui/viewer/controls.py	_interaction_guide_payload	106	interaction guide payload still needs a focused copy-data split
+src/graphfakos/ui/viewer/discovery.py	_command_palette_payload	242	command palette payload still needs section extraction
+src/graphfakos/ui/viewer/navigation.py	_navigation_map_payload	131	navigation payload still needs route-shape extraction

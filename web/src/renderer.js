@@ -1,5 +1,6 @@
 import ForceGraph3D from "3d-force-graph";
 import { CSS2DRenderer, CSS2DObject } from "three/addons/renderers/CSS2DRenderer.js";
+import { shapeLinks, stableHash } from "./link-shape.js";
 
 const colorByKind = {
   artifact: "#ff936b",
@@ -9,45 +10,39 @@ const colorByKind = {
   warning: "#ff6b7a",
 };
 
-function hash(value) {
-  let result = 2166136261;
-  for (const character of String(value)) {
-    result ^= character.charCodeAt(0);
-    result = Math.imul(result, 16777619);
-  }
-  return result >>> 0;
+function clusterCenters(nodes) {
+  const clusterIds = [...new Set(nodes.map((node) => node.clusterId || node.kind || "unclustered"))].sort();
+  if (clusterIds.length === 1) return new Map([[clusterIds[0], { x: 0, y: 0, z: 0 }]]);
+  const spread = Math.min(620, 210 + Math.sqrt(clusterIds.length) * 92);
+  const goldenAngle = Math.PI * (3 - Math.sqrt(5));
+  return new Map(clusterIds.map((clusterId, index) => {
+    const radius = spread * Math.sqrt((index + 0.7) / clusterIds.length);
+    const angle = index * goldenAngle;
+    return [clusterId, {
+      x: Math.cos(angle) * radius,
+      y: Math.sin(angle) * radius,
+      z: ((index % 5) - 2) * 72,
+    }];
+  }));
 }
 
-function seededPosition(id, clusterId) {
-  const clusterHash = hash(clusterId || "unclustered");
-  const nodeHash = hash(id);
-  const clusterAngle = (clusterHash % 360) * (Math.PI / 180);
-  const clusterRadius = 120 + (clusterHash % 9) * 55;
+function seededPosition(id, clusterId, centers) {
+  const nodeHash = stableHash(id);
+  const center = centers.get(clusterId || "unclustered") || { x: 0, y: 0, z: 0 };
   const localAngle = (nodeHash % 360) * (Math.PI / 180);
-  const localRadius = 20 + (nodeHash % 80);
+  const localRadius = 24 + (nodeHash % 64);
   return {
-    x: Math.cos(clusterAngle) * clusterRadius + Math.cos(localAngle) * localRadius,
-    y: Math.sin(clusterAngle) * clusterRadius + Math.sin(localAngle) * localRadius,
-    z: ((clusterHash % 13) - 6) * 35 + ((nodeHash % 41) - 20) * 2,
+    x: center.x + Math.cos(localAngle) * localRadius,
+    y: center.y + Math.sin(localAngle) * localRadius,
+    z: center.z + ((nodeHash % 41) - 20) * 2,
   };
 }
 
-function clusterCenter(clusterId) {
-  const value = hash(clusterId || "unclustered");
-  const angle = (value % 360) * (Math.PI / 180);
-  const radius = 150 + (value % 7) * 52;
-  return {
-    x: Math.cos(angle) * radius,
-    y: Math.sin(angle) * radius,
-    z: ((value % 11) - 5) * 42,
-  };
-}
-
-function clusterForce(nodes) {
-  let strength = 0.085;
+function clusterForce(nodes, centers) {
+  let strength = 0.12;
   const force = (alpha) => {
     for (const node of nodes) {
-      const center = clusterCenter(node.clusterId || node.kind);
+      const center = centers.get(node.clusterId || node.kind || "unclustered") || { x: 0, y: 0, z: 0 };
       node.vx += (center.x - node.x) * strength * alpha;
       node.vy += (center.y - node.y) * strength * alpha;
       node.vz += (center.z - node.z) * strength * alpha;
@@ -61,9 +56,10 @@ function clusterForce(nodes) {
   return force;
 }
 
-function labelObject(node) {
+function createLabelObject(node) {
   const element = document.createElement("span");
   element.className = "gf-webgl-label";
+  element.dataset.priority = node.priority || "ambient";
   element.textContent = node.label;
   const object = new CSS2DObject(element);
   object.position.set(0, 8, 0);
@@ -88,25 +84,54 @@ const hash = (value) => {
   }
   return result >>> 0;
 };
-const position = (id, clusterId) => {
-  const clusterHash = hash(clusterId || "unclustered");
+const position = (id, clusterId, center) => {
   const nodeHash = hash(id);
-  const clusterAngle = (clusterHash % 360) * Math.PI / 180;
-  const clusterRadius = 150 + (clusterHash % 7) * 52;
   const localAngle = (nodeHash % 360) * Math.PI / 180;
-  const localRadius = 22 + (nodeHash % 68);
+  const localRadius = 24 + (nodeHash % 64);
   return {
     id,
-    x: Math.cos(clusterAngle) * clusterRadius + Math.cos(localAngle) * localRadius,
-    y: Math.sin(clusterAngle) * clusterRadius + Math.sin(localAngle) * localRadius,
-    z: ((clusterHash % 11) - 5) * 42 + ((nodeHash % 31) - 15) * 2,
+    x: center.x + Math.cos(localAngle) * localRadius,
+    y: center.y + Math.sin(localAngle) * localRadius,
+    z: center.z + ((nodeHash % 41) - 20) * 2,
   };
 };
 self.onmessage = ({ data }) => {
-  self.postMessage({ requestId: data.requestId, positions: data.nodes.map((node) => position(node.id, node.clusterId)) });
+  self.postMessage({
+    requestId: data.requestId,
+    positions: data.nodes.map((node) => position(
+      node.id,
+      node.clusterId,
+      data.centers[node.clusterId || "unclustered"],
+    )),
+  });
 };`;
 
-function startLayoutJob(nodes, onComplete) {
+function labelIds(nodes, scene) {
+  const baseBudget = scene.sceneLevel === "local" ? 20 : scene.sceneLevel === "cluster" ? 10 : 4;
+  const budget = Math.max(2, Math.round(baseBudget * (0.35 + (scene.labelDensity ?? 1) * 0.65)));
+  return new Set([...nodes]
+    .sort((left, right) => {
+      const leftRank = left.selected ? 1000 : left.priority === "focus" ? 800 : left.priority === "hub" ? 500 : 0;
+      const rightRank = right.selected ? 1000 : right.priority === "focus" ? 800 : right.priority === "hub" ? 500 : 0;
+      return rightRank - leftRank || (right.degree || 0) - (left.degree || 0) || left.label.localeCompare(right.label);
+    })
+    .slice(0, Math.min(budget, nodes.length))
+    .map((node) => node.id));
+}
+
+function connectedIds(links, focusId) {
+  const result = new Set(focusId ? [focusId] : []);
+  if (!focusId) return result;
+  for (const link of links) {
+    const sourceId = typeof link.source === "object" ? link.source.id : link.source;
+    const targetId = typeof link.target === "object" ? link.target.id : link.target;
+    if (sourceId === focusId) result.add(targetId);
+    if (targetId === focusId) result.add(sourceId);
+  }
+  return result;
+}
+
+function startLayoutJob(nodes, centers, onComplete) {
   if (typeof Worker === "undefined" || typeof Blob === "undefined") return null;
   const url = URL.createObjectURL(new Blob([layoutWorkerSource], { type: "text/javascript" }));
   const worker = new Worker(url);
@@ -118,7 +143,11 @@ function startLayoutJob(nodes, onComplete) {
   };
   worker.postMessage({
     requestId,
-    nodes: nodes.map(({ id, clusterId }) => ({ id, clusterId })),
+    nodes: nodes.map(({ id, clusterId, kind }) => ({
+      id,
+      clusterId: clusterId || kind || "unclustered",
+    })),
+    centers: Object.fromEntries(centers),
   });
   return {
     cancel() {
@@ -130,17 +159,18 @@ function startLayoutJob(nodes, onComplete) {
 
 function mount(element, scene, callbacks = {}) {
   if (!hasWebGL()) throw new Error("WebGL is unavailable");
+  let centers = clusterCenters(scene.nodes);
   let nodes = scene.nodes.map((node) => ({
     ...node,
-    ...seededPosition(node.id, node.clusterId || node.kind),
+    ...seededPosition(node.id, node.clusterId || node.kind, centers),
   }));
-  let links = scene.links.map((link) => ({
-    ...link,
-    source: link.sourceId,
-    target: link.targetId,
-  }));
+  let links = shapeLinks(nodes, scene.links);
   let activeScene = scene;
+  let hoveredNodeId = "";
+  let visibleLabelIds = labelIds(nodes, activeScene);
+  const labelObjects = new Map();
   let initialFit = true;
+  let frameTimer = 0;
   const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
   let clusterDrag = false;
   const setClusterDrag = (event) => {
@@ -151,28 +181,92 @@ function mount(element, scene, callbacks = {}) {
   };
   window.addEventListener("keydown", setClusterDrag);
   window.addEventListener("keyup", clearClusterDrag);
+  let selectedNodeIds = new Set();
+  let activeFocusId = "";
+  let focusedNodeIds = new Set();
+  const refreshInteractionContext = () => {
+    selectedNodeIds = new Set(activeScene.nodes.filter((node) => node.selected).map((node) => node.id));
+    activeFocusId = hoveredNodeId || [...selectedNodeIds][0] || "";
+    focusedNodeIds = connectedIds(links, activeFocusId);
+  };
+  refreshInteractionContext();
+  const nodeColor = (node) => {
+    if (selectedNodeIds.has(node.id)) return "#ffffff";
+    if (node.id === hoveredNodeId) return "#f8fbff";
+    if (activeFocusId && !focusedNodeIds.has(node.id)) {
+      return activeScene.theme === "space" ? "#27324f" : "#c4cfcc";
+    }
+    return colorByKind[node.kind] || "#8aa4c8";
+  };
+  const linkEndpoints = (link) => ({
+    source: typeof link.source === "object" ? link.source.id : link.source,
+    target: typeof link.target === "object" ? link.target.id : link.target,
+  });
+  const linkTouchesFocus = (link) => {
+    const { source, target } = linkEndpoints(link);
+    return Boolean(activeFocusId && (source === activeFocusId || target === activeFocusId));
+  };
+  const linkColor = (link) => {
+    if (link.selected) return "#72ddff";
+    if (linkTouchesFocus(link)) return activeScene.theme === "space" ? "#8adfff" : "#287b91";
+    return activeScene.theme === "space" ? "#5d6f91" : "#8f9d9a";
+  };
+  const nodeObject = (node) => {
+    if (node.id !== hoveredNodeId && !node.selected && !visibleLabelIds.has(node.id)) return null;
+    if (!labelObjects.has(node.id)) labelObjects.set(node.id, createLabelObject(node));
+    return labelObjects.get(node.id);
+  };
+  const nodeSize = (node) => {
+    const baseSize = 0.68 + (node.degree || 0) * 0.055;
+    return Math.max(0.56, Math.min(2.35, baseSize * (activeScene.nodeScale || 1)));
+  };
+  const refreshVisuals = () => {
+    graph.nodeColor(nodeColor);
+    graph.linkColor(linkColor);
+    graph.linkWidth((link) => (link.selected ? 2.1 : linkTouchesFocus(link) ? 1.15 : 0.32));
+    graph.nodeThreeObject(nodeObject);
+    graph.refresh();
+  };
+  const focusCamera = (node) => {
+    const distance = 145;
+    const length = Math.hypot(node.x || 0, node.y || 0, node.z || 0) || 1;
+    const ratio = 1 + distance / length;
+    graph.cameraPosition(
+      { x: (node.x || 0) * ratio, y: (node.y || 0) * ratio, z: (node.z || 0) * ratio },
+      node,
+      reducedMotion ? 0 : 650,
+    );
+  };
   const graph = ForceGraph3D({ extraRenderers: [new CSS2DRenderer()] })(element)
     .backgroundColor(scene.theme === "space" ? "#070d24" : "#eef4f2")
+    .showNavInfo(false)
     .graphData({ nodes, links })
     .nodeId("id")
-    .nodeColor((node) => {
-      const selected = new Set(activeScene.nodes.filter((item) => item.selected).map((item) => item.id));
-      return selected.has(node.id) ? "#ffffff" : colorByKind[node.kind] || "#8aa4c8";
-    })
-    .nodeVal((node) => Math.max(1.1, Math.min(4.2, 1.1 + (node.degree || 0) * 0.12)))
-    .nodeOpacity(0.94)
+    .nodeColor(nodeColor)
+    .nodeVal(nodeSize)
+    .nodeOpacity(0.92)
     .nodeVisibility((node) => !activeScene.nodes.find((item) => item.id === node.id)?.hidden)
     .nodeResolution(8)
-    .linkColor((link) => (link.selected ? "#68d8ff" : scene.theme === "space" ? "#577198" : "#83949a"))
-    .linkOpacity(scene.sceneLevel === "overview" ? 0.18 : 0.34)
+    .linkColor(linkColor)
+    .linkOpacity((scene.sceneLevel === "overview" ? 0.24 : 0.34) * (scene.edgeOpacity || 1))
     .linkVisibility((link) => !activeScene.links.find((item) => item.id === link.id)?.hidden)
-    .linkWidth((link) => (link.selected ? 2.2 : 0.45))
-    .linkCurvature((link) => ((hash(link.id) % 9) - 4) * 0.025)
-    .linkCurveRotation((link) => (hash(`${link.id}:rotation`) % 628) / 100)
-    .cooldownTicks(reducedMotion ? 0 : 160)
+    .linkWidth((link) => (link.selected ? 2.1 : linkTouchesFocus(link) ? 1.15 : 0.32))
+    .linkCurvature("curvature")
+    .linkCurveRotation("curveRotation")
+    .warmupTicks(reducedMotion ? 0 : 72)
+    .cooldownTicks(reducedMotion ? 0 : 120)
     .d3AlphaDecay(0.035)
     .d3VelocityDecay(0.36)
-    .onNodeClick((node, event) => callbacks.onSelect?.(node, event))
+    .onNodeClick((node, event) => {
+      callbacks.onSelect?.(node, event);
+      if ((event?.detail || 0) > 1) focusCamera(node);
+    })
+    .onNodeHover((node) => {
+      hoveredNodeId = node?.id || "";
+      refreshInteractionContext();
+      refreshVisuals();
+      callbacks.onHover?.(node || null);
+    })
     .onNodeDrag((node, translate) => {
       if (!clusterDrag || !node.clusterId) return;
       const positions = {};
@@ -190,13 +284,27 @@ function mount(element, scene, callbacks = {}) {
     .onEngineStop(() => {
       if (!initialFit) return;
       initialFit = false;
-      graph.zoomToFit(650, 42);
+      frameGraph(420);
     });
 
-  graph.d3Force("charge")?.strength(-105);
-  graph.d3Force("link")?.distance(62);
-  graph.d3Force("cluster", clusterForce(nodes));
-  graph.nodeThreeObject((node) => (node.priority === "focus" || node.selected ? labelObject(node) : null));
+  const frameGraph = (duration = 0) => {
+    window.clearTimeout(frameTimer);
+    graph.zoomToFit(duration, 18);
+    frameTimer = window.setTimeout(() => {
+      const camera = graph.cameraPosition();
+      const scale = activeScene.sceneLevel === "local" ? 0.76 : 0.72;
+      graph.cameraPosition(
+        { x: camera.x * scale, y: camera.y * scale, z: camera.z * scale },
+        { x: 0, y: 0, z: 0 },
+        reducedMotion ? 0 : 180,
+      );
+    }, reducedMotion ? 0 : duration + 20);
+  };
+
+  graph.d3Force("charge")?.strength(-138);
+  graph.d3Force("link")?.distance(68).strength(0.38);
+  graph.d3Force("cluster", clusterForce(nodes, centers));
+  graph.nodeThreeObject(nodeObject);
   graph.nodeThreeObjectExtend(true);
 
   const resize = () => {
@@ -206,54 +314,56 @@ function mount(element, scene, callbacks = {}) {
   const observer = new ResizeObserver(resize);
   observer.observe(element);
   resize();
-  graph.cameraPosition({ x: 0, y: 0, z: 540 }, { x: 0, y: 0, z: 0 }, 0);
-  const layoutJob = startLayoutJob(nodes, (positions) => {
+  frameGraph();
+  const layoutJob = startLayoutJob(nodes, centers, (positions) => {
     const byId = new Map(positions.map((position) => [position.id, position]));
     for (const node of nodes) Object.assign(node, byId.get(node.id) || {});
     if (!reducedMotion) graph.d3ReheatSimulation();
-    graph.zoomToFit(reducedMotion ? 0 : 650, 42);
+    frameGraph(reducedMotion ? 0 : 420);
   });
 
   return {
-    fit: () => graph.zoomToFit(500, 60),
+    fit: () => frameGraph(360),
     reset: () => {
       graph.cameraPosition({ x: 0, y: 0, z: 720 }, { x: 0, y: 0, z: 0 }, 500);
       graph.d3ReheatSimulation();
     },
     resetLayout: () => {
       for (const node of nodes) {
-        const position = seededPosition(node.id, node.clusterId || node.kind);
+        const position = seededPosition(node.id, node.clusterId || node.kind, centers);
         Object.assign(node, position, { fx: undefined, fy: undefined, fz: undefined });
       }
       graph.d3ReheatSimulation();
-      graph.zoomToFit(650, 42);
+      frameGraph(420);
     },
     update(nextScene) {
       activeScene = { ...activeScene, ...nextScene };
       if (Array.isArray(nextScene.nodes) && Array.isArray(nextScene.links)) {
         const positions = new Map(nodes.map((node) => [node.id, node]));
+        centers = clusterCenters(nextScene.nodes);
         nodes = nextScene.nodes.map((node) => ({
           ...node,
-          ...(positions.get(node.id) || seededPosition(node.id, node.clusterId || node.kind)),
+          ...(positions.get(node.id) || seededPosition(node.id, node.clusterId || node.kind, centers)),
         }));
-        links = nextScene.links.map((link) => ({
-          ...link,
-          source: link.sourceId,
-          target: link.targetId,
-        }));
+        links = shapeLinks(nodes, nextScene.links);
         graph.graphData({ nodes, links });
-        graph.d3Force("cluster", clusterForce(nodes));
+        graph.d3Force("cluster", clusterForce(nodes, centers));
         if (!reducedMotion) graph.d3ReheatSimulation();
       }
+      refreshInteractionContext();
+      visibleLabelIds = labelIds(nodes, activeScene);
       graph.backgroundColor(nextScene.theme === "space" ? "#070d24" : "#eef4f2");
-      graph.nodeColor(graph.nodeColor());
-      graph.linkColor(graph.linkColor());
+      graph.nodeVal(nodeSize);
+      graph.linkOpacity((activeScene.sceneLevel === "overview" ? 0.24 : 0.34) * (activeScene.edgeOpacity || 1));
       graph.nodeVisibility(graph.nodeVisibility());
       graph.linkVisibility(graph.linkVisibility());
+      refreshVisuals();
     },
     destroy() {
       observer.disconnect();
       layoutJob?.cancel();
+      window.clearTimeout(frameTimer);
+      labelObjects.clear();
       window.removeEventListener("keydown", setClusterDrag);
       window.removeEventListener("keyup", clearClusterDrag);
       graph._destructor?.();

@@ -199,6 +199,15 @@
       next.camera_pitch = clamp(number(payload.pitch ?? payload.camera_pitch, next.camera_pitch), -72, 72);
     }
     if (action === "layout") next.layout = command.value || payload.layout || next.layout;
+    if (action === "scene-setting") {
+      const key = payload.key || command.target_id;
+      if (key === "node_scale") next.node_scale = clamp(number(payload.value, next.node_scale), 0.35, 2.2);
+      if (key === "edge_opacity") next.edge_opacity = clamp(number(payload.value, next.edge_opacity), 0.15, 1);
+      if (key === "label_density") next.label_density = clamp(number(payload.value, next.label_density), 0, 1);
+    }
+    if (action === "scene-level" && ["overview", "cluster", "local"].includes(payload.value)) {
+      next.scene_level = payload.value;
+    }
     if (action === "filter") {
       const key = payload.key || command.target_id;
       if (key) {
@@ -515,15 +524,21 @@
     ...shell.querySelectorAll(`[data-source-id="${CSS.escape(nodeId)}"], [data-target-id="${CSS.escape(nodeId)}"]`),
   ];
 
-  const curvedEdgePath = (x1, y1, x2, y2, edgeId = "") => {
+  const curvedEdgeControl = (x1, y1, x2, y2, edgeId = "") => {
     const dx = x2 - x1;
     const dy = y2 - y1;
     const distance = Math.hypot(dx, dy) || 1;
     const bendSign = [...String(edgeId)].reduce((total, char) => total + char.charCodeAt(0), 0) % 2 ? -1 : 1;
-    const bend = clamp(distance * 0.12, 10, 46) * bendSign;
-    const cx = (x1 + x2) / 2 - (dy / distance) * bend;
-    const cy = (y1 + y2) / 2 + (dx / distance) * bend;
-    return `M${x1.toFixed(1)},${y1.toFixed(1)} Q${cx.toFixed(1)},${cy.toFixed(1)} ${x2.toFixed(1)},${y2.toFixed(1)}`;
+    const bend = clamp(distance * 0.18, 14, 72) * bendSign;
+    return {
+      x: (x1 + x2) / 2 - (dy / distance) * bend,
+      y: (y1 + y2) / 2 + (dx / distance) * bend,
+    };
+  };
+
+  const curvedEdgePath = (x1, y1, x2, y2, edgeId = "") => {
+    const control = curvedEdgeControl(x1, y1, x2, y2, edgeId);
+    return `M${x1.toFixed(1)},${y1.toFixed(1)} Q${control.x.toFixed(1)},${control.y.toFixed(1)} ${x2.toFixed(1)},${y2.toFixed(1)}`;
   };
 
   const shellViewport = (shell) => {
@@ -1043,13 +1058,8 @@
       if (!source || !target) return;
       context.beginPath();
       context.moveTo(source.x, source.y);
-      const dx = target.x - source.x;
-      const dy = target.y - source.y;
-      const distance = Math.hypot(dx, dy) || 1;
-      const bend = clamp(distance * 0.12, 10, 46);
-      const cx = (source.x + target.x) / 2 - (dy / distance) * bend;
-      const cy = (source.y + target.y) / 2 + (dx / distance) * bend;
-      context.quadraticCurveTo(cx, cy, target.x, target.y);
+      const control = curvedEdgeControl(source.x, source.y, target.x, target.y, edge.dataset.edgeId || "");
+      context.quadraticCurveTo(control.x, control.y, target.x, target.y);
       context.strokeStyle = edge.dataset.selected === "true" ? "#f97316" : "rgba(62,74,92,0.34)";
       context.lineWidth = number(edge.dataset.edgeWidth, 1.4);
       context.globalAlpha = number(edge.dataset.edgeOpacity, 1);
@@ -1142,9 +1152,16 @@
     emit(root, "inspect-close", { state: root.getState?.() || {} });
   };
 
-  const webglSceneFromShell = (shell, state) => ({
+  const webglDisplayState = (state, sceneLevel) => ({
     theme: state.theme,
-    sceneLevel: state.scene_level || shell.dataset.detailMode || "overview",
+    sceneLevel,
+    nodeScale: state.node_scale,
+    edgeOpacity: state.edge_opacity,
+    labelDensity: state.label_density,
+  });
+
+  const webglSceneFromShell = (shell, state) => ({
+    ...webglDisplayState(state, state.scene_level || shell.dataset.detailMode || "overview"),
     nodes: [...shell.querySelectorAll(".gf-node")].map((node) => ({
       id: node.dataset.nodeId || "",
       label: node.dataset.label || node.dataset.nodeId || "Node",
@@ -1166,8 +1183,7 @@
   });
 
   const webglSceneFromGraph = (graph, state) => ({
-    theme: state.theme,
-    sceneLevel: state.scene_level || "overview",
+    ...webglDisplayState(state, state.scene_level || "overview"),
     nodes: (graph.nodes || []).map((node) => ({
       id: node.id,
       label: node.label || node.id,
@@ -1760,6 +1776,13 @@
       this.querySelectorAll("[data-gf-history='redo']").forEach((button) => {
         button.disabled = this.#redoStack.length === 0;
       });
+      this.querySelectorAll("[data-gf-scene-control]").forEach((control) => {
+        const key = control.dataset.gfSceneControl || "";
+        if (key && key in this.state) control.value = String(this.state[key]);
+      });
+      this.querySelectorAll("[data-gf-scene-level]").forEach((button) => {
+        button.dataset.active = button.dataset.gfSceneLevel === this.state.scene_level ? "true" : "false";
+      });
       emit(this, action, { previous, state: this.getState() });
     }
 
@@ -2219,6 +2242,21 @@
           if (action === "reset") this.resetCamera();
           if (action === "fullscreen") this.querySelector(".gf-canvas-shell")?.requestFullscreen?.();
         });
+      });
+      this.querySelectorAll("[data-gf-scene-control]").forEach((control) => {
+        control.addEventListener("input", () => this.dispatch({
+          name: "scene-setting",
+          payload: {
+            key: control.dataset.gfSceneControl || "",
+            value: control.value,
+          },
+        }));
+      });
+      this.querySelectorAll("[data-gf-scene-level]").forEach((button) => {
+        button.addEventListener("click", () => this.dispatch({
+          name: "scene-level",
+          payload: { value: button.dataset.gfSceneLevel || "overview" },
+        }));
       });
       this.querySelectorAll("[data-gf-pin='reset']").forEach((button) => {
         button.addEventListener("click", () => this.dispatch({ name: "reset-pins" }));

@@ -112,7 +112,11 @@ and `graphfakos.ui`.
 - `tests/test_cli.py`: CLI smoke and JSON output
 - `tests/test_artifacts.py`: artifact round-trip and file-backed provider proof
 - `tests/test_release_check.py`: release script shape
+- `tests/test_quality_scripts.py`: package-local validator baselines and guard entrypoints
 - `tests/test_fixture_adapter.py`: fake third-party provider compatibility
 - `tests/test_demo_adapter.py`: generated demo provider scenarios
 - `scripts/generate_benchmark_envelopes.py`: deterministic 1K, 200K, and 1M
   provider-envelope fixtures with honest omitted counts
+- `scripts/validate/`: package-local complexity, structure, public-surface, and
+  hygiene validators
+- `scripts/baselines/`: ratchet baselines consumed by package-local validators

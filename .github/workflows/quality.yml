@@ -61,6 +61,8 @@ jobs:
             Makefile
             pyproject.toml
             scripts/validate_commit_message.py
+            scripts/validate/*.py
+            scripts/baselines/*.tsv
           )
           ./.venv/bin/python3.11 -m pre_commit run \
             --files "${files[@]}" \

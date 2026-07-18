@@ -1,0 +1,8 @@
+# Format: path<TAB>underscore_count
+scripts/generate_benchmark_envelopes.py	2
+scripts/validate/filename_underscore_hygiene.py	2
+scripts/validate/max_file_loc.py	2
+scripts/validate/path_structure_hygiene.py	2
+scripts/validate/type_ignore_hygiene.py	2
+scripts/validate_commit_message.py	2
+src/graphfakos/_model_values.py	2

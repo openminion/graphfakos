@@ -5,6 +5,9 @@ knowledge graphs.
 
 Start with:
 
+- [Engineering patterns](engineering-patterns.md)
+- [Code quality enforcement](code-quality-enforcement.md)
+- [Cleanup workflow](cleanup-workflow.md)
 - [Artifact interchange](artifact-interchange.md)
 - [Source tree owner map](source-tree-owner-map.md)
 - [UI contracts](ui-contracts.md)

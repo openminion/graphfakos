@@ -109,6 +109,8 @@ def make_local_viewer_server(
             if parsed.path == "/api/live":
                 self._send_live_event(query)
                 return
+            if not self._request_allowed(parsed.path):
+                return
             route = parsed.path
             if parsed.query:
                 route = f"{route}?{parsed.query}"

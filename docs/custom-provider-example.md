@@ -96,3 +96,18 @@ PYTHONDONTWRITEBYTECODE=1 .venv/bin/python3.11 -m ruff check src tests scripts
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src .venv/bin/python3.11 -m pytest -q
 .venv/bin/python3.11 scripts/release_check.py --skip-twine --skip-wheel-smoke
 ```
+
+## Runnable host example
+
+For a complete public-import-only example, see
+`examples/provider_host.py`. It demonstrates a package-local provider that:
+
+- returns provider-neutral nodes, edges, citations, stats, and provider payloads,
+- accepts `GraphFakosKnowledgeCapture` without importing a host runtime,
+- previews `GraphFakosGraphAction` while keeping persistence host-owned, and
+- renders static HTML through `render_static_html`.
+
+That shape is the preferred integration model for future Sophiagraph,
+PragmaGraph, OpenMinion, and third-party graph producers: shared viewer code
+lives in GraphFakos, while provider packages own truth, durability, action
+policy, and rebuild behavior.

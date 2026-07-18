@@ -878,6 +878,55 @@ body.gf-page[data-theme="paper"] {
 .gf-capture-status[data-state="saved"] {
   color: var(--gf-accent);
 }
+.gf-action-readiness {
+  background: color-mix(in srgb, var(--gf-soft) 80%, white);
+  border: 1px solid color-mix(in srgb, var(--gf-accent) 20%, var(--gf-line));
+  border-radius: 10px;
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+}
+.gf-action-readiness div {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.gf-action-readiness b {
+  color: var(--gf-ink);
+  font-size: 13px;
+  margin-right: 2px;
+}
+.gf-action-readiness p {
+  color: var(--gf-muted);
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 0;
+}
+.gf-action-readiness ol {
+  display: grid;
+  gap: 7px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.gf-action-readiness li {
+  align-items: baseline;
+  display: grid;
+  gap: 3px;
+}
+.gf-action-readiness span {
+  color: var(--gf-muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+.gf-action-readiness strong {
+  color: var(--gf-ink);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.4;
+}
 .gf-context-menu {
   border: 1px solid var(--gf-line);
   border-radius: 10px;
@@ -1178,6 +1227,23 @@ body.gf-page[data-theme="space"] .gf-node[data-kind="document"] polygon {
   min-height: 76px;
   padding: 8px;
   resize: vertical;
+}
+.gf-inspect-field {
+  color: var(--gf-muted);
+  display: grid;
+  font-size: 12px;
+  font-weight: 800;
+  gap: 5px;
+  margin-top: 8px;
+}
+.gf-inspect-field input,
+.gf-inspect-field textarea {
+  background: color-mix(in srgb, var(--gf-panel) 86%, transparent);
+  border: 1px solid var(--gf-line);
+  border-radius: 10px;
+  color: var(--gf-ink);
+  font: inherit;
+  padding: 8px;
 }
 .gf-inspect-overlay button {
   background: var(--gf-blue-soft);
@@ -1499,35 +1565,89 @@ body.gf-page[data-theme="space"] .gf-node text {
   stroke-width: 2;
 }
 .gf-group-controls {
-  align-items: center;
   border-top: 1px solid var(--gf-line);
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
+  display: grid;
+  gap: 8px;
   margin-top: 8px;
   padding-top: 8px;
-  flex-wrap: wrap;
+}
+.gf-group-controls-head,
+.gf-group-kind-row,
+.gf-group-cluster-row {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+}
+.gf-group-controls-head {
+  justify-content: space-between;
+}
+.gf-group-controls-head > span {
+  color: var(--gf-muted);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.gf-group-kind-row,
+.gf-group-cluster-row {
+  overflow-x: auto;
+  padding-bottom: 2px;
 }
 .gf-group-controls button,
-.gf-group-fallback a {
+.gf-group-fallback a,
+.gf-cluster-card {
   border: 1px solid var(--gf-line);
-  border-radius: 999px;
   background: var(--gf-panel);
   color: var(--gf-muted);
   font: inherit;
   font-size: 12px;
   font-weight: 700;
-  margin: 0 4px 4px 0;
+}
+.gf-group-kind-row button,
+.gf-group-fallback a,
+.gf-group-controls [data-gf-group-show-all] {
+  border-radius: 999px;
   padding: 4px 8px;
+}
+.gf-cluster-card {
+  align-items: start;
+  border-radius: 14px;
+  cursor: pointer;
+  display: grid;
+  flex: 0 0 190px;
+  gap: 2px;
+  min-height: 72px;
+  padding: 10px 12px;
+  text-align: left;
+}
+.gf-cluster-card span {
+  color: var(--gf-muted);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.gf-cluster-card strong {
+  color: var(--gf-ink);
+  font-size: 14px;
+}
+.gf-cluster-card small {
+  color: var(--gf-muted);
+  font-size: 11px;
+  line-height: 1.3;
 }
 .gf-group-controls [data-gf-group-show-all] {
   border-color: color-mix(in srgb, var(--gf-accent) 38%, var(--gf-line));
   color: var(--gf-accent);
 }
 .gf-group-controls button[data-active="false"] {
-  background: var(--gf-soft);
+  background: color-mix(in srgb, var(--gf-soft) 72%, transparent);
   color: var(--gf-muted);
-  text-decoration: line-through;
+  opacity: .58;
+}
+.gf-group-controls button[data-active="false"] strong,
+.gf-group-controls button[data-active="false"] small {
+  color: var(--gf-muted);
 }
 .gf-card[data-highlight="true"],
 .gf-list li[data-highlight="true"] {

@@ -201,11 +201,11 @@
     if (action === "layout") next.layout = command.value || payload.layout || next.layout;
     if (action === "scene-setting") {
       const key = payload.key || command.target_id;
-      if (key === "node_scale") next.node_scale = clamp(number(payload.value, next.node_scale), 0.35, 2.2);
+      if (key === "node_scale") next.node_scale = clamp(number(payload.value, next.node_scale), 0.2, 2.2);
       if (key === "edge_opacity") next.edge_opacity = clamp(number(payload.value, next.edge_opacity), 0.15, 1);
       if (key === "label_density") next.label_density = clamp(number(payload.value, next.label_density), 0, 1);
     }
-    if (action === "scene-level" && ["overview", "cluster", "local"].includes(payload.value)) {
+    if (action === "scene-level" && ["overview", "islands", "cluster", "local", "precision"].includes(payload.value)) {
       next.scene_level = payload.value;
     }
     if (action === "filter") {
@@ -1125,6 +1125,10 @@
     setText(overlay, "[data-gf-inspect-title]", payload.contentTitle || payload.label);
     setText(overlay, "[data-gf-inspect-summary]", payload.summary);
     setText(overlay, "[data-gf-inspect-content]", payload.contentPreview || payload.summary);
+    const titleInput = overlay.querySelector("[data-gf-inspect-title-input]");
+    if (titleInput) titleInput.value = payload.contentTitle || payload.label;
+    const contentInput = overlay.querySelector("[data-gf-inspect-content-input]");
+    if (contentInput) contentInput.value = payload.contentPreview || payload.summary;
     setText(
       overlay,
       "[data-gf-inspect-evidence]",
@@ -1170,7 +1174,8 @@
       degree: number(node.dataset.degree, 0),
       priority: node.dataset.labelPriority || "ambient",
       selected: state.selected_node_ids.includes(node.dataset.nodeId || ""),
-      hidden: state.hidden_groups.includes(node.dataset.kind || ""),
+      hidden: state.hidden_groups.includes(node.dataset.kind || "")
+        || state.hidden_groups.includes(node.dataset.clusterId || ""),
     })),
     links: [...shell.querySelectorAll(".gf-edge")].map((edge) => ({
       id: edge.dataset.edgeId || "",
@@ -1192,7 +1197,8 @@
       degree: 0,
       priority: state.selected_node_ids.includes(node.id) ? "focus" : "ambient",
       selected: state.selected_node_ids.includes(node.id),
-      hidden: state.hidden_groups.includes(node.kind || ""),
+      hidden: state.hidden_groups.includes(node.kind || "")
+        || state.hidden_groups.includes(node.provider_payload?.cluster_id || node.visual?.group || ""),
     })),
     links: (graph.edges || []).map((edge) => ({
       id: edge.id,
@@ -1744,7 +1750,9 @@
       this.querySelectorAll(".gf-node").forEach((node) => {
         node.dataset.selected = this.state.selected_node_ids.includes(node.dataset.nodeId) ? "true" : "false";
         node.dataset.pinned = this.state.pinned_positions[node.dataset.nodeId] ? "true" : node.dataset.pinned || "false";
-        node.dataset.hidden = this.state.hidden_groups.includes(node.dataset.kind) ? "true" : "false";
+        const hiddenByKind = this.state.hidden_groups.includes(node.dataset.kind || "");
+        const hiddenByCluster = this.state.hidden_groups.includes(node.dataset.clusterId || "");
+        node.dataset.hidden = hiddenByKind || hiddenByCluster ? "true" : "false";
         node.dataset.neighbor = "false";
       });
       this.querySelectorAll(".gf-edge").forEach((edge) => {

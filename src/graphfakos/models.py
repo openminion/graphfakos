@@ -102,6 +102,8 @@ class GraphFakosViewerState:
             theme=request.theme,
             scene_level="overview",
             filters=dict(request.filters),
+            expanded_groups=request.expanded_groups,
+            hidden_groups=request.hidden_groups,
             saved_view_id=request.saved_view_id,
             show_orphans=request.show_orphans,
             show_neighbor_links=request.show_neighbor_links,
@@ -1322,6 +1324,8 @@ class GraphFakosRequest:
     camera_pitch: float | None = None
     render_engine: str = "svg"
     theme: str = "default"
+    expanded_groups: tuple[str, ...] = ()
+    hidden_groups: tuple[str, ...] = ()
     saved_view_id: str = ""
     show_orphans: bool = True
     show_neighbor_links: bool = True
@@ -1374,6 +1378,8 @@ class GraphFakosRequest:
             camera_pitch=self.camera_pitch,
             render_engine=self.render_engine,
             theme=self.theme,
+            expanded_groups=self.expanded_groups,
+            hidden_groups=self.hidden_groups,
             saved_view_id=self.saved_view_id,
             show_orphans=self.show_orphans,
             show_neighbor_links=self.show_neighbor_links,
@@ -1427,6 +1433,8 @@ class GraphFakosRequest:
             "camera_pitch": self.camera_pitch,
             "render_engine": self.render_engine,
             "theme": self.theme,
+            "expanded_groups": list(self.expanded_groups),
+            "hidden_groups": list(self.hidden_groups),
             "saved_view_id": self.saved_view_id,
             "show_orphans": self.show_orphans,
             "show_neighbor_links": self.show_neighbor_links,
@@ -1515,6 +1523,14 @@ class GraphFakosRequest:
                 payload.get("render_engine", "svg"), "request.render_engine"
             ),
             theme=_string(payload.get("theme", "default"), "request.theme"),
+            expanded_groups=_string_tuple(
+                payload.get("expanded_groups", ()),
+                "request.expanded_groups",
+            ),
+            hidden_groups=_string_tuple(
+                payload.get("hidden_groups", ()),
+                "request.hidden_groups",
+            ),
             saved_view_id=_string(
                 payload.get("saved_view_id", ""),
                 "request.saved_view_id",

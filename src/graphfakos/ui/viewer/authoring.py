@@ -185,6 +185,7 @@ def _graph_action_panel(
         f"{_viewer_context_preview(graph, request)}"
         f"<button type='submit'{submit_attrs}>Queue action</button>"
         f"<p class='gf-capture-status' data-gf-action-status-text='true' data-state='{status_state}'>{escape(status_text)}</p>"
+        f"{_action_readiness_panel(graph, supported)}"
         "</form>"
         f"{_json_script('data-gf-action-template', action.to_dict())}"
         f"{_json_script('data-gf-action-status', status.to_dict())}"
@@ -327,6 +328,61 @@ def _draft_action_status(action: GraphFakosGraphAction) -> GraphFakosActionStatu
         action_id=action.action_id,
         status="draft",
         message="GraphFakos can submit this provider-neutral action to a host provider.",
+    )
+
+
+def _action_readiness_panel(graph: GraphFakosGraph, supported: bool) -> str:
+    payload = {
+        "provider_id": graph.provider_id,
+        "provider_label": graph.provider_label,
+        "graph_id": graph.graph_id,
+        "graph_role": graph.graph_role,
+        "action_capability": "graph_action",
+        "supported": supported,
+        "lifecycle": (
+            "draft",
+            "preview_or_submit",
+            "provider_decides",
+            "refresh_or_replay",
+        ),
+        "host_boundary": (
+            "GraphFakos shapes provider-neutral action payloads; the provider "
+            "owns validation, persistence, audit, and replay."
+        ),
+    }
+    tone = "accent" if supported else "neutral"
+    summary = (
+        "This graph can accept provider-neutral actions through the local preview."
+        if supported
+        else "This graph is read-only here; use the provider's own host surface for mutation."
+    )
+    steps = (
+        ("Draft", "GraphFakos prepares node, edge, merge, or alias payloads."),
+        ("Preview or submit", "The host can preview, queue, or execute the action."),
+        (
+            "Provider decides",
+            "The provider returns applied, blocked, conflict, recovery, or unsupported.",
+        ),
+        (
+            "Refresh/replay",
+            "The viewer refreshes graph state without owning durable truth.",
+        ),
+    )
+    rows = "".join(
+        f"<li><span>{escape(label)}</span><strong>{escape(text)}</strong></li>"
+        for label, text in steps
+    )
+    return (
+        "<aside class='gf-action-readiness' data-gf-action-readiness='true' "
+        "aria-label='Action readiness and host boundary'>"
+        "<div>"
+        "<b>Action readiness</b>"
+        f"{_badge('host owned', 'neutral')}{_badge('submit enabled' if supported else 'read only', tone)}"
+        "</div>"
+        f"<p>{escape(summary)}</p>"
+        f"<ol>{rows}</ol>"
+        f"{_json_script('data-gf-action-readiness-payload', payload)}"
+        "</aside>"
     )
 
 

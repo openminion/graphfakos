@@ -13,15 +13,16 @@ const colorByKind = {
 function clusterCenters(nodes) {
   const clusterIds = [...new Set(nodes.map((node) => node.clusterId || node.kind || "unclustered"))].sort();
   if (clusterIds.length === 1) return new Map([[clusterIds[0], { x: 0, y: 0, z: 0 }]]);
-  const spread = Math.min(620, 210 + Math.sqrt(clusterIds.length) * 92);
+  const spread = Math.min(1460, 310 + Math.sqrt(clusterIds.length) * 138);
   const goldenAngle = Math.PI * (3 - Math.sqrt(5));
   return new Map(clusterIds.map((clusterId, index) => {
-    const radius = spread * Math.sqrt((index + 0.7) / clusterIds.length);
+    const ring = Math.sqrt((index + 0.9) / clusterIds.length);
+    const radius = spread * ring;
     const angle = index * goldenAngle;
     return [clusterId, {
       x: Math.cos(angle) * radius,
       y: Math.sin(angle) * radius,
-      z: ((index % 5) - 2) * 72,
+      z: ((index % 7) - 3) * 92,
     }];
   }));
 }
@@ -30,16 +31,16 @@ function seededPosition(id, clusterId, centers) {
   const nodeHash = stableHash(id);
   const center = centers.get(clusterId || "unclustered") || { x: 0, y: 0, z: 0 };
   const localAngle = (nodeHash % 360) * (Math.PI / 180);
-  const localRadius = 24 + (nodeHash % 64);
+  const localRadius = 12 + (nodeHash % 46);
   return {
     x: center.x + Math.cos(localAngle) * localRadius,
     y: center.y + Math.sin(localAngle) * localRadius,
-    z: center.z + ((nodeHash % 41) - 20) * 2,
+    z: center.z + ((nodeHash % 47) - 23) * 1.7,
   };
 }
 
 function clusterForce(nodes, centers) {
-  let strength = 0.12;
+  let strength = 0.18;
   const force = (alpha) => {
     for (const node of nodes) {
       const center = centers.get(node.clusterId || node.kind || "unclustered") || { x: 0, y: 0, z: 0 };
@@ -87,12 +88,12 @@ const hash = (value) => {
 const position = (id, clusterId, center) => {
   const nodeHash = hash(id);
   const localAngle = (nodeHash % 360) * Math.PI / 180;
-  const localRadius = 24 + (nodeHash % 64);
+  const localRadius = 12 + (nodeHash % 46);
   return {
     id,
     x: center.x + Math.cos(localAngle) * localRadius,
     y: center.y + Math.sin(localAngle) * localRadius,
-    z: center.z + ((nodeHash % 41) - 20) * 2,
+    z: center.z + ((nodeHash % 47) - 23) * 1.7,
   };
 };
 self.onmessage = ({ data }) => {
@@ -107,7 +108,13 @@ self.onmessage = ({ data }) => {
 };`;
 
 function labelIds(nodes, scene) {
-  const baseBudget = scene.sceneLevel === "local" ? 20 : scene.sceneLevel === "cluster" ? 10 : 4;
+  const baseBudget = {
+    overview: 2,
+    islands: 6,
+    cluster: 10,
+    local: 18,
+    precision: 32,
+  }[scene.sceneLevel] || 4;
   const budget = Math.max(2, Math.round(baseBudget * (0.35 + (scene.labelDensity ?? 1) * 0.65)));
   return new Set([...nodes]
     .sort((left, right) => {
@@ -217,8 +224,9 @@ function mount(element, scene, callbacks = {}) {
     return labelObjects.get(node.id);
   };
   const nodeSize = (node) => {
-    const baseSize = 0.68 + (node.degree || 0) * 0.055;
-    return Math.max(0.56, Math.min(2.35, baseSize * (activeScene.nodeScale || 1)));
+    const baseSize = 0.42 + Math.sqrt(Math.max(0, node.degree || 0)) * 0.09;
+    const focusBoost = selectedNodeIds.has(node.id) || node.id === hoveredNodeId ? 1.45 : 1;
+    return Math.max(0.3, Math.min(1.7, baseSize * focusBoost * (activeScene.nodeScale || 1)));
   };
   const refreshVisuals = () => {
     graph.nodeColor(nodeColor);
@@ -248,9 +256,9 @@ function mount(element, scene, callbacks = {}) {
     .nodeVisibility((node) => !activeScene.nodes.find((item) => item.id === node.id)?.hidden)
     .nodeResolution(8)
     .linkColor(linkColor)
-    .linkOpacity((scene.sceneLevel === "overview" ? 0.24 : 0.34) * (scene.edgeOpacity || 1))
+    .linkOpacity((["overview", "islands"].includes(scene.sceneLevel) ? 0.16 : 0.28) * (scene.edgeOpacity || 1))
     .linkVisibility((link) => !activeScene.links.find((item) => item.id === link.id)?.hidden)
-    .linkWidth((link) => (link.selected ? 2.1 : linkTouchesFocus(link) ? 1.15 : 0.32))
+    .linkWidth((link) => (link.selected ? 1.7 : linkTouchesFocus(link) ? 0.95 : 0.22))
     .linkCurvature("curvature")
     .linkCurveRotation("curveRotation")
     .warmupTicks(reducedMotion ? 0 : 72)
@@ -292,7 +300,7 @@ function mount(element, scene, callbacks = {}) {
     graph.zoomToFit(duration, 18);
     frameTimer = window.setTimeout(() => {
       const camera = graph.cameraPosition();
-      const scale = activeScene.sceneLevel === "local" ? 0.76 : 0.72;
+      const scale = activeScene.sceneLevel === "precision" ? 0.78 : activeScene.sceneLevel === "local" ? 0.72 : 0.66;
       graph.cameraPosition(
         { x: camera.x * scale, y: camera.y * scale, z: camera.z * scale },
         { x: 0, y: 0, z: 0 },
@@ -301,8 +309,8 @@ function mount(element, scene, callbacks = {}) {
     }, reducedMotion ? 0 : duration + 20);
   };
 
-  graph.d3Force("charge")?.strength(-138);
-  graph.d3Force("link")?.distance(68).strength(0.38);
+  graph.d3Force("charge")?.strength(-210);
+  graph.d3Force("link")?.distance(112).strength(0.2);
   graph.d3Force("cluster", clusterForce(nodes, centers));
   graph.nodeThreeObject(nodeObject);
   graph.nodeThreeObjectExtend(true);
@@ -352,9 +360,9 @@ function mount(element, scene, callbacks = {}) {
       }
       refreshInteractionContext();
       visibleLabelIds = labelIds(nodes, activeScene);
-      graph.backgroundColor(nextScene.theme === "space" ? "#070d24" : "#eef4f2");
+      graph.backgroundColor(activeScene.theme === "space" ? "#070d24" : "#eef4f2");
       graph.nodeVal(nodeSize);
-      graph.linkOpacity((activeScene.sceneLevel === "overview" ? 0.24 : 0.34) * (activeScene.edgeOpacity || 1));
+      graph.linkOpacity((["overview", "islands"].includes(activeScene.sceneLevel) ? 0.16 : 0.28) * (activeScene.edgeOpacity || 1));
       graph.nodeVisibility(graph.nodeVisibility());
       graph.linkVisibility(graph.linkVisibility());
       refreshVisuals();

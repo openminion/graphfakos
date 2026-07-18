@@ -89,6 +89,10 @@ def _request_from_query(
         render_engine=_first_query_value(query, "render_engine")
         or request.render_engine,
         theme=_first_query_value(query, "theme") or request.theme,
+        expanded_groups=_tuple_query_value(
+            query, "expanded_groups", request.expanded_groups
+        ),
+        hidden_groups=_tuple_query_value(query, "hidden_groups", request.hidden_groups),
         saved_view_id=_first_query_value(query, "saved_view_id")
         or request.saved_view_id,
         show_orphans=_bool_query_value(query, "show_orphans", request.show_orphans),

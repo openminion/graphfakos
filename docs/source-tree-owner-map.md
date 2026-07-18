@@ -42,6 +42,12 @@ and `graphfakos.ui`.
 - `docs/accessibility.md`: WCAG 2.2 AA automated/manual viewer proof matrix
 - `docs/source-tree-owner-map.md`: this source-tree owner map
 
+## Examples
+
+- `examples/provider_host.py`: runnable public-import-only provider showing
+  host-owned truth, knowledge capture, graph action preview, and static HTML
+  rendering through GraphFakos
+
 ## Source
 
 - `src/graphfakos/models.py`: provider-neutral graph DTOs and serialized

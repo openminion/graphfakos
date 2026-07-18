@@ -59,8 +59,10 @@ def display_controls(request: GraphFakosRequest) -> str:
         f"data-active='{str(active_level == level).lower()}'>{label}</button>"
         for level, label in (
             ("overview", "Overview"),
+            ("islands", "Islands"),
             ("cluster", "Clusters"),
             ("local", "Local"),
+            ("precision", "Precision"),
         )
     )
     return (
@@ -68,8 +70,8 @@ def display_controls(request: GraphFakosRequest) -> str:
         "<summary><span>Display</span><small>scene</small></summary>"
         "<div class='gf-display-dock-body'>"
         f"<div class='gf-scene-levels' aria-label='Graph detail level'>{levels}</div>"
-        "<label><span>Nodes</span>"
-        f"<input type='range' min='0.35' max='1.6' step='0.05' "
+        "<label><span>Dots</span>"
+        f"<input type='range' min='0.2' max='1.6' step='0.05' "
         f"value='{request.node_scale:.2f}' data-gf-scene-control='node_scale'></label>"
         "<label><span>Labels</span>"
         f"<input type='range' min='0' max='1' step='0.05' "

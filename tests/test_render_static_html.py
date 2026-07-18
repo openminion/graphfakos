@@ -279,6 +279,10 @@ def test_static_viewer_renders_competitive_workbench_controls() -> None:
     assert "Actions unsupported" in html
     assert "data-gf-action-form='true' data-gf-capability-supported='false'" in html
     assert "Current provider does not advertise graph authoring actions." in html
+    assert "data-gf-action-readiness='true'" in html
+    assert "Action readiness" in html
+    assert "read only" in html
+    assert "provider_decides" in html
     assert "data-gf-saved-view='true'" in html
     assert "data-gf-saved-queries='true'" in html
     assert "data-gf-workbook='true'" in html
@@ -303,6 +307,17 @@ def test_static_viewer_renders_competitive_workbench_controls() -> None:
         == "draft_node"
     )
     assert _json_script_payload(html, "data-gf-action-status")["status"] == "draft"
+    action_readiness = _json_script_payload(html, "data-gf-action-readiness-payload")
+    assert action_readiness["supported"] is False
+    assert action_readiness["lifecycle"] == [
+        "draft",
+        "preview_or_submit",
+        "provider_decides",
+        "refresh_or_replay",
+    ]
+    assert action_readiness["host_boundary"].startswith(
+        "GraphFakos shapes provider-neutral action payloads"
+    )
     component_map = _json_script_payload(html, "data-gf-component-map")
     assert component_map["components"][0]["component_id"] == "component:1"
     assert component_map["components"][0]["hub_label"] == "Viewer Spec"
@@ -814,9 +829,15 @@ def test_demo_viewer_marks_workbench_editor_capabilities_supported() -> None:
     assert "Actions supported" in html
     assert "data-gf-knowledge-form='true' data-gf-capability-supported='true'" in html
     assert "data-gf-action-form='true' data-gf-capability-supported='true'" in html
+    assert "data-gf-action-readiness='true'" in html
+    assert "submit enabled" in html
     assert "Current provider does not advertise" not in html
     assert "<button type='submit'>Add to graph</button>" in html
     assert "<button type='submit'>Queue action</button>" in html
+    assert (
+        _json_script_payload(html, "data-gf-action-readiness-payload")["supported"]
+        is True
+    )
 
 
 def test_graph_authoring_defaults_follow_selected_nodes() -> None:

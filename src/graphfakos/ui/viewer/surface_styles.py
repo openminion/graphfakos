@@ -66,7 +66,7 @@ SURFACE_STYLE = """
   left: 14px;
   position: absolute;
   top: 14px;
-  width: 220px;
+  width: 252px;
   z-index: 6;
 }
 .gf-display-dock:not([open]) { width: auto; }
@@ -118,7 +118,7 @@ SURFACE_STYLE = """
 .gf-scene-levels {
   display: grid;
   gap: 4px;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 .gf-scene-levels button {
   background: transparent;
@@ -130,7 +130,7 @@ SURFACE_STYLE = """
   font-size: 10px;
   font-weight: 800;
   min-height: 28px;
-  padding: 4px;
+  padding: 4px 3px;
 }
 .gf-scene-levels button[data-active="true"] {
   background: var(--gf-accent-soft);

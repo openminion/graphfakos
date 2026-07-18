@@ -1228,23 +1228,6 @@ body.gf-page[data-theme="space"] .gf-node[data-kind="document"] polygon {
   padding: 8px;
   resize: vertical;
 }
-.gf-inspect-field {
-  color: var(--gf-muted);
-  display: grid;
-  font-size: 12px;
-  font-weight: 800;
-  gap: 5px;
-  margin-top: 8px;
-}
-.gf-inspect-field input,
-.gf-inspect-field textarea {
-  background: color-mix(in srgb, var(--gf-panel) 86%, transparent);
-  border: 1px solid var(--gf-line);
-  border-radius: 10px;
-  color: var(--gf-ink);
-  font: inherit;
-  padding: 8px;
-}
 .gf-inspect-overlay button {
   background: var(--gf-blue-soft);
   border: 1px solid color-mix(in srgb, var(--gf-blue) 28%, var(--gf-line));
@@ -1563,91 +1546,6 @@ body.gf-page[data-theme="space"] .gf-node text {
   fill: var(--gf-blue-soft);
   stroke: var(--gf-blue);
   stroke-width: 2;
-}
-.gf-group-controls {
-  border-top: 1px solid var(--gf-line);
-  display: grid;
-  gap: 8px;
-  margin-top: 8px;
-  padding-top: 8px;
-}
-.gf-group-controls-head,
-.gf-group-kind-row,
-.gf-group-cluster-row {
-  align-items: center;
-  display: flex;
-  gap: 6px;
-}
-.gf-group-controls-head {
-  justify-content: space-between;
-}
-.gf-group-controls-head > span {
-  color: var(--gf-muted);
-  font-size: 11px;
-  font-weight: 900;
-  letter-spacing: .08em;
-  text-transform: uppercase;
-}
-.gf-group-kind-row,
-.gf-group-cluster-row {
-  overflow-x: auto;
-  padding-bottom: 2px;
-}
-.gf-group-controls button,
-.gf-group-fallback a,
-.gf-cluster-card {
-  border: 1px solid var(--gf-line);
-  background: var(--gf-panel);
-  color: var(--gf-muted);
-  font: inherit;
-  font-size: 12px;
-  font-weight: 700;
-}
-.gf-group-kind-row button,
-.gf-group-fallback a,
-.gf-group-controls [data-gf-group-show-all] {
-  border-radius: 999px;
-  padding: 4px 8px;
-}
-.gf-cluster-card {
-  align-items: start;
-  border-radius: 14px;
-  cursor: pointer;
-  display: grid;
-  flex: 0 0 190px;
-  gap: 2px;
-  min-height: 72px;
-  padding: 10px 12px;
-  text-align: left;
-}
-.gf-cluster-card span {
-  color: var(--gf-muted);
-  font-size: 10px;
-  font-weight: 900;
-  letter-spacing: .08em;
-  text-transform: uppercase;
-}
-.gf-cluster-card strong {
-  color: var(--gf-ink);
-  font-size: 14px;
-}
-.gf-cluster-card small {
-  color: var(--gf-muted);
-  font-size: 11px;
-  line-height: 1.3;
-}
-.gf-group-controls [data-gf-group-show-all] {
-  border-color: color-mix(in srgb, var(--gf-accent) 38%, var(--gf-line));
-  color: var(--gf-accent);
-}
-.gf-group-controls button[data-active="false"] {
-  background: color-mix(in srgb, var(--gf-soft) 72%, transparent);
-  color: var(--gf-muted);
-  opacity: .58;
-}
-.gf-group-controls button[data-active="false"] strong,
-.gf-group-controls button[data-active="false"] small {
-  color: var(--gf-muted);
 }
 .gf-card[data-highlight="true"],
 .gf-list li[data-highlight="true"] {

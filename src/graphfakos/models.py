@@ -1,11 +1,10 @@
-"""Provider-neutral graph viewer DTOs."""
-
 from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Literal, cast
 
+from . import camera
 from ._model_values import (
     _bool,
     _float,
@@ -50,6 +49,7 @@ class GraphFakosViewerState:
     camera_zoom: float = 1.0
     camera_yaw: float = 0.0
     camera_pitch: float = 0.0
+    camera_pose: camera.GraphFakosCameraPose | None = None
     render_engine: str = "svg"
     theme: str = "default"
     scene_level: str = "overview"
@@ -85,23 +85,26 @@ class GraphFakosViewerState:
 
     @classmethod
     def from_request(cls, request: GraphFakosRequest) -> GraphFakosViewerState:
+        ids = (request.focus_node_id, *request.selected_node_ids)
+        selected_node_ids = tuple(dict.fromkeys(node_id for node_id in ids if node_id))
         return cls(
             screen=request.screen,
             layout=request.layout,
             selected_node_id=request.focus_node_id,
-            selected_node_ids=request.selected_node_ids,
+            selected_node_ids=selected_node_ids,
             selected_edge_id=request.selected_edge_id,
             camera_x=request.camera_x if request.camera_x is not None else 0.0,
             camera_y=request.camera_y if request.camera_y is not None else 0.0,
             camera_zoom=request.camera_zoom if request.camera_zoom is not None else 1.0,
             camera_yaw=request.camera_yaw if request.camera_yaw is not None else 0.0,
-            camera_pitch=(
-                request.camera_pitch if request.camera_pitch is not None else 0.0
-            ),
+            camera_pitch=request.camera_pitch or 0.0,
+            camera_pose=request.camera_pose,
             render_engine=request.render_engine,
             theme=request.theme,
             scene_level="overview",
             filters=dict(request.filters),
+            expanded_groups=request.expanded_groups,
+            hidden_groups=request.hidden_groups,
             saved_view_id=request.saved_view_id,
             show_orphans=request.show_orphans,
             show_neighbor_links=request.show_neighbor_links,
@@ -175,6 +178,7 @@ class GraphFakosViewerState:
             payload["selected_edge_id"] = self.selected_edge_id
         if self.saved_view_id:
             payload["saved_view_id"] = self.saved_view_id
+        camera.add_pose_query(payload, self.camera_pose)
         payload.update(self.filters)
         if self.expanded_groups:
             payload["expanded_groups"] = ",".join(self.expanded_groups)
@@ -194,6 +198,7 @@ class GraphFakosViewerState:
             "camera_zoom": self.camera_zoom,
             "camera_yaw": self.camera_yaw,
             "camera_pitch": self.camera_pitch,
+            "camera_pose": self.camera_pose.to_dict() if self.camera_pose else None,
             "render_engine": self.render_engine,
             "theme": self.theme,
             "scene_level": self.scene_level,
@@ -248,15 +253,12 @@ class GraphFakosViewerState:
             ),
             camera_x=_float(payload.get("camera_x", 0.0), "viewer_state.camera_x"),
             camera_y=_float(payload.get("camera_y", 0.0), "viewer_state.camera_y"),
-            camera_zoom=_float(
-                payload.get("camera_zoom", 1.0), "viewer_state.camera_zoom"
+            camera_zoom=camera.float_value(payload, "camera_zoom", 1.0, "viewer_state"),
+            camera_yaw=camera.float_value(payload, "camera_yaw", 0.0, "viewer_state"),
+            camera_pitch=camera.float_value(
+                payload, "camera_pitch", 0.0, "viewer_state"
             ),
-            camera_yaw=_float(
-                payload.get("camera_yaw", 0.0), "viewer_state.camera_yaw"
-            ),
-            camera_pitch=_float(
-                payload.get("camera_pitch", 0.0), "viewer_state.camera_pitch"
-            ),
+            camera_pose=camera.camera_pose_or_none(payload.get("camera_pose")),
             render_engine=_string(
                 payload.get("render_engine", "svg"), "viewer_state.render_engine"
             ),
@@ -1320,8 +1322,11 @@ class GraphFakosRequest:
     camera_zoom: float | None = None
     camera_yaw: float | None = None
     camera_pitch: float | None = None
+    camera_pose: camera.GraphFakosCameraPose | None = None
     render_engine: str = "svg"
     theme: str = "default"
+    expanded_groups: tuple[str, ...] = ()
+    hidden_groups: tuple[str, ...] = ()
     saved_view_id: str = ""
     show_orphans: bool = True
     show_neighbor_links: bool = True
@@ -1372,8 +1377,11 @@ class GraphFakosRequest:
             camera_zoom=self.camera_zoom,
             camera_yaw=self.camera_yaw,
             camera_pitch=self.camera_pitch,
+            camera_pose=self.camera_pose,
             render_engine=self.render_engine,
             theme=self.theme,
+            expanded_groups=self.expanded_groups,
+            hidden_groups=self.hidden_groups,
             saved_view_id=self.saved_view_id,
             show_orphans=self.show_orphans,
             show_neighbor_links=self.show_neighbor_links,
@@ -1425,8 +1433,11 @@ class GraphFakosRequest:
             "camera_zoom": self.camera_zoom,
             "camera_yaw": self.camera_yaw,
             "camera_pitch": self.camera_pitch,
+            "camera_pose": self.camera_pose.to_dict() if self.camera_pose else None,
             "render_engine": self.render_engine,
             "theme": self.theme,
+            "expanded_groups": list(self.expanded_groups),
+            "hidden_groups": list(self.hidden_groups),
             "saved_view_id": self.saved_view_id,
             "show_orphans": self.show_orphans,
             "show_neighbor_links": self.show_neighbor_links,
@@ -1504,17 +1515,22 @@ class GraphFakosRequest:
             render_limit=_int(payload.get("render_limit", 120), "request.render_limit"),
             camera_x=_float_or_none(payload.get("camera_x"), "request.camera_x"),
             camera_y=_float_or_none(payload.get("camera_y"), "request.camera_y"),
-            camera_zoom=_float_or_none(
-                payload.get("camera_zoom"), "request.camera_zoom"
-            ),
+            camera_zoom=camera.optional_float(payload, "camera_zoom", "request"),
             camera_yaw=_float_or_none(payload.get("camera_yaw"), "request.camera_yaw"),
-            camera_pitch=_float_or_none(
-                payload.get("camera_pitch"), "request.camera_pitch"
-            ),
+            camera_pitch=camera.optional_float(payload, "camera_pitch", "request"),
+            camera_pose=camera.camera_pose_or_none(payload.get("camera_pose")),
             render_engine=_string(
                 payload.get("render_engine", "svg"), "request.render_engine"
             ),
             theme=_string(payload.get("theme", "default"), "request.theme"),
+            expanded_groups=_string_tuple(
+                payload.get("expanded_groups", ()),
+                "request.expanded_groups",
+            ),
+            hidden_groups=_string_tuple(
+                payload.get("hidden_groups", ()),
+                "request.hidden_groups",
+            ),
             saved_view_id=_string(
                 payload.get("saved_view_id", ""),
                 "request.saved_view_id",

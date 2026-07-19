@@ -6,6 +6,7 @@ import re
 from graphfakos import (
     DemoGraphProvider,
     FixtureGraphProvider,
+    GraphFakosCameraPose,
     GraphFakosRequest,
     render_graph_dot,
     render_embeddable_html,
@@ -53,7 +54,21 @@ def test_static_viewer_renders_graph_canvas_and_inspector() -> None:
     assert "aria-keyshortcuts='/ Control+K Meta+K'" in html
     assert "gf-command-shortcut" in html
     assert "/ or Ctrl+K" in html
+    assert (
+        "Close menu or preview, inspector, then clear focus" in viewer_runtime_script()
+    )
+    assert "setConnectedPreviewDom" in viewer_runtime_script()
+    assert "Alt/Option + Arrow" in viewer_runtime_script()
+    assert "stepSpatialNode" in viewer_runtime_script()
+    assert "renderer.panByScreen" in viewer_runtime_script()
+    assert "renderer.zoomBy" in viewer_runtime_script()
+    assert 'addEventListener("popstate"' in viewer_runtime_script()
     assert "aria-label='Graph minimap'" in html
+    assert "data-gf-minimap='true'" in html
+    assert "data-gf-minimap-map='true'" in html
+    assert "role='application' tabindex='0'" in html
+    assert "aria-keyshortcuts='ArrowLeft ArrowRight ArrowUp ArrowDown Home'" in html
+    assert "data-gf-minimap-bearing='true'" in html
     assert "data-gf-minimap-node='true'" in html
     assert "data-gf-minimap-viewport='true'" in html
     assert ".gf-minimap-viewport" in html
@@ -106,6 +121,12 @@ def test_static_viewer_renders_graph_canvas_and_inspector() -> None:
     assert "data-cluster-id=" in html
     assert "data-content-preview=" in html
     assert "data-gf-inspect-overlay='true'" in html
+    assert "data-gf-inspect-compact='true'" in html
+    assert "aria-label='Node navigation actions'" in html
+    assert "<summary>Content &amp; edit</summary>" in html
+    assert html.index("aria-label='Node navigation actions'") < html.index(
+        "data-gf-inspect-content-section='true'"
+    )
     assert "data-gf-inspect-command='true'" in html
     assert "data-gf-overlay-action='draft_note'" in html
     assert "lastCommand" in viewer_runtime_script()
@@ -126,8 +147,40 @@ def test_static_viewer_renders_graph_canvas_and_inspector() -> None:
     assert ".gf-surface-menu" in html
     assert ".gf-selection-box" in html
     assert "data-gf-theme-toggle='true'" in html
+    assert "data-gf-spatial-trail='true'" in html
+    assert "data-gf-spatial-root='true'" in html
+
+
+def test_local_lens_keeps_focus_but_requests_a_fresh_camera() -> None:
+    html = render_static_html(
+        FixtureGraphProvider(),
+        GraphFakosRequest(
+            focus_node_id="provider:third-party",
+            camera_pose=GraphFakosCameraPose(
+                position=(100.0, 50.0, 900.0),
+                target=(0.0, 0.0, 0.0),
+            ),
+            render_engine="3d",
+        ),
+    )
+    node = re.search(
+        r"data-node-id='provider:third-party'.*?data-local-route='([^']+)'",
+        html,
+    )
+
+    assert node is not None
+    local_route = node.group(1)
+    assert local_route.startswith("/neighborhood?")
+    assert "focus_node_id=provider%3Athird-party" in local_route
+    assert "camera_scope=fresh" in local_route
+    assert "camera_pose=" not in local_route
+    assert "data-gf-inspect-overlay='true' data-open='true'" in html
     assert "data-gf-group-show-all='true'" in html
     assert "Show all" in html
+    assert "data-gf-touch-guide='true'" in html
+    assert "Tap inspect" in html
+    assert "Pinch zoom" in html
+    assert "touch-action: none" in html
     assert "<graphfakos-viewer" in html
     assert "data-state-json=" in html
     assert 'customElements.define("graphfakos-viewer"' in html
@@ -196,6 +249,8 @@ def test_static_viewer_renders_competitive_workbench_controls() -> None:
 
     assert "data-theme='ink'" in html
     assert "render-engine='canvas'" in html
+    assert "aria-controls='gf-nav-menu'" in html
+    assert "data-gf-nav-menu='true'" in html
     assert "name='render_engine' value='canvas'" in html
     assert "name='theme' value='ink'" in html
     assert "name='saved_view_id' value='ops-review'" in html
@@ -279,6 +334,10 @@ def test_static_viewer_renders_competitive_workbench_controls() -> None:
     assert "Actions unsupported" in html
     assert "data-gf-action-form='true' data-gf-capability-supported='false'" in html
     assert "Current provider does not advertise graph authoring actions." in html
+    assert "data-gf-action-readiness='true'" in html
+    assert "Action readiness" in html
+    assert "read only" in html
+    assert "provider_decides" in html
     assert "data-gf-saved-view='true'" in html
     assert "data-gf-saved-queries='true'" in html
     assert "data-gf-workbook='true'" in html
@@ -303,6 +362,17 @@ def test_static_viewer_renders_competitive_workbench_controls() -> None:
         == "draft_node"
     )
     assert _json_script_payload(html, "data-gf-action-status")["status"] == "draft"
+    action_readiness = _json_script_payload(html, "data-gf-action-readiness-payload")
+    assert action_readiness["supported"] is False
+    assert action_readiness["lifecycle"] == [
+        "draft",
+        "preview_or_submit",
+        "provider_decides",
+        "refresh_or_replay",
+    ]
+    assert action_readiness["host_boundary"].startswith(
+        "GraphFakos shapes provider-neutral action payloads"
+    )
     component_map = _json_script_payload(html, "data-gf-component-map")
     assert component_map["components"][0]["component_id"] == "component:1"
     assert component_map["components"][0]["hub_label"] == "Viewer Spec"
@@ -814,9 +884,15 @@ def test_demo_viewer_marks_workbench_editor_capabilities_supported() -> None:
     assert "Actions supported" in html
     assert "data-gf-knowledge-form='true' data-gf-capability-supported='true'" in html
     assert "data-gf-action-form='true' data-gf-capability-supported='true'" in html
+    assert "data-gf-action-readiness='true'" in html
+    assert "submit enabled" in html
     assert "Current provider does not advertise" not in html
     assert "<button type='submit'>Add to graph</button>" in html
     assert "<button type='submit'>Queue action</button>" in html
+    assert (
+        _json_script_payload(html, "data-gf-action-readiness-payload")["supported"]
+        is True
+    )
 
 
 def test_graph_authoring_defaults_follow_selected_nodes() -> None:
@@ -1083,6 +1159,9 @@ def test_neighborhood_screen_uses_depth_controls() -> None:
     )
 
     assert "aria-label='Neighborhood controls'" in html
+    assert "gf-layout-graph-first" in html
+    assert html.index("Graph Canvas") < html.index("Neighborhood controls")
+    assert html.count("aria-label='Local graph controls'") == 0
     assert "Depth 2 neighborhood" in html
     assert "Static Export" in html
 

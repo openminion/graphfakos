@@ -42,6 +42,12 @@ and `graphfakos.ui`.
 - `docs/accessibility.md`: WCAG 2.2 AA automated/manual viewer proof matrix
 - `docs/source-tree-owner-map.md`: this source-tree owner map
 
+## Examples
+
+- `examples/provider_host.py`: runnable public-import-only provider showing
+  host-owned truth, knowledge capture, graph action preview, and static HTML
+  rendering through GraphFakos
+
 ## Source
 
 - `src/graphfakos/models.py`: provider-neutral graph DTOs and serialized
@@ -84,12 +90,28 @@ and `graphfakos.ui`.
   and graph-action forms; providers still own persistence and semantic truth
 - `src/graphfakos/ui/viewer/evidence.py` and `diffing.py`: evidence summaries
   and graph snapshot comparison
-- `src/graphfakos/ui/viewer/html.py`, `shell.py`, `panels.py`, and `styles.py`:
-  shared presentation primitives, graph-first shell placement, and stylesheet
+- `src/graphfakos/ui/viewer/html.py` and `shell.py`: shared HTML primitives,
+  document composition, responsive screen navigation, and graph-first shell
+  placement
+- `src/graphfakos/ui/viewer/styles.py`, `surface_styles.py`, and
+  `surface_controls.py`: base styling plus graph-surface presentation and
+  controls
+- `src/graphfakos/assets/focus-trail.js`: pure semantic focus-history labels and
+  compact spatial-trail presentation model
+- `src/graphfakos/assets/spatial-map.js`: pure 3D overview projection and
+  minimap-to-world coordinate model
+- `src/graphfakos/assets/overview-control.js`: overview-map pointer and keyboard
+  navigation lifecycle
 - `src/graphfakos/assets/viewer.js`: provider-neutral state, command, history,
-  fallback-SVG, and custom-element runtime
+  fallback-SVG, and custom-element runtime orchestration
 - `web/src/renderer.js`: source owner for the true WebGL 3D renderer; built to
   `src/graphfakos/assets/renderer-3d.js` for offline wheel use
+- `web/src/focus-readability.js`: screen-space label collision and inspector
+  camera-reservation math used by the WebGL renderer
+- `web/src/spatial-navigation.js`: deterministic screen-direction node ranking
+  used by keyboard travel in the WebGL scene
+- `web/src/semantic-detail.js`: pure camera-distance detail, label-budget, and
+  sparse-scene node-scale policy for WebGL navigation
 - `web/tests/`: pinned real-browser interaction, responsive, fallback,
   accessibility, and scale proof
 - `src/graphfakos/adapters/file.py`: file-backed provider for persisted graph

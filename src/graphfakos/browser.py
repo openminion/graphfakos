@@ -8,8 +8,15 @@ from importlib.resources import files
 
 @lru_cache(maxsize=1)
 def viewer_runtime_script() -> str:
-    return (
-        files("graphfakos").joinpath("assets", "viewer.js").read_text(encoding="utf-8")
+    assets = files("graphfakos").joinpath("assets")
+    return "\n".join(
+        assets.joinpath(name).read_text(encoding="utf-8")
+        for name in (
+            "focus-trail.js",
+            "spatial-map.js",
+            "overview-control.js",
+            "viewer.js",
+        )
     )
 
 

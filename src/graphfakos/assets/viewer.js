@@ -18,6 +18,13 @@
     .filter(Boolean);
   const workbookStorageKey = "graphfakos:viewer-workbook:v1";
   const themeStorageKey = "graphfakos:viewer-theme:v1";
+  const connectedPreviewInvalidatingActions = new Set([
+    "select-node",
+    "select-edge",
+    "select-many",
+    "clear-selection",
+    "group-toggle",
+  ]);
   const safeLocalStorage = () => {
     try {
       return typeof window !== "undefined" ? window.localStorage : null;
@@ -34,6 +41,56 @@
     if (!storage?.setItem || !["default", "ink", "paper", "space"].includes(theme)) return;
     storage.setItem(themeStorageKey, theme);
   };
+  const wireResponsiveNavigation = () => {
+    const toggle = document.querySelector("[data-gf-nav-toggle]");
+    if (!toggle || toggle.dataset.gfWired) return;
+    const shell = toggle.closest(".gf-shell");
+    const nav = toggle.closest(".gf-nav");
+    const mobile = window.matchMedia("(max-width: 840px)");
+    if (!shell || !nav) return;
+    const setCollapsed = (collapsed) => {
+      shell.dataset.navCollapsed = collapsed ? "true" : "false";
+      toggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
+    };
+    const syncBreakpoint = () => setCollapsed(mobile.matches);
+    toggle.dataset.gfWired = "true";
+    syncBreakpoint();
+    toggle.addEventListener("click", () => {
+      setCollapsed(shell.dataset.navCollapsed !== "true");
+    });
+    nav.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape" || shell.dataset.navCollapsed === "true") return;
+      setCollapsed(true);
+      toggle.focus();
+    });
+    mobile.addEventListener?.("change", syncBreakpoint);
+  };
+  const vector3 = (value) => {
+    const source = Array.isArray(value)
+      ? { x: value[0], y: value[1], z: value[2] }
+      : value;
+    if (!source || typeof source !== "object") return null;
+    const values = [source.x, source.y, source.z].map(Number);
+    if (!values.every(Number.isFinite)) return null;
+    return { x: values[0], y: values[1], z: values[2] };
+  };
+  const normalizeCameraPose = (value) => {
+    const position = vector3(value?.position);
+    const target = vector3(value?.target);
+    return position && target ? { position, target } : null;
+  };
+  const cameraPoseParam = (value) => {
+    const pose = normalizeCameraPose(value);
+    if (!pose) return "";
+    return [
+      pose.position.x,
+      pose.position.y,
+      pose.position.z,
+      pose.target.x,
+      pose.target.y,
+      pose.target.z,
+    ].map((item) => item.toFixed(6)).join(",");
+  };
   const viewerContext = (state) => {
     const current = normalizeState(state);
     return {
@@ -48,6 +105,7 @@
         zoom: current.camera_zoom,
         yaw: current.camera_yaw,
         pitch: current.camera_pitch,
+        pose: current.camera_pose ? clone(current.camera_pose) : null,
       },
       layout: current.layout,
       render_engine: current.render_engine,
@@ -88,6 +146,7 @@
     camera_zoom: 1,
     camera_yaw: 0,
     camera_pitch: 0,
+    camera_pose: null,
     render_engine: "svg",
     theme: "default",
     scene_level: "overview",
@@ -133,8 +192,13 @@
     next.camera_zoom = clamp(number(next.camera_zoom, 1), 0.35, 3);
     next.camera_yaw = clamp(number(next.camera_yaw, 0), -180, 180);
     next.camera_pitch = clamp(number(next.camera_pitch, 0), -72, 72);
+    next.camera_pose = normalizeCameraPose(next.camera_pose);
     next.filters = clone(next.filters);
-    next.selected_node_ids = Array.isArray(next.selected_node_ids) ? next.selected_node_ids.filter(Boolean) : [];
+    const selectedNodeIds = Array.isArray(next.selected_node_ids) ? next.selected_node_ids.filter(Boolean) : [];
+    next.selected_node_ids = [...new Set(selectedNodeIds)];
+    if (next.selected_node_id && !next.selected_node_ids.includes(next.selected_node_id)) {
+      next.selected_node_ids.unshift(next.selected_node_id);
+    }
     next.applied_patch_ids = Array.isArray(next.applied_patch_ids) ? next.applied_patch_ids.filter(Boolean) : [];
     next.expanded_groups = Array.isArray(next.expanded_groups) ? next.expanded_groups : [];
     next.hidden_groups = Array.isArray(next.hidden_groups) ? next.hidden_groups : [];
@@ -168,7 +232,11 @@
         next.selected_node_ids = nodeId ? [nodeId] : [];
       }
     }
-    if (action === "select-many") next.selected_node_ids = Array.isArray(payload.node_ids) ? payload.node_ids.filter(Boolean).sort() : [];
+    if (action === "select-many") {
+      next.selected_node_ids = Array.isArray(payload.node_ids) ? payload.node_ids.filter(Boolean).sort() : [];
+      next.selected_node_id = next.selected_node_ids[0] || null;
+      next.selected_edge_id = null;
+    }
     if (action === "clear-selection") {
       next.selected_node_id = null;
       next.selected_node_ids = [];
@@ -201,11 +269,11 @@
     if (action === "layout") next.layout = command.value || payload.layout || next.layout;
     if (action === "scene-setting") {
       const key = payload.key || command.target_id;
-      if (key === "node_scale") next.node_scale = clamp(number(payload.value, next.node_scale), 0.35, 2.2);
+      if (key === "node_scale") next.node_scale = clamp(number(payload.value, next.node_scale), 0.2, 2.2);
       if (key === "edge_opacity") next.edge_opacity = clamp(number(payload.value, next.edge_opacity), 0.15, 1);
       if (key === "label_density") next.label_density = clamp(number(payload.value, next.label_density), 0, 1);
     }
-    if (action === "scene-level" && ["overview", "cluster", "local"].includes(payload.value)) {
+    if (action === "scene-level" && ["overview", "islands", "cluster", "local", "precision"].includes(payload.value)) {
       next.scene_level = payload.value;
     }
     if (action === "filter") {
@@ -329,6 +397,7 @@
     put("camera_zoom", current.camera_zoom.toFixed(2));
     put("camera_yaw", current.camera_yaw.toFixed(2));
     put("camera_pitch", current.camera_pitch.toFixed(2));
+    put("camera_pose", cameraPoseParam(current.camera_pose));
     put("render_engine", current.render_engine);
     put("theme", current.theme);
     put("saved_view_id", current.saved_view_id);
@@ -422,6 +491,7 @@
     url.searchParams.set("camera_zoom", state.camera_zoom.toFixed(2));
     url.searchParams.set("camera_yaw", state.camera_yaw.toFixed(2));
     url.searchParams.set("camera_pitch", state.camera_pitch.toFixed(2));
+    setUrlParam(url, "camera_pose", cameraPoseParam(state.camera_pose));
     setUrlParam(url, "focus_node_id", state.selected_node_id);
     setUrlParam(url, "selected_node_ids", state.selected_node_ids);
     setUrlParam(url, "selected_edge_id", state.selected_edge_id);
@@ -433,6 +503,18 @@
       url.searchParams.delete("pinned_positions");
     }
     link.setAttribute("href", `${url.pathname}${url.search}`);
+  };
+
+  const preserveNavigationState = (url, state) => {
+    const restoreCamera = url.searchParams.get("camera_scope") !== "fresh";
+    url.searchParams.delete("camera_scope");
+    for (const key of ["hidden_groups", "expanded_groups", "node_scale", "edge_opacity", "label_density"]) {
+      if (!url.searchParams.has(key)) setUrlParam(url, key, state[key]);
+    }
+    if (restoreCamera && !url.searchParams.has("camera_pose")) {
+      setUrlParam(url, "camera_pose", cameraPoseParam(state.camera_pose));
+    }
+    return restoreCamera;
   };
 
   const minimapViewportRect = (state, viewport = {}, minimap = {}) => {
@@ -503,6 +585,18 @@
     const status = shell.closest(".gf-canvas-panel")?.querySelector("[data-gf-detail-mode]");
     if (status) status.textContent = `${mode.charAt(0).toUpperCase()}${mode.slice(1)} view`;
     return mode;
+  };
+
+  const applyWebGLDetailMode = (shell, detail = {}) => {
+    const mode = ["overview", "balanced", "detail", "precision"].includes(detail.level)
+      ? detail.level
+      : "overview";
+    shell.dataset.detailMode = mode;
+    shell.dataset.semanticZoom = number(detail.zoom, 1).toFixed(2);
+    shell.dataset.cameraDistance = number(detail.cameraDistance, 0).toFixed(2);
+    shell.dataset.referenceDistance = number(detail.referenceDistance, 0).toFixed(2);
+    const status = shell.closest(".gf-canvas-panel")?.querySelector("[data-gf-detail-mode]");
+    if (status) status.textContent = `${mode.charAt(0).toUpperCase()}${mode.slice(1)} view`;
   };
 
   const applyCamera = (shell, state) => {
@@ -796,6 +890,19 @@
     return selectedNodes.length ? selectedNodes : allNodes;
   };
 
+  const nodeIdsForGroup = (shell, group) => {
+    const target = String(group || "");
+    if (!shell || !target) return [];
+    return [...shell.querySelectorAll(".gf-node")]
+      .filter((node) => (
+        node.dataset.hidden !== "true"
+        && (node.dataset.kind === target || node.dataset.clusterId === target)
+      ))
+      .map((node) => node.dataset.nodeId || "")
+      .filter(Boolean)
+      .sort();
+  };
+
   const viewportSize = (shell) => {
     const viewBox = shell.querySelector(".gf-canvas")?.viewBox?.baseVal;
     return {
@@ -806,7 +913,9 @@
   };
 
   const closeSurfaceMenus = (root) => {
-    root.querySelectorAll(".gf-surface-menu").forEach((menu) => menu.remove());
+    const menus = [...root.querySelectorAll(".gf-surface-menu")];
+    menus.forEach((menu) => menu.remove());
+    return menus.length > 0;
   };
 
   const menuButton = (label, onClick) => {
@@ -834,10 +943,15 @@
     { key: "+ / =", action: "Zoom in" },
     { key: "-", action: "Zoom out" },
     { key: "Arrow keys / WASD", action: "Pan graph" },
+    { key: "Alt/Option + Arrow", action: "Preview nearest node in that direction" },
+    { key: "Enter / .", action: "Focus current selection" },
+    { key: "[ / ]", action: "Previous / next graph focus" },
+    { key: "J / K", action: "Next / previous connected item" },
+    { key: "Home", action: "Fit visible graph" },
     { key: "0", action: "Reset camera" },
     { key: "F", action: "Fullscreen" },
     { key: "Delete / Backspace", action: "Clear selection" },
-    { key: "Esc", action: "Close surface menu" },
+    { key: "Esc", action: "Close menu or preview, inspector, then clear focus" },
   ];
 
   const isEditableTarget = (target) => Boolean(
@@ -852,6 +966,7 @@
   const focusGraphSearch = (root) => {
     const input = root.querySelector("[data-gf-command-search]");
     if (!input) return false;
+    input.closest("[data-gf-command-dock]")?.setAttribute("open", "");
     input.focus();
     input.select?.();
     return true;
@@ -1096,6 +1211,89 @@
     evidenceRoute: node?.dataset.evidenceRoute || "",
   });
 
+  const connectedNodeRows = (root, nodeId) => {
+    if (!root || !nodeId) return [];
+    const rows = new Map();
+    root.querySelectorAll(".gf-edge").forEach((edge) => {
+      const sourceId = edge.dataset.sourceId || "";
+      const targetId = edge.dataset.targetId || "";
+      const neighborId = sourceId === nodeId ? targetId : targetId === nodeId ? sourceId : "";
+      if (!neighborId) return;
+      const node = root.querySelector(`.gf-node[data-node-id="${CSS.escape(neighborId)}"]`);
+      if (!node || node.dataset.hidden === "true") return;
+      const row = rows.get(neighborId) || {
+        id: neighborId,
+        label: node.dataset.label || neighborId,
+        kind: node.dataset.kind || "node",
+        relations: new Set(),
+        directions: new Set(),
+        edgeCount: 0,
+      };
+      row.relations.add(edge.dataset.label || edge.dataset.kind || "linked");
+      row.directions.add(sourceId === nodeId ? "outgoing" : "incoming");
+      row.edgeCount += 1;
+      rows.set(neighborId, row);
+    });
+    return [...rows.values()].map(({ relations, directions, ...row }) => ({
+      ...row,
+      relation: [...relations].join(", "),
+      direction: directions.size > 1 ? "both directions" : [...directions][0],
+    })).sort((left, right) => right.edgeCount - left.edgeCount || left.label.localeCompare(right.label));
+  };
+
+  const connectedNodesMarkup = (rows) => rows.slice(0, 12).map((row) => (
+    `<button type="button" data-gf-neighbor-node="${escapeHtml(row.id)}" data-previewed="false">`
+    + `<span>${escapeHtml(row.kind)}</span><strong>${escapeHtml(row.label)}</strong>`
+    + `<small>${escapeHtml(row.relation)}</small>`
+    + `<em>${escapeHtml(row.direction)}${row.edgeCount > 1 ? ` · ${row.edgeCount} links` : ""}</em></button>`
+  )).join("");
+
+  const moveConnectedFocus = (root, direction) => {
+    const overlay = root?.querySelector?.("[data-gf-inspect-overlay][data-open='true']");
+    const items = [...(overlay?.querySelectorAll?.("[data-gf-neighbor-node]") || [])];
+    if (!items.length) return "";
+    const current = items.indexOf(document.activeElement);
+    const step = direction === "previous" ? -1 : 1;
+    const next = current < 0 ? (step < 0 ? items.length - 1 : 0) : (current + step + items.length) % items.length;
+    items[next].focus({ preventScroll: true });
+    items[next].scrollIntoView?.({ block: "nearest" });
+    return items[next].dataset.gfNeighborNode || "";
+  };
+
+  const setConnectedPreviewDom = (root, nodeId) => {
+    const previewId = String(nodeId || "");
+    const overlay = root?.querySelector?.("[data-gf-inspect-overlay][data-open='true']");
+    const originId = overlay?.dataset.nodeId || root?.getState?.().selected_node_id || "";
+    const edges = [...(root?.querySelectorAll?.(".gf-edge") || [])];
+    const directlyConnected = Boolean(originId && edges.some((edge) => {
+      const endpoints = new Set([edge.dataset.sourceId || "", edge.dataset.targetId || ""]);
+      return endpoints.has(originId) && endpoints.has(previewId);
+    }));
+    root?.querySelectorAll?.("[data-gf-neighbor-node]").forEach((item) => {
+      item.dataset.previewed = String(Boolean(previewId && item.dataset.gfNeighborNode === previewId));
+    });
+    root?.querySelectorAll?.(".gf-node").forEach((node) => {
+      node.dataset.previewed = String(Boolean(previewId && node.dataset.nodeId === previewId));
+    });
+    edges.forEach((edge) => {
+      const endpoints = new Set([edge.dataset.sourceId || "", edge.dataset.targetId || ""]);
+      edge.dataset.previewed = String(Boolean(
+        previewId && endpoints.has(previewId) && (!directlyConnected || endpoints.has(originId)),
+      ));
+    });
+    const status = root?.querySelector?.("[data-gf-live-selection]");
+    const previewNode = previewId
+      ? root?.querySelector?.(`.gf-node[data-node-id="${CSS.escape(previewId)}"]`)
+      : null;
+    if (status && previewId) {
+      status.dataset.previewedNodeId = previewId;
+      status.textContent = `Previewing ${previewNode?.dataset.label || previewId}. Enter to focus; Escape to cancel.`;
+    } else if (status) {
+      delete status.dataset.previewedNodeId;
+    }
+    return previewId;
+  };
+
   const setText = (root, selector, value) => {
     const element = root.querySelector(selector);
     if (element) element.textContent = value || "";
@@ -1121,10 +1319,15 @@
     const payload = nodeInspectPayload(node);
     overlay.dataset.open = "true";
     overlay.dataset.nodeId = payload.id;
+    overlay.scrollTop = 0;
     setText(overlay, "[data-gf-inspect-kind]", payload.kind);
     setText(overlay, "[data-gf-inspect-title]", payload.contentTitle || payload.label);
     setText(overlay, "[data-gf-inspect-summary]", payload.summary);
     setText(overlay, "[data-gf-inspect-content]", payload.contentPreview || payload.summary);
+    const titleInput = overlay.querySelector("[data-gf-inspect-title-input]");
+    if (titleInput) titleInput.value = payload.contentTitle || payload.label;
+    const contentInput = overlay.querySelector("[data-gf-inspect-content-input]");
+    if (contentInput) contentInput.value = payload.contentPreview || payload.summary;
     setText(
       overlay,
       "[data-gf-inspect-evidence]",
@@ -1139,6 +1342,10 @@
     if (targetInput) targetInput.value = payload.id;
     const sourceInput = overlay.querySelector("[data-gf-inspect-source]");
     if (sourceInput) sourceInput.value = payload.source;
+    const neighbors = connectedNodeRows(root, payload.id);
+    const neighborList = overlay.querySelector("[data-gf-inspect-neighbors]");
+    if (neighborList) neighborList.innerHTML = connectedNodesMarkup(neighbors);
+    setText(overlay, "[data-gf-inspect-neighbor-count]", String(neighbors.length));
     overlay.querySelector("[data-gf-overlay-action='center']")?.setAttribute("data-route", payload.focusRoute);
     overlay.querySelector("[data-gf-overlay-action='local']")?.setAttribute("data-route", payload.localRoute);
     overlay.querySelector("[data-gf-overlay-action='evidence']")?.setAttribute("data-route", payload.evidenceRoute);
@@ -1161,16 +1368,19 @@
   });
 
   const webglSceneFromShell = (shell, state) => ({
-    ...webglDisplayState(state, state.scene_level || shell.dataset.detailMode || "overview"),
+    ...webglDisplayState(state, shell.dataset.detailMode || state.scene_level || "overview"),
     nodes: [...shell.querySelectorAll(".gf-node")].map((node) => ({
       id: node.dataset.nodeId || "",
       label: node.dataset.label || node.dataset.nodeId || "Node",
       kind: node.dataset.kind || "node",
       clusterId: node.dataset.clusterId || node.dataset.kind || "",
       degree: number(node.dataset.degree, 0),
+      summary: node.dataset.summary || "",
+      contentPreview: node.dataset.contentPreview || node.dataset.summary || "",
       priority: node.dataset.labelPriority || "ambient",
       selected: state.selected_node_ids.includes(node.dataset.nodeId || ""),
-      hidden: state.hidden_groups.includes(node.dataset.kind || ""),
+      hidden: state.hidden_groups.includes(node.dataset.kind || "")
+        || state.hidden_groups.includes(node.dataset.clusterId || ""),
     })),
     links: [...shell.querySelectorAll(".gf-edge")].map((edge) => ({
       id: edge.dataset.edgeId || "",
@@ -1190,9 +1400,12 @@
       kind: node.kind || "node",
       clusterId: node.provider_payload?.cluster_id || node.visual?.group || node.kind || "",
       degree: 0,
+      summary: node.summary || node.source || node.id,
+      contentPreview: node.content_preview || node.provider_payload?.content_preview || node.summary || "",
       priority: state.selected_node_ids.includes(node.id) ? "focus" : "ambient",
       selected: state.selected_node_ids.includes(node.id),
-      hidden: state.hidden_groups.includes(node.kind || ""),
+      hidden: state.hidden_groups.includes(node.kind || "")
+        || state.hidden_groups.includes(node.provider_payload?.cluster_id || node.visual?.group || ""),
     })),
     links: (graph.edges || []).map((edge) => ({
       id: edge.id,
@@ -1208,14 +1421,22 @@
     #wired = false;
     #suppressNextClick = false;
     #webglRenderers = new Map();
+    #minimapOverviews = new WeakMap();
     #undoStack = [];
     #redoStack = [];
+    #focusBackStack = [];
+    #focusForwardStack = [];
+    #focusCurrent = null;
+    #connectedPreviewId = "";
+    #cameraLinkTimer = 0;
     #liveSource = null;
     #liveUrl = "/api/live";
+    #routeNavigationId = 0;
 
     connectedCallback() {
       this.graph = parseJsonAttribute(this, "data-graph-json", {});
       this.state = normalizeState(parseJsonAttribute(this, "data-state-json", {}));
+      if (!this.#focusCurrent) this.#focusCurrent = this.#focusEntry({ node_ids: this.#currentNodeIds() });
       const urlHasTheme = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("theme");
       const storedTheme = readStoredTheme();
       if (!urlHasTheme && storedTheme) this.state.theme = storedTheme;
@@ -1223,18 +1444,7 @@
       if (typeof document !== "undefined") document.body?.setAttribute?.("data-theme", this.state.theme);
       this.setAttribute("data-render-engine", this.state.render_engine);
       this.setAttribute("data-theme", this.state.theme);
-      const navToggle = typeof document !== "undefined"
-        ? document.querySelector("[data-gf-nav-toggle]")
-        : null;
-      if (navToggle && !navToggle.dataset.gfWired) {
-        navToggle.dataset.gfWired = "true";
-        navToggle.addEventListener("click", () => {
-          const shell = navToggle.closest(".gf-shell");
-          const collapsed = shell?.dataset.navCollapsed !== "true";
-          if (shell) shell.dataset.navCollapsed = collapsed ? "true" : "false";
-          navToggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
-        });
-      }
+      if (typeof document !== "undefined") wireResponsiveNavigation();
       this.#wireFallbackDom();
       this.querySelector("[data-gf-live-resync]")?.addEventListener("click", () => this.resyncLiveSession());
       this.querySelectorAll(".gf-canvas-shell").forEach((shell) => {
@@ -1244,15 +1454,138 @@
       updateSelectionStatus(this, this.state);
       updateWorkbenchForms(this, this.state);
       this.#renderWorkbook();
+      this.#updateFocusHistoryButtons();
       this.querySelectorAll(".gf-canvas-shell").forEach((shell) => drawCanvas(shell));
       this.#mountWebGLScenes();
+      const initialFocus = this.state.selected_node_id
+        ? this.querySelector(`.gf-node[data-node-id="${CSS.escape(this.state.selected_node_id)}"]`)
+        : null;
+      if (initialFocus) openInspectOverlay(this, initialFocus);
       emit(this, "ready", { state: this.getState(), graph: this.graph });
     }
 
     disconnectedCallback() {
       this.#liveSource?.close?.();
       this.#liveSource = null;
+      this.#routeNavigationId += 1;
+      window.clearTimeout(this.#cameraLinkTimer);
       this.#destroyWebGLScenes();
+    }
+
+    #updateOrientationHud(shell, camera) {
+      const yaw = number(camera?.yaw, 0);
+      const pitch = number(camera?.pitch, 0);
+      const pose = normalizeCameraPose(camera);
+      if (pose) {
+        this.state = normalizeState({
+          ...this.state,
+          camera_yaw: yaw,
+          camera_pitch: pitch,
+          camera_pose: pose,
+        });
+        updateSavedLink(this, this.state);
+        window.clearTimeout(this.#cameraLinkTimer);
+        this.#cameraLinkTimer = window.setTimeout(() => {
+          if (!window.history?.replaceState) return;
+          const url = new URL(window.location.href);
+          setUrlParam(url, "camera_pose", cameraPoseParam(this.state.camera_pose));
+          setUrlParam(url, "camera_yaw", this.state.camera_yaw.toFixed(2));
+          setUrlParam(url, "camera_pitch", this.state.camera_pitch.toFixed(2));
+          window.history.replaceState(window.history.state, "", routeFromUrl(url));
+        }, 180);
+      }
+      const hud = shell?.querySelector?.("[data-gf-orientation-reset]");
+      if (!hud) return;
+      const compass = hud.querySelector("[data-gf-orientation-compass]");
+      if (compass) compass.style.transform = `rotate(${(-yaw).toFixed(1)}deg)`;
+      setText(hud, "[data-gf-orientation-yaw]", `${Math.round(yaw)}°`);
+      setText(hud, "[data-gf-orientation-pitch]", Math.abs(pitch) < 3 ? "level" : `${Math.round(pitch)}° tilt`);
+      hud.dataset.yaw = yaw.toFixed(1);
+      hud.dataset.pitch = pitch.toFixed(1);
+    }
+
+    #updateMinimapOverview(shell, overview) {
+      const minimap = shell?.closest?.(".gf-canvas-panel")?.querySelector?.("[data-gf-minimap]");
+      const map = minimap?.querySelector?.("[data-gf-minimap-map]");
+      const viewBox = map?.viewBox?.baseVal;
+      const spatialMap = globalThis.GraphFakosSpatialMap;
+      if (!minimap || !map || !viewBox || !spatialMap?.overviewProjection) return;
+      const size = { width: viewBox.width, height: viewBox.height };
+      const model = spatialMap.overviewProjection(overview?.nodes || [], size);
+      const positions = new Map(model.positions.map((position) => [position.id, position]));
+      map.querySelectorAll("[data-minimap-node-id]").forEach((node) => {
+        const position = positions.get(node.dataset.minimapNodeId || "");
+        node.dataset.hidden = position ? "false" : "true";
+        if (!position || node.tagName.toLowerCase() !== "circle") return;
+        node.setAttribute("cx", position.x.toFixed(1));
+        node.setAttribute("cy", position.y.toFixed(1));
+        node.dataset.depth = position.depth.toFixed(2);
+        node.dataset.layer = position.layer;
+        node.dataset.primary = position.primary ? "true" : "false";
+        node.dataset.selected = position.selected ? "true" : "false";
+      });
+      const yaw = number(overview?.camera?.yaw, 0);
+      const pitch = number(overview?.camera?.pitch, 0);
+      const footprint = spatialMap.cameraFootprint?.(overview?.camera, model.bounds, size);
+      const viewport = minimap.querySelector("[data-gf-minimap-viewport]");
+      const target = minimap.querySelector("[data-gf-minimap-camera-target]");
+      const heading = minimap.querySelector("[data-gf-minimap-camera-heading]");
+      const focusBearing = minimap.querySelector("[data-gf-minimap-focus-bearing]");
+      const focusBeacon = minimap.querySelector("[data-gf-minimap-focus-beacon]");
+      const selectedPosition = model.positions.find((position) => position.primary)
+        || model.positions.find((position) => position.selected);
+      if (footprint && viewport && target && heading) {
+        viewport.setAttribute("x", footprint.x.toFixed(1));
+        viewport.setAttribute("y", footprint.y.toFixed(1));
+        viewport.setAttribute("width", footprint.width.toFixed(1));
+        viewport.setAttribute("height", footprint.height.toFixed(1));
+        viewport.setAttribute(
+          "transform",
+          `rotate(${footprint.rotation.toFixed(1)} ${footprint.center.x.toFixed(1)} ${footprint.center.y.toFixed(1)})`,
+        );
+        viewport.dataset.cameraDistance = footprint.distance.toFixed(2);
+        target.setAttribute("cx", footprint.center.x.toFixed(1));
+        target.setAttribute("cy", footprint.center.y.toFixed(1));
+        for (const coordinate of ["x1", "y1", "x2", "y2"]) {
+          heading.setAttribute(coordinate, footprint.heading[coordinate].toFixed(1));
+        }
+      }
+      const hasFocus = Boolean(footprint && selectedPosition && focusBearing && focusBeacon);
+      minimap.dataset.hasFocus = hasFocus ? "true" : "false";
+      if (hasFocus) {
+        focusBearing.setAttribute("x1", footprint.center.x.toFixed(1));
+        focusBearing.setAttribute("y1", footprint.center.y.toFixed(1));
+        focusBearing.setAttribute("x2", selectedPosition.x.toFixed(1));
+        focusBearing.setAttribute("y2", selectedPosition.y.toFixed(1));
+        focusBeacon.setAttribute("cx", selectedPosition.x.toFixed(1));
+        focusBeacon.setAttribute("cy", selectedPosition.y.toFixed(1));
+      }
+      const bearing = minimap.querySelector("[data-gf-minimap-bearing]");
+      if (bearing) bearing.style.transform = `rotate(${(-yaw).toFixed(1)}deg)`;
+      setText(minimap, "[data-gf-minimap-orientation]", `${Math.round(yaw)}\u00b0 \u00b7 ${Math.round(pitch)}\u00b0`);
+      minimap.dataset.mode = "3d";
+      const focusContext = hasFocus
+        ? ` The focus beacon marks ${selectedPosition.label || selectedPosition.id}.`
+        : "";
+      minimap.setAttribute(
+        "aria-label",
+        `3D overview map. Heading ${Math.round(yaw)} degrees, tilt ${Math.round(pitch)} degrees. The outlined footprint shows camera coverage.${focusContext} Drag, click empty space, or use arrow keys to move the camera target.`,
+      );
+      this.#minimapOverviews.set(map, { camera: overview?.camera, footprint, model, size });
+    }
+
+    #moveFromMinimap(map, point, duration = 420) {
+      const shell = map.closest(".gf-canvas-panel")?.querySelector(".gf-canvas-shell");
+      const renderer = this.#webglRenderers.get(shell);
+      const overview = this.#minimapOverviews.get(map);
+      const target = globalThis.GraphFakosSpatialMap?.worldPointFromMap?.(
+        point,
+        overview?.model?.bounds,
+        overview?.size || point,
+      );
+      if (!renderer?.focusPoint?.(target, duration)) return false;
+      emit(this, "minimap-move", { target, state: this.getState() });
+      return true;
     }
 
     #mountWebGLScenes() {
@@ -1272,7 +1605,10 @@
                   payload: { additive: Boolean(event?.shiftKey) },
                 });
                 const node = shell.querySelector(`.gf-node[data-node-id="${CSS.escape(item.id)}"]`);
-                if (node) openInspectOverlay(this, node);
+                if (node) {
+                  openInspectOverlay(this, node);
+                  window.requestAnimationFrame(() => renderer.ensureNodeVisible?.(item.id));
+                }
               },
               onPin: (item) => this.dispatch({
                 name: "pin-node",
@@ -1283,10 +1619,29 @@
                 name: "pin-many",
                 payload: { positions },
               }),
+              onBackground: () => {
+                this.#clearConnectedPreview();
+                closeInspectOverlay(this);
+                if (this.state.selected_node_ids.length || this.state.selected_edge_id) {
+                  this.dispatch({ name: "clear-selection" });
+                }
+                shell.focus({ preventScroll: true });
+                emit(this, "focus-clear", { source: "background", state: this.getState() });
+              },
+              onCameraChange: (camera) => this.#updateOrientationHud(shell, camera),
+              onDetailChange: (detail) => applyWebGLDetailMode(shell, detail),
+              onOverview: (overview) => this.#updateMinimapOverview(shell, overview),
             },
           );
           if (!renderer) throw new Error("3D renderer did not mount");
           this.#webglRenderers.set(shell, renderer);
+          if (this.state.camera_pose) {
+            renderer.restoreCamera?.(
+              { mode: "3d", ...this.state.camera_pose },
+              0,
+            );
+          }
+          this.#updateMinimapOverview(shell, renderer.overviewState?.());
           shell.dataset.webglReady = "true";
           shell.dataset.webglFallback = "false";
           emit(this, "renderer-ready", { backend: "webgl", state: this.getState() });
@@ -1385,6 +1740,9 @@
       const action = command?.name || "";
       if (action === "undo") return this.#undo();
       if (action === "redo") return this.#redo();
+      if (connectedPreviewInvalidatingActions.has(action)) {
+        this.#clearConnectedPreview();
+      }
       this.state = reduce(this.state, command);
       if (!new Set(["camera", "state"]).has(action) && JSON.stringify(previous) !== JSON.stringify(this.state)) {
         this.#undoStack.push(previous);
@@ -1436,8 +1794,11 @@
       const targetShell = shell || this.querySelector(".gf-canvas-shell");
       if (!targetShell) return this.resetCamera();
       const renderer = this.#webglRenderers.get(targetShell);
+      const selectedIds = this.state.selected_node_ids || [];
       if (renderer) {
-        renderer.fit?.();
+        if (selectedIds.length === 1) renderer.focusNeighborhood?.(selectedIds[0]);
+        else if (selectedIds.length) renderer.focusNodes?.(selectedIds);
+        else renderer.fit?.();
         return this.getState();
       }
       const fitted = fittedCameraState(this.state, fitNodesFromShell(targetShell, this.state), viewportSize(targetShell));
@@ -1453,16 +1814,378 @@
       });
     }
 
+    fitVisible(shell = null) {
+      const targetShell = shell || this.querySelector(".gf-canvas-shell");
+      if (!targetShell) return this.resetCamera();
+      const renderer = this.#webglRenderers.get(targetShell);
+      if (renderer) {
+        renderer.fit?.();
+        return this.getState();
+      }
+      const fitState = { ...this.state, selected_node_ids: [], selected_edge_id: "" };
+      const fitted = fittedCameraState(fitState, fitNodesFromShell(targetShell, fitState), viewportSize(targetShell));
+      return this.dispatch({
+        name: "camera",
+        payload: {
+          x: fitted.camera_x,
+          y: fitted.camera_y,
+          zoom: fitted.camera_zoom,
+          yaw: this.state.camera_yaw,
+          pitch: this.state.camera_pitch,
+        },
+      });
+    }
+
+    #focusTrailModel() {
+      return globalThis.GraphFakosFocusTrail?.focusTrailModel?.(
+        this.#focusBackStack,
+        this.#focusCurrent,
+        this.#focusForwardStack,
+        this.graph,
+      ) || { backLabel: "", forwardLabel: "", items: [], rootIndex: -1, visible: false };
+    }
+
+    #renderFocusTrail(model = this.#focusTrailModel()) {
+      const trail = this.querySelector("[data-gf-spatial-trail]");
+      const items = trail?.querySelector("[data-gf-spatial-items]");
+      if (!trail || !items) return;
+      trail.hidden = !model.visible;
+      items.replaceChildren();
+      model.items.forEach((item) => {
+        const separator = document.createElement("span");
+        separator.className = "gf-spatial-separator";
+        separator.setAttribute("aria-hidden", "true");
+        separator.textContent = "›";
+        const button = document.createElement("button");
+        button.type = "button";
+        button.dataset.gfSpatialIndex = String(item.historyIndex);
+        button.textContent = item.label;
+        button.title = item.current ? `Current graph location: ${item.label}` : `Return to ${item.label}`;
+        if (item.current) {
+          button.className = "gf-spatial-current";
+          button.disabled = true;
+          button.setAttribute("aria-current", "location");
+        }
+        items.append(separator, button);
+      });
+    }
+
+    #updateFocusHistoryButtons() {
+      const model = this.#focusTrailModel();
+      this.querySelectorAll("[data-gf-focus-history='back']").forEach((button) => {
+        button.disabled = this.#focusBackStack.length === 0;
+        button.title = model.backLabel ? `Previous focus: ${model.backLabel}` : "No previous graph focus";
+        button.setAttribute("aria-label", button.title);
+      });
+      this.querySelectorAll("[data-gf-focus-history='forward']").forEach((button) => {
+        button.disabled = this.#focusForwardStack.length === 0;
+        button.title = model.forwardLabel ? `Next focus: ${model.forwardLabel}` : "No next graph focus";
+        button.setAttribute("aria-label", button.title);
+      });
+      this.#renderFocusTrail(model);
+    }
+
+    #focusEntry(entry = {}) {
+      const nodeIds = [...new Set(entry.node_ids || [])].filter(Boolean);
+      const group = String(entry.group || "");
+      return {
+        node_ids: nodeIds,
+        group,
+        camera: entry.camera ? clone(entry.camera) : null,
+        fingerprint: JSON.stringify({ node_ids: nodeIds, group }),
+      };
+    }
+
+    #currentNodeIds() {
+      return [...new Set([this.state.selected_node_id, ...this.state.selected_node_ids])].filter(Boolean);
+    }
+
+    #cameraSnapshot(shell = null) {
+      const targetShell = shell || this.querySelector(".gf-canvas-shell");
+      const renderer = this.#webglRenderers.get(targetShell);
+      return renderer?.cameraState?.() || {
+        mode: "svg",
+        x: this.state.camera_x,
+        y: this.state.camera_y,
+        zoom: this.state.camera_zoom,
+        yaw: this.state.camera_yaw,
+        pitch: this.state.camera_pitch,
+      };
+    }
+
+    #captureCurrentCamera(shell = null) {
+      if (!this.#focusCurrent) this.#focusCurrent = this.#focusEntry({ node_ids: this.#currentNodeIds() });
+      this.#focusCurrent = { ...this.#focusCurrent, camera: this.#cameraSnapshot(shell) };
+    }
+
+    #restoreCamera(snapshot, shell = null) {
+      if (!snapshot) return false;
+      const targetShell = shell || this.querySelector(".gf-canvas-shell");
+      const renderer = this.#webglRenderers.get(targetShell);
+      if (snapshot.mode === "3d" && renderer?.restoreCamera?.(snapshot)) {
+        this.state = normalizeState({
+          ...this.state,
+          camera_yaw: snapshot.yaw,
+          camera_pitch: snapshot.pitch,
+          camera_pose: snapshot,
+        });
+        updateSavedLink(this, this.state);
+        return true;
+      }
+      if (snapshot.mode !== "svg") return false;
+      const previous = this.getState();
+      this.state = normalizeState({
+        ...this.state,
+        camera_x: snapshot.x,
+        camera_y: snapshot.y,
+        camera_zoom: snapshot.zoom,
+        camera_yaw: snapshot.yaw,
+        camera_pitch: snapshot.pitch,
+      });
+      this.#applyState("focus-camera", previous);
+      return true;
+    }
+
+    #rememberFocus(entry) {
+      const normalized = this.#focusEntry(entry);
+      if (!normalized.node_ids.length) return;
+      if (this.#focusCurrent?.fingerprint === normalized.fingerprint) return;
+      if (this.#focusCurrent) this.#focusBackStack.push(this.#focusCurrent);
+      this.#focusBackStack = this.#focusBackStack.slice(-40);
+      this.#focusCurrent = normalized;
+      this.#focusForwardStack = [];
+      this.#updateFocusHistoryButtons();
+    }
+
+    #showFocus(entry, shell = null, remember = true, restoreCamera = false) {
+      const targetShell = shell || this.querySelector(".gf-canvas-shell");
+      if (!targetShell) return { nodeIds: [], state: this.getState() };
+      if (remember) this.#captureCurrentCamera(targetShell);
+      if (entry.group && this.state.hidden_groups.includes(entry.group)) {
+        this.dispatch({ name: "group-toggle", target_id: entry.group });
+      }
+      const nodeIds = [...new Set(entry?.node_ids || [])].filter((nodeId) => {
+        const node = targetShell.querySelector(`.gf-node[data-node-id="${CSS.escape(nodeId)}"]`);
+        return node && node.dataset.hidden !== "true";
+      });
+      if (entry?.node_ids?.length && !nodeIds.length) return { nodeIds, state: this.getState() };
+      if (nodeIds.length) this.dispatch({ name: "select-many", payload: { node_ids: nodeIds } });
+      else this.dispatch({ name: "clear-selection" });
+      const renderer = this.#webglRenderers.get(targetShell);
+      const cameraRestored = restoreCamera && this.#restoreCamera(entry.camera, targetShell);
+      if (!cameraRestored && renderer) {
+        if (nodeIds.length === 1) renderer.focusNeighborhood?.(nodeIds[0]);
+        else if (nodeIds.length) renderer.focusNodes?.(nodeIds);
+        else renderer.fit?.();
+      } else if (!cameraRestored) this.fitSelection(targetShell);
+      const first = nodeIds.length
+        ? targetShell.querySelector(`.gf-node[data-node-id="${CSS.escape(nodeIds[0])}"]`)
+        : null;
+      if (first) openInspectOverlay(this, first);
+      else closeInspectOverlay(this);
+      if (first && renderer) {
+        window.setTimeout(() => renderer.ensureNodeVisible?.(nodeIds[0]), 560);
+      }
+      if (remember) this.#rememberFocus({ node_ids: nodeIds, group: entry.group });
+      return { nodeIds, state: this.getState() };
+    }
+
+    #applyFocusEntry(entry, shell = null) {
+      const result = this.#showFocus(entry, shell, false, true);
+      emit(this, "focus-history", {
+        entry: { ...clone(entry), node_ids: result.nodeIds },
+        state: result.state,
+      });
+      return result.state;
+    }
+
+    navigateFocusHistory(direction, shell = null) {
+      const backward = direction === "back";
+      const source = backward ? this.#focusBackStack : this.#focusForwardStack;
+      const destination = backward ? this.#focusForwardStack : this.#focusBackStack;
+      const entry = source.pop();
+      if (!entry) return this.getState();
+      this.#captureCurrentCamera(shell);
+      if (this.#focusCurrent) destination.push(this.#focusCurrent);
+      this.#focusCurrent = entry;
+      this.#updateFocusHistoryButtons();
+      return this.#applyFocusEntry(entry, shell);
+    }
+
+    #jumpFocusHistory(index, shell = null) {
+      if (index < 0 || index >= this.#focusBackStack.length) return this.getState();
+      this.#captureCurrentCamera(shell);
+      const history = [...this.#focusBackStack, this.#focusCurrent].filter(Boolean);
+      const existingForward = [...this.#focusForwardStack];
+      this.#focusCurrent = history[index];
+      this.#focusBackStack = history.slice(0, index);
+      this.#focusForwardStack = [...existingForward, ...history.slice(index + 1).reverse()];
+      this.#updateFocusHistoryButtons();
+      return this.#applyFocusEntry(this.#focusCurrent, shell);
+    }
+
+    exportNavigationTrail(shell = null) {
+      this.#captureCurrentCamera(shell);
+      return {
+        scope: `${this.graph?.provider_id || "provider"}:${this.graph?.graph_id || "graph"}`,
+        back: clone(this.#focusBackStack),
+        current: clone(this.#focusCurrent),
+        forward: clone(this.#focusForwardStack),
+      };
+    }
+
+    importNavigationTrail(trail, options = {}) {
+      const scope = `${this.graph?.provider_id || "provider"}:${this.graph?.graph_id || "graph"}`;
+      if (!trail || trail.scope !== scope) return false;
+      this.#focusBackStack = (trail.back || []).slice(-40).map((entry) => this.#focusEntry(entry));
+      this.#focusForwardStack = (trail.forward || []).slice(-40).map((entry) => this.#focusEntry(entry));
+      const previous = this.#focusEntry(trail.current || {});
+      const current = this.#focusEntry({ node_ids: this.#currentNodeIds(), camera: previous.camera });
+      if (current.fingerprint !== previous.fingerprint) this.#focusBackStack.push(previous);
+      this.#focusCurrent = current.fingerprint === previous.fingerprint ? previous : current;
+      this.#updateFocusHistoryButtons();
+      if (options.restoreCamera) this.#restoreCamera(previous.camera);
+      return true;
+    }
+
+    stepConnectedNode(direction = "next") {
+      const nodeId = moveConnectedFocus(this, direction);
+      if (nodeId) {
+        this.#previewConnectedNode(nodeId);
+        emit(this, "neighbor-focus", { node_id: nodeId, direction, state: this.getState() });
+      }
+      return nodeId;
+    }
+
+    stepSpatialNode(direction, shell = null) {
+      const targetShell = shell || this.querySelector(".gf-canvas-shell");
+      const renderer = this.#webglRenderers.get(targetShell);
+      const originId = this.#connectedPreviewId || this.state.selected_node_id || "";
+      const nodeId = renderer?.directionalNode?.(originId, direction) || "";
+      if (nodeId) {
+        this.#previewConnectedNode(nodeId, "spatial");
+        emit(this, "spatial-focus", { node_id: nodeId, direction, state: this.getState() });
+      }
+      return nodeId;
+    }
+
+    #previewConnectedNode(nodeId, source = "neighbor") {
+      const previewId = String(nodeId || "");
+      if (previewId === this.#connectedPreviewId) return previewId;
+      this.#connectedPreviewId = setConnectedPreviewDom(this, previewId);
+      this.#webglRenderers.forEach((renderer) => renderer.previewNode?.(this.#connectedPreviewId));
+      emit(this, `${source}-preview`, { node_id: this.#connectedPreviewId, state: this.getState() });
+      return this.#connectedPreviewId;
+    }
+
+    #clearConnectedPreview() {
+      if (!this.#connectedPreviewId) return false;
+      this.#connectedPreviewId = setConnectedPreviewDom(this, "");
+      this.#webglRenderers.forEach((renderer) => renderer.previewNode?.(""));
+      updateSelectionStatus(this, this.state);
+      emit(this, "neighbor-preview-clear", { state: this.getState() });
+      return true;
+    }
+
+    focusGroup(group, shell = null) {
+      const targetGroup = String(group || "");
+      if (!targetGroup) return this.getState();
+      const targetShell = shell || this.querySelector(".gf-canvas-shell");
+      if (this.state.hidden_groups.includes(targetGroup)) this.dispatch({ name: "group-toggle", target_id: targetGroup });
+      const nodeIds = nodeIdsForGroup(targetShell, targetGroup);
+      if (!nodeIds.length) return this.getState();
+      const result = this.#showFocus({ node_ids: nodeIds, group: targetGroup }, targetShell);
+      emit(this, "group-focus", { group: targetGroup, node_ids: result.nodeIds, state: result.state });
+      return result.state;
+    }
+
+    focusNode(nodeId, shell = null) {
+      const targetId = String(nodeId || "");
+      const node = targetId
+        ? this.querySelector(`.gf-node[data-node-id="${CSS.escape(targetId)}"]`)
+        : null;
+      if (!node || node.dataset.hidden === "true") return this.getState();
+      const targetShell = shell || node.closest(".gf-canvas-panel")?.querySelector(".gf-canvas-shell");
+      const result = this.#showFocus({ node_ids: [targetId] }, targetShell);
+      emit(this, "node-focus", { node_id: targetId, state: result.state });
+      return result.state;
+    }
+
     resetCamera() {
       this.#webglRenderers.forEach((renderer) => renderer.reset?.());
       return this.dispatch({ name: "camera", payload: { x: 0, y: 0, zoom: 1, yaw: 0, pitch: 0 } });
     }
 
+    #handleEscape() {
+      if (closeSurfaceMenus(document)) return true;
+      if (this.#clearConnectedPreview()) return true;
+      const overlay = this.querySelector("[data-gf-inspect-overlay][data-open='true']");
+      if (overlay) {
+        closeInspectOverlay(this);
+        overlay.closest(".gf-canvas-shell")?.focus({ preventScroll: true });
+        return true;
+      }
+      if (this.state.selected_node_ids.length || this.state.selected_edge_id) {
+        this.dispatch({ name: "clear-selection" });
+        emit(this, "focus-clear", { state: this.getState() });
+        return true;
+      }
+      return false;
+    }
+
     #handleCanvasKey(shell, event) {
-      if (isEditableTarget(event.target)) return;
       const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
+      const spatialDirections = {
+        ArrowDown: "down",
+        ArrowLeft: "left",
+        ArrowRight: "right",
+        ArrowUp: "up",
+      };
+      const connectedShortcut = (key === "j" || key === "k")
+        && !event.target?.closest?.("input, textarea, select, [contenteditable='true']");
+      const spatialShortcut = event.altKey && key in spatialDirections
+        && !event.target?.closest?.("input, textarea, select, [contenteditable='true']");
+      if (isEditableTarget(event.target) && !connectedShortcut && !spatialShortcut) return;
       const panStep = event.shiftKey ? 64 : 32;
       const camera = {};
+      if (spatialShortcut) {
+        event.preventDefault();
+        this.stepSpatialNode(spatialDirections[key], shell);
+        return;
+      }
+      const renderer = this.#webglRenderers.get(shell);
+      if (renderer) {
+        if (key === "+" || key === "=") {
+          event.preventDefault();
+          renderer.zoomBy?.(1.18);
+          return;
+        }
+        if (key === "-") {
+          event.preventDefault();
+          renderer.zoomBy?.(1 / 1.18);
+          return;
+        }
+        if (key === "q" || key === "e") {
+          event.preventDefault();
+          renderer.orbitBy?.(key === "q" ? -8 : 8);
+          return;
+        }
+        const panDirections = {
+          ArrowDown: [0, panStep],
+          ArrowLeft: [-panStep, 0],
+          ArrowRight: [panStep, 0],
+          ArrowUp: [0, -panStep],
+          a: [-panStep, 0],
+          d: [panStep, 0],
+          s: [0, panStep],
+          w: [0, -panStep],
+        };
+        if (key in panDirections) {
+          event.preventDefault();
+          renderer.panByScreen?.(...panDirections[key]);
+          return;
+        }
+      }
       if (key === "+" || key === "=") camera.zoom = this.state.camera_zoom * 1.18;
       if (key === "-") camera.zoom = this.state.camera_zoom / 1.18;
       if (key === "q") {
@@ -1478,6 +2201,30 @@
         this.resetCamera();
         return;
       }
+      if (key === "Enter" || key === ".") {
+        event.preventDefault();
+        if (this.#connectedPreviewId) {
+          this.focusNode(this.#connectedPreviewId, shell);
+          return;
+        }
+        this.fitSelection(shell);
+        return;
+      }
+      if (key === "Home") {
+        event.preventDefault();
+        this.fitVisible(shell);
+        return;
+      }
+      if (key === "[" || key === "]") {
+        event.preventDefault();
+        this.navigateFocusHistory(key === "[" ? "back" : "forward", shell);
+        return;
+      }
+      if (key === "j" || key === "k") {
+        event.preventDefault();
+        this.stepConnectedNode(key === "k" ? "previous" : "next");
+        return;
+      }
       if (key === "ArrowLeft" || key === "a") camera.x = this.state.camera_x + panStep;
       if (key === "ArrowRight" || key === "d") camera.x = this.state.camera_x - panStep;
       if (key === "ArrowUp" || key === "w") camera.y = this.state.camera_y + panStep;
@@ -1485,10 +2232,6 @@
       if (key === "f") {
         event.preventDefault();
         shell.requestFullscreen?.();
-        return;
-      }
-      if (key === "Escape") {
-        closeSurfaceMenus(document);
         return;
       }
       if ((event.ctrlKey || event.metaKey) && key === "z") {
@@ -1513,7 +2256,13 @@
       }
       const target = new URL(String(url), window.location.href);
       if (!isInternalRoute(target)) return false;
-      if (!target.searchParams.has("theme")) target.searchParams.set("theme", this.state.theme);
+      const navigationId = ++this.#routeNavigationId;
+      const navigationTrail = this.exportNavigationTrail();
+      const preserve = options.preserve !== false;
+      if (preserve && !target.searchParams.has("theme")) {
+        target.searchParams.set("theme", this.state.theme);
+      }
+      const restoreCamera = preserve ? preserveNavigationState(target, this.state) : false;
       emit(this, "route-loading", { route: routeFromUrl(target), state: this.getState() });
       try {
         const response = await fetch(routeFromUrl(target), {
@@ -1524,11 +2273,13 @@
         });
         if (!response.ok) throw new Error(`route fetch failed: ${response.status}`);
         const payload = await response.json();
+        if (navigationId !== this.#routeNavigationId) return false;
         const fragment = String(payload.fragment || "");
         const doc = new DOMParser().parseFromString(fragment, "text/html");
         const next = doc.querySelector("graphfakos-viewer");
         if (!next) throw new Error("route fragment did not include graphfakos-viewer");
         this.replaceWith(next);
+        next.importNavigationTrail?.(navigationTrail, { restoreCamera });
         const nextTheme = next.getState?.().theme || target.searchParams.get("theme") || this.state.theme;
         document.body?.setAttribute?.("data-theme", nextTheme);
         writeStoredTheme(nextTheme);
@@ -1538,6 +2289,7 @@
         emit(next, "route-loaded", { route: payload.route || routeFromUrl(target), state: next.getState?.() || {} });
         return true;
       } catch (error) {
+        if (navigationId !== this.#routeNavigationId) return false;
         emit(this, "error", { message: error?.message || String(error), route: routeFromUrl(target) });
         if (typeof window !== "undefined") window.location.href = routeFromUrl(target);
         return false;
@@ -1744,7 +2496,9 @@
       this.querySelectorAll(".gf-node").forEach((node) => {
         node.dataset.selected = this.state.selected_node_ids.includes(node.dataset.nodeId) ? "true" : "false";
         node.dataset.pinned = this.state.pinned_positions[node.dataset.nodeId] ? "true" : node.dataset.pinned || "false";
-        node.dataset.hidden = this.state.hidden_groups.includes(node.dataset.kind) ? "true" : "false";
+        const hiddenByKind = this.state.hidden_groups.includes(node.dataset.kind || "");
+        const hiddenByCluster = this.state.hidden_groups.includes(node.dataset.clusterId || "");
+        node.dataset.hidden = hiddenByKind || hiddenByCluster ? "true" : "false";
         node.dataset.neighbor = "false";
       });
       this.querySelectorAll(".gf-edge").forEach((edge) => {
@@ -1762,7 +2516,11 @@
         const group = button.dataset.gfGroup || "";
         const active = !this.state.hidden_groups.includes(group);
         button.dataset.active = active ? "true" : "false";
-        button.title = `${active ? "Hide" : "Show"} ${group} nodes`;
+        button.setAttribute("aria-pressed", active ? "true" : "false");
+        button.title = `${active ? "Hide" : "Show"} ${group} nodes. Alt-click to focus this group.`;
+      });
+      this.querySelectorAll("[data-gf-group-card]").forEach((card) => {
+        card.dataset.active = this.state.hidden_groups.includes(card.dataset.gfGroupCard || "") ? "false" : "true";
       });
       updateSelectionStatus(this, this.state);
       updateWorkbenchForms(this, this.state);
@@ -2143,7 +2901,41 @@
         const inspectClose = event.target?.closest?.("[data-gf-inspect-close]");
         if (inspectClose) {
           event.preventDefault();
+          this.#clearConnectedPreview();
           closeInspectOverlay(this);
+          return;
+        }
+        const inspectCompact = event.target?.closest?.("[data-gf-inspect-compact]");
+        if (inspectCompact) {
+          event.preventDefault();
+          const overlay = inspectCompact.closest("[data-gf-inspect-overlay]");
+          const compact = overlay?.dataset.compact !== "true";
+          if (!overlay) return;
+          overlay.dataset.compact = String(compact);
+          inspectCompact.textContent = compact ? "Expand" : "Collapse";
+          inspectCompact.setAttribute("aria-expanded", String(!compact));
+          if (!compact) {
+            const renderer = this.#webglRenderers.get(overlay.closest(".gf-canvas-shell"));
+            window.requestAnimationFrame(() => renderer?.ensureNodeVisible?.(overlay.dataset.nodeId));
+          }
+          emit(this, "inspect-resize", { compact, state: this.getState() });
+          return;
+        }
+        const spatialTarget = event.target?.closest?.("[data-gf-spatial-index], [data-gf-spatial-root]");
+        if (spatialTarget) {
+          const model = this.#focusTrailModel();
+          const rawIndex = spatialTarget.dataset.gfSpatialIndex;
+          const index = rawIndex === undefined ? model.rootIndex : Number(rawIndex);
+          if (index >= 0) {
+            event.preventDefault();
+            this.#jumpFocusHistory(index, spatialTarget.closest(".gf-canvas-panel")?.querySelector(".gf-canvas-shell"));
+            return;
+          }
+        }
+        const neighbor = event.target?.closest?.("[data-gf-neighbor-node]");
+        if (neighbor) {
+          event.preventDefault();
+          this.focusNode(neighbor.dataset.gfNeighborNode || "");
           return;
         }
         const overlayAction = event.target?.closest?.("[data-gf-overlay-action]");
@@ -2153,6 +2945,10 @@
           const route = overlayAction.getAttribute("data-route") || "";
           const overlay = overlayAction.closest("[data-gf-inspect-overlay]");
           if (overlay) overlay.dataset.lastCommand = action;
+          if (action === "center") {
+            this.focusNode(overlay?.dataset.nodeId || "");
+            return;
+          }
           if (route && action !== "draft_note") {
             this.navigate(route);
             return;
@@ -2192,10 +2988,18 @@
           if (focusGraphSearch(this)) emit(this, "search-focus", { state: this.getState() });
           return;
         }
-        if (event.key === "Escape") closeSurfaceMenus(document);
+        if (event.key === "Escape" && this.#handleEscape()) {
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
         if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
           this.#showKeyboardSurfaceMenu(event.target, event);
         }
+      });
+      this.addEventListener("focusin", (event) => {
+        const neighbor = event.target?.closest?.("[data-gf-neighbor-node]");
+        if (neighbor) this.#previewConnectedNode(neighbor.dataset.gfNeighborNode || "");
       });
       if (typeof window !== "undefined" && !window.__graphfakosSurfaceMenuWired) {
         window.__graphfakosSurfaceMenuWired = true;
@@ -2236,11 +3040,33 @@
       this.querySelectorAll("[data-gf-camera]").forEach((button) => {
         button.addEventListener("click", () => {
           const action = button.dataset.gfCamera;
-          if (action === "zoom-in") this.dispatch({ name: "camera", payload: { zoom: this.state.camera_zoom * 1.18 } });
-          if (action === "zoom-out") this.dispatch({ name: "camera", payload: { zoom: this.state.camera_zoom / 1.18 } });
-          if (action === "fit") this.fitSelection(button.closest(".gf-canvas-panel")?.querySelector(".gf-canvas-shell"));
+          const shell = button.closest(".gf-canvas-panel")?.querySelector(".gf-canvas-shell");
+          const renderer = this.#webglRenderers.get(shell);
+          if (action === "zoom-in") {
+            if (renderer) renderer.zoomBy?.(1.18);
+            else this.dispatch({ name: "camera", payload: { zoom: this.state.camera_zoom * 1.18 } });
+          }
+          if (action === "zoom-out") {
+            if (renderer) renderer.zoomBy?.(1 / 1.18);
+            else this.dispatch({ name: "camera", payload: { zoom: this.state.camera_zoom / 1.18 } });
+          }
+          if (action === "fit") this.fitSelection(shell);
           if (action === "reset") this.resetCamera();
           if (action === "fullscreen") this.querySelector(".gf-canvas-shell")?.requestFullscreen?.();
+        });
+      });
+      this.querySelectorAll("[data-gf-focus-history]").forEach((button) => {
+        button.addEventListener("click", () => this.navigateFocusHistory(
+          button.dataset.gfFocusHistory || "",
+          button.closest(".gf-canvas-panel")?.querySelector(".gf-canvas-shell"),
+        ));
+      });
+      this.querySelectorAll("[data-gf-neighbor-step]").forEach((button) => {
+        button.addEventListener("click", () => this.stepConnectedNode(button.dataset.gfNeighborStep || "next"));
+      });
+      this.querySelectorAll("[data-gf-orientation-reset]").forEach((button) => {
+        button.addEventListener("click", () => {
+          this.#webglRenderers.get(button.closest(".gf-canvas-shell"))?.resetOrientation?.();
         });
       });
       this.querySelectorAll("[data-gf-scene-control]").forEach((control) => {
@@ -2303,13 +3129,35 @@
           if (!nodeId) return;
           event.preventDefault();
           event.stopPropagation();
-          this.dispatch({ name: "select-node", target_id: nodeId });
-          this.fitSelection(item.closest(".gf-canvas-panel")?.querySelector(".gf-canvas-shell"));
+          this.focusNode(nodeId, item.closest(".gf-canvas-panel")?.querySelector(".gf-canvas-shell"));
           emit(this, "minimap-select", { node_id: nodeId, state: this.getState() });
         });
       });
+      this.querySelectorAll("[data-gf-minimap-map]").forEach((map) => {
+        globalThis.GraphFakosOverviewControl?.bind?.(map, {
+          current: () => this.#minimapOverviews.get(map),
+          eventPoint: (event) => svgPoint(map, event),
+          move: (point, duration) => this.#moveFromMinimap(map, point, duration),
+        });
+      });
       this.querySelectorAll("[data-gf-group]").forEach((button) => {
-        button.addEventListener("click", () => this.dispatch({ name: "group-toggle", target_id: button.dataset.gfGroup || "" }));
+        button.addEventListener("click", (event) => {
+          const group = button.dataset.gfGroup || "";
+          if (event.altKey || event.metaKey) {
+            event.preventDefault();
+            this.focusGroup(group, button.closest(".gf-canvas-panel")?.querySelector(".gf-canvas-shell"));
+            return;
+          }
+          this.dispatch({ name: "group-toggle", target_id: group });
+        });
+      });
+      this.querySelectorAll("[data-gf-group-focus]").forEach((button) => {
+        button.addEventListener("click", () => {
+          this.focusGroup(
+            button.dataset.gfGroupFocus || "",
+            button.closest(".gf-canvas-panel")?.querySelector(".gf-canvas-shell"),
+          );
+        });
       });
       this.querySelectorAll("[data-gf-group-show-all]").forEach((button) => {
         button.addEventListener("click", () => this.dispatch({ name: "group-show-all" }));
@@ -2354,6 +3202,7 @@
     savedViewRoute,
     workbookSlotPayload,
     workbookSlotsFromStorage,
+    openInspectOverlay,
     applyGraphPatch,
   };
   if (typeof window !== "undefined") window.GraphFakosViewerRuntime = runtime;
@@ -2361,7 +3210,10 @@
   if (typeof window !== "undefined" && !window.__graphfakosPopstateWired) {
     window.__graphfakosPopstateWired = true;
     window.addEventListener("popstate", () => {
-      document.querySelector("graphfakos-viewer")?.navigate?.(window.location.href, { push: false });
+      document.querySelector("graphfakos-viewer")?.navigate?.(window.location.href, {
+        preserve: false,
+        push: false,
+      });
     });
   }
   if (typeof customElements !== "undefined" && !customElements.get("graphfakos-viewer")) {

@@ -20,7 +20,12 @@ from graphfakos.provider import (
     load_overlay_graphs,
     load_provider_graph,
 )
-from graphfakos.ui.viewer import panel_stack, render_document, render_graph_workspace
+from graphfakos.ui.viewer import (
+    panel_stack,
+    render_document,
+    render_graph_workspace,
+    render_navigation,
+)
 from graphfakos.ui.viewer.controls import (
     _filter_toolbar,
     _workspace_controls,
@@ -225,7 +230,7 @@ def render_graph_viewer(
     return render_document(
         title=graph.label,
         theme=request.theme,
-        navigation=_nav(request),
+        navigation=render_navigation(request),
         content=body,
         styles=viewer_styles(),
         script=_viewer_script_tag(),
@@ -373,33 +378,6 @@ def _viewer_script_tag() -> str:
     return (
         f"<script>\n{viewer_renderer_script()}\n</script>"
         f"<script>\n{viewer_runtime_script()}\n</script>"
-    )
-
-
-def _nav(request: GraphFakosRequest) -> str:
-    primary_screens = {"explore", "neighborhood", "path"}
-    primary_links = ""
-    analysis_links = ""
-    for screen, label in _SCREEN_NAV:
-        current = 'aria-current="page"' if request.screen == screen else ""
-        display_label = "Local" if screen == "neighborhood" else label
-        link = (
-            f"<a href='{_route_href(request, screen=screen, overrides={'preset_id': None})}' "
-            f"{current}>{escape(display_label)}</a>"
-        )
-        if screen in primary_screens:
-            primary_links += link
-        else:
-            analysis_links += link
-    analysis_open = " open" if request.screen not in primary_screens else ""
-    return (
-        "<nav class='gf-nav' aria-label='GraphFakos screens'>"
-        "<div class='gf-nav-heading'><h1>GraphFakos</h1>"
-        "<button type='button' data-gf-nav-toggle='true' aria-label='Toggle navigation' "
-        "aria-expanded='true'>☰</button></div>"
-        f"<div class='gf-nav-primary'>{primary_links}</div>"
-        f"<details class='gf-nav-analysis'{analysis_open}><summary>Analyze</summary>{analysis_links}</details>"
-        "</nav>"
     )
 
 
@@ -637,26 +615,26 @@ def _render_neighborhood(graph: GraphFakosGraph, request: GraphFakosRequest) -> 
         request,
     )
     neighborhood_graph = _graph_with_items(graph, (focus, *neighbors), edges)
-    primary = (
-        f"{_neighborhood_toolbar(graph, request, focus.id)}"
-        f"{_local_graph_controls(graph, request, focus)}"
-        f"{_graph_canvas(neighborhood_graph, request, focus.id, request.selected_edge_id)}"
-    )
-    primary += _panel(
+    around = _panel(
         f"Around {focus.label}",
-        f"<p class='gf-empty'>Depth {max(request.max_depth, 1)} neighborhood.</p>"
-        f"{_node_cards(neighbors, request) if neighbors else _empty('No neighboring nodes match this view yet.')}",
+        f"<p class='gf-empty'>Depth {max(request.max_depth, 1)} neighborhood.</p>{_node_cards(neighbors, request) if neighbors else _empty('No neighboring nodes match this view yet.')}",
     )
-    secondary = (
-        _graph_navigator(graph, neighborhood_graph, request, focus)
-        + _relationship_trail_panel(neighborhood_graph, request, focus)
-        + _analytics_panel(graph, request)
-        + _focus_workflow(graph, request, focus)
-        + _knowledge_capture_panel(neighborhood_graph, request, focus)
-        + _graph_action_panel(neighborhood_graph, request, focus)
-        + _inspector(graph, focus, _selected_edge(graph, request))
+    edge_id = request.selected_edge_id
+    primary = _graph_canvas(neighborhood_graph, request, focus.id, edge_id)
+    context = panel_stack(
+        (
+            _neighborhood_toolbar(graph, request, focus.id),
+            _graph_navigator(graph, neighborhood_graph, request, focus),
+            around,
+            _relationship_trail_panel(neighborhood_graph, request, focus),
+            _analytics_panel(graph, request),
+            _focus_workflow(graph, request, focus),
+            _knowledge_capture_panel(neighborhood_graph, request, focus),
+            _graph_action_panel(neighborhood_graph, request, focus),
+            _inspector(graph, focus, _selected_edge(graph, request)),
+        )
     )
-    return _split(primary, secondary)
+    return render_graph_workspace(primary, context)
 
 
 def _render_path(graph: GraphFakosGraph, request: GraphFakosRequest) -> str:

@@ -25,9 +25,25 @@ function rounded(value) {
   return Math.round(value * 10_000) / 10_000;
 }
 
-const localCurve = 0.18;
-const bridgeCurve = 0.1;
-const parallelSpacing = 0.1;
+const localCurve = 0.24;
+const bridgeCurve = 0.18;
+const parallelSpacing = 0.12;
+
+function curveProfile(source, target, sameCluster, key, index, lane) {
+  if (source === target) {
+    return {
+      curvature: curveSign(`${key}:loop`) * (0.58 + index * 0.08),
+      curveRotation: (stableHash(`${key}:rotation`) % 6283) / 1000,
+    };
+  }
+
+  const base = (sameCluster ? localCurve : bridgeCurve) + (stableHash(key) % 7) * 0.014;
+  const sign = lane === 0 ? curveSign(key) : Math.sign(lane);
+  return {
+    curvature: rounded(sign * Math.min(0.48, base + Math.abs(lane) * parallelSpacing)),
+    curveRotation: (stableHash(`${key}:${source}:${target}:rotation`) % 6283) / 1000,
+  };
+}
 
 export function shapeLinks(nodes, links) {
   const clusterByNode = new Map(nodes.map((node) => [node.id, node.clusterId || node.kind || "unclustered"]));
@@ -44,22 +60,9 @@ export function shapeLinks(nodes, links) {
     ordered.forEach((link, index) => {
       const source = endpointId(link.source ?? link.sourceId);
       const target = endpointId(link.target ?? link.targetId);
-      if (source === target) {
-        profileById.set(link.id, {
-          curvature: curveSign(`${link.id}:loop`) * (0.55 + index * 0.08),
-          curveRotation: (stableHash(`${link.id}:rotation`) % 6283) / 1000,
-        });
-        return;
-      }
-
       const sameCluster = clusterByNode.get(source) === clusterByNode.get(target);
-      const base = (sameCluster ? localCurve : bridgeCurve) + (stableHash(key) % 5) * 0.015;
       const lane = index - (ordered.length - 1) / 2;
-      const sign = lane === 0 ? curveSign(link.id) : Math.sign(lane);
-      profileById.set(link.id, {
-        curvature: rounded(sign * Math.min(0.42, base + Math.abs(lane) * parallelSpacing)),
-        curveRotation: (stableHash(`${key}:rotation`) % 6283) / 1000,
-      });
+      profileById.set(link.id, curveProfile(source, target, sameCluster, key, index, lane));
     });
   }
 

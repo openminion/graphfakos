@@ -192,10 +192,46 @@ the provider-neutral DTOs and emits provider-neutral commands.
 canvas drag orbits the scene, right-drag pans, scroll zooms, node drag pins a
 viewer-local position, and the visible non-drag controls provide fit, reset,
 pin reset, undo, redo, fullscreen, and theme switching. Saved routes and
-exported viewer state carry
-`camera_yaw` and `camera_pitch` in addition to `camera_x`, `camera_y`, and
-`camera_zoom`. Static export may render the same graph without live orbit, but
-it must remain readable and provider-neutral.
+exported viewer state carry `camera_yaw` and `camera_pitch` in addition to
+`camera_x`, `camera_y`, and `camera_zoom`. For 3D scenes, the typed
+provider-neutral `GraphFakosCameraPose` also carries the exact camera position
+and look-at target. Route reloads and local workbook slots restore that pose
+before asynchronous layout settles, so a saved investigation opens at the same
+viewpoint. A route that changes graph scope, such as overview to local
+neighborhood, keeps theme, filters, focus history, and the focused node as the
+primary selection, but fits a fresh camera to the new scope. The selected node
+and navigation-first inspector must be available as soon as that route loads.
+A compact semantic trail identifies recent node or group focus,
+names previous and next focus destinations, and provides a route-backed return
+to the complete graph. Browser Back and Forward load the exact historical
+viewer route through the same fragment protocol without inheriting filters,
+focus, or camera state from the scene being left. Stale responses from rapid
+route changes cannot replace the current scene. During live 3D navigation, the
+overview map projects the current renderer positions, distinguishes near and
+far depth, reports camera heading and tilt, and lets empty-map click, drag, or
+keyboard movement retarget the camera continuously without changing camera
+distance or orientation. A camera target, heading line, and distance-scaled
+focus footprint keep the current 3D view legible relative to the complete
+graph; they are viewer orientation aids, not claims about graph membership or
+provider truth. When the viewer has an active selection, the overview map also
+shows a primary-focus beacon and a camera-to-focus bearing so distant travel
+does not erase spatial context. Multi-selection may highlight several overview
+nodes, but the bearing targets only the primary viewer selection. Its node links and the static SVG
+fallback remain route-backed. Static export may render the same graph without
+live orbit, but it must remain readable and provider-neutral.
+
+Touch and mouse selection must not depend on hover. Tapping or clicking any
+rendered node opens the same navigation-first inspector, while tapping or
+clicking empty space dismisses the active preview, inspector, and visual
+selection without changing provider data. Coarse-pointer scenes expose a
+compact first-use guide for one-finger orbit, two-finger pan, pinch zoom, and
+tap-to-inspect, then yield the full canvas after interaction. Pointer-cancel
+must abandon pending label selection so an interrupted gesture cannot select a
+stale node.
+
+At narrow breakpoints, package navigation starts as a compact sticky header so
+the graph remains in the initial viewport. The menu toggle exposes its expanded
+state, and Escape closes an expanded menu while returning focus to the toggle.
 
 ## Local Workbench Server Contract
 
@@ -307,6 +343,62 @@ their internal graph truth:
 The shared viewer must not infer facts, promote memories, ingest source files,
 or decide durable memory policy. Those responsibilities stay with the provider
 or host package.
+
+Small visual nodes must retain a larger invisible pointer target so overview
+scenes remain readable without making individual nodes difficult to select.
+Hover may temporarily expand a budgeted label with provider-neutral kind, link
+count, and summary context. Clicking the same node must continue into the full
+inspector and provider-owned editing flow rather than turning the hover preview
+into a parallel content surface.
+
+At local depth, visible WebGL labels are ranked and decluttered in screen space.
+Focused and hovered labels win, lower-priority collisions yield, and labels do
+not render underneath an open inspector. When a selected node would be covered
+by that inspector, the camera shifts only far enough to keep the node visible.
+Selection preserves orientation by keeping the wider graph visible while
+promoting a bounded set of direct-neighbor labels and incident links. Centering
+a single node frames that node with its visible one-hop neighborhood rather
+than zooming to an isolated point.
+
+The inspector is navigation-first: center, local, evidence, and connected-node
+travel remain visible before secondary editing sections. Full content editing,
+properties, evidence detail, and note drafting remain available through
+progressive sections without displacing the graph navigation path. The
+inspector is owned by the graph scene rather than page chrome: it stays within
+the canvas bounds, can collapse to a selected-node handle, and expands without
+covering the selected node or camera controls.
+
+Connected-node traversal uses preview before commit. `J` and `K`, or the
+adjacent inspector controls, move a visible candidate through the connected
+list while the canvas highlights that node and its incident edge without
+changing selection, route, camera history, or provider state. Enter or click
+commits the candidate as normal graph focus. Escape cancels the candidate
+before continuing through the remaining layered dismissal behavior.
+
+Live 3D scenes also support screen-direction travel without repurposing camera
+controls. `Alt/Option` plus an arrow key previews the nearest visible node in
+that screen direction using the current camera projection. Repeated movement
+continues from the previewed node. The status line, node label, and incident
+links identify the candidate; Enter commits normal graph focus and Escape
+cancels it. Plain arrows and WASD pan relative to the current screen, `Q` and
+`E` orbit around the current target, and plus/minus or the toolbar zoom controls
+change true camera distance. These WebGL controls report the resulting exact
+camera pose through the same route and saved-view contract as pointer orbit,
+pan, and zoom.
+
+Live 3D semantic detail follows true camera distance rather than the static
+route zoom value. The fitted scene establishes the overview distance; moving
+closer progressively increases the bounded label budget and link visibility,
+while moving away returns to a quieter overview. Sparse scenes scale their
+visible node marks up without changing hit targets or provider data. Fitting a
+scene preserves the current camera target instead of recentering through the
+world origin.
+
+Escape recovery is layered and works even when focus is inside inspector
+controls: dismiss a surface menu first, cancel a connected-node preview second,
+close the inspector while preserving selection third, then clear visual
+selection without changing provider data or discarding focus history. Closing
+the inspector returns keyboard focus to the graph surface.
 
 ## Compatibility Expectations
 

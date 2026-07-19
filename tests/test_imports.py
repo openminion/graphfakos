@@ -10,6 +10,7 @@ def test_graphfakos_package_imports() -> None:
     import graphfakos.artifacts
     import graphfakos.adapters
     import graphfakos.browser
+    import graphfakos.camera
     import graphfakos.contracts
     import graphfakos.live
     import graphfakos.models
@@ -21,10 +22,11 @@ def test_graphfakos_package_imports() -> None:
     import graphfakos.testing
     import graphfakos.ui
 
-    assert graphfakos.__version__ == "0.0.5"
+    assert graphfakos.__version__ == "0.0.6"
     assert graphfakos.PACKAGE_STATUS == "semantic-alpha"
     assert "graphfakos.artifacts" in graphfakos.STABLE_IMPORT_ROOTS
     assert "graphfakos.browser" in graphfakos.STABLE_IMPORT_ROOTS
+    assert "graphfakos.camera" in graphfakos.STABLE_IMPORT_ROOTS
     assert "graphfakos.models" in graphfakos.STABLE_IMPORT_ROOTS
     assert "graphfakos.contracts" in graphfakos.STABLE_IMPORT_ROOTS
     assert "graphfakos.live" in graphfakos.STABLE_IMPORT_ROOTS
@@ -34,6 +36,7 @@ def test_graphfakos_package_imports() -> None:
     assert "DemoGraphProvider" in graphfakos.__all__
     assert "DEMO_SCENARIOS" in graphfakos.__all__
     assert "GraphFakosViewerState" in graphfakos.__all__
+    assert "GraphFakosCameraPose" in graphfakos.__all__
     assert "GraphFakosGraphPatch" in graphfakos.__all__
     assert "GraphFakosLiveProvider" in graphfakos.__all__
     assert "GraphFakosLiveReplayBundle" in graphfakos.__all__

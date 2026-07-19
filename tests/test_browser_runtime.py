@@ -1,15 +1,94 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 import shutil
 import subprocess
+from tempfile import TemporaryDirectory
 
 from graphfakos.browser import viewer_runtime_script
 
 
-def test_packaged_runtime_applies_live_patches_without_resetting_view_state() -> None:
+def _run_node_script(script: str) -> str:
     node = shutil.which("node")
     assert node is not None, "Node.js is required for the browser runtime harness"
+    with TemporaryDirectory() as temp_dir:
+        script_path = Path(temp_dir) / "graphfakos-runtime-test.js"
+        script_path.write_text(script, encoding="utf-8")
+        completed = subprocess.run(
+            [node, str(script_path)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    return completed.stdout
+
+
+def test_packaged_runtime_projects_live_spatial_overview() -> None:
+    script = (
+        viewer_runtime_script()
+        + """
+const spatial = globalThis.GraphFakosSpatialMap;
+const overviewControl = globalThis.GraphFakosOverviewControl;
+const model = spatial.overviewProjection([
+  { id: "far", x: 0, y: 0, z: -10 },
+  { id: "near", x: 100, y: 50, z: 90 },
+  { id: "hidden", x: 1000, y: 1000, z: 1000, hidden: true }
+], { width: 180, height: 90 });
+const target = spatial.worldPointFromMap(
+  { x: 90, y: 45 },
+  model.bounds,
+  { width: 180, height: 90 }
+);
+const mappedTarget = spatial.mapPointFromWorld(target, model.bounds, { width: 180, height: 90 });
+console.log(JSON.stringify({ model, target, mappedTarget, overviewControl: typeof overviewControl.bind }));
+"""
+    )
+    payload = json.loads(_run_node_script(script))
+
+    assert [item["id"] for item in payload["model"]["positions"]] == ["far", "near"]
+    assert payload["model"]["positions"][0] == {
+        "id": "far",
+        "label": "far",
+        "x": 6,
+        "y": 6,
+        "depth": 0,
+        "layer": "far",
+        "primary": False,
+        "selected": False,
+    }
+    assert payload["model"]["positions"][1]["layer"] == "near"
+    assert payload["target"] == {"x": 50, "y": 25, "z": 40}
+    assert payload["mappedTarget"] == {"x": 90, "y": 45}
+    assert payload["overviewControl"] == "function"
+
+
+def test_packaged_runtime_builds_semantic_focus_trails() -> None:
+    script = (
+        viewer_runtime_script()
+        + """
+const trail = globalThis.GraphFakosFocusTrail.focusTrailModel(
+  [
+    { node_ids: [], group: "" },
+    { node_ids: ["node:a"], group: "" }
+  ],
+  { node_ids: ["node:a", "node:b"], group: "provider" },
+  [{ node_ids: ["node:b"], group: "" }],
+  { nodes: [{ id: "node:a", label: "Alpha" }, { id: "node:b", label: "Beta" }] }
+);
+console.log(JSON.stringify(trail));
+"""
+    )
+    trail = json.loads(_run_node_script(script))
+
+    assert trail["rootIndex"] == 0
+    assert trail["backLabel"] == "Alpha"
+    assert trail["forwardLabel"] == "Beta"
+    assert [item["label"] for item in trail["items"]] == ["Alpha", "Provider group"]
+    assert trail["items"][-1]["current"] is True
+
+
+def test_packaged_runtime_applies_live_patches_without_resetting_view_state() -> None:
     script = (
         viewer_runtime_script()
         + """
@@ -43,13 +122,7 @@ const duplicate = runtime.applyGraphPatch(result.graph, result.state, patch);
 console.log(JSON.stringify({ result, duplicate }));
 """
     )
-    completed = subprocess.run(
-        [node, "-e", script],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    payload = json.loads(completed.stdout)
+    payload = json.loads(_run_node_script(script))
 
     assert [node["id"] for node in payload["result"]["graph"]["nodes"]] == ["a", "b"]
     assert payload["result"]["graph"]["edges"][0]["id"] == "ab"
@@ -60,8 +133,6 @@ console.log(JSON.stringify({ result, duplicate }));
 
 
 def test_packaged_viewer_runtime_reducer_runs_in_node() -> None:
-    node = shutil.which("node")
-    assert node is not None, "Node.js is required for the browser runtime harness"
     assert "submitKnowledge" in viewer_runtime_script()
     assert "knowledge-saved" in viewer_runtime_script()
     assert "submitAction" in viewer_runtime_script()
@@ -117,6 +188,7 @@ def test_packaged_viewer_runtime_reducer_runs_in_node() -> None:
     assert "group-show-all" in viewer_runtime_script()
     assert "commandPaletteActionMatches" in viewer_runtime_script()
     assert "command-palette-filtered" in viewer_runtime_script()
+    assert "GraphFakosFocusTrail" in viewer_runtime_script()
     script = (
         viewer_runtime_script()
         + """
@@ -258,6 +330,7 @@ const savedRoute = runtime.savedViewRoute(runtime.normalizeState({
   camera_zoom: 1.25,
   camera_yaw: 16,
   camera_pitch: -12,
+  camera_pose: { position: [120, -40, 680], target: [12, 8, -4] },
   render_engine: "canvas",
   theme: "ink",
   saved_view_id: "ops-review",
@@ -275,6 +348,7 @@ const workbookSlot = runtime.workbookSlotPayload(
     camera_zoom: 1.25,
     camera_yaw: 16,
     camera_pitch: -12,
+    camera_pose: { position: [120, -40, 680], target: [12, 8, -4] },
     render_engine: "canvas",
     theme: "ink",
     filters: { node_kind: "memory" }
@@ -367,13 +441,7 @@ process.stdout.write(JSON.stringify({
 """
     )
 
-    result = subprocess.run(
-        [node, "-e", script],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    payload = json.loads(result.stdout)
+    payload = json.loads(_run_node_script(script))
 
     assert payload["eventName"] == "graphfakos:select-node"
     assert payload["state"]["selected_node_id"] == "memory:operator-preference"
@@ -427,7 +495,14 @@ process.stdout.write(JSON.stringify({
         "selected_node_id": "node:b",
         "selected_node_ids": ["node:a", "node:b"],
         "selected_edge_id": "edge:ab",
-        "camera": {"x": 8, "y": -2, "zoom": 1.25, "yaw": 16, "pitch": -12},
+        "camera": {
+            "x": 8,
+            "y": -2,
+            "zoom": 1.25,
+            "yaw": 16,
+            "pitch": -12,
+            "pose": None,
+        },
         "layout": "force",
         "render_engine": "canvas",
         "theme": "ink",
@@ -455,12 +530,19 @@ process.stdout.write(JSON.stringify({
     assert "camera_zoom=1.25" in payload["savedRoute"]
     assert "camera_yaw=16.00" in payload["savedRoute"]
     assert "camera_pitch=-12.00" in payload["savedRoute"]
+    assert "camera_pose=120.000000%2C-40.000000%2C680.000000" in payload["savedRoute"]
     assert "render_engine=canvas" in payload["savedRoute"]
     assert "hidden_groups=provider" in payload["savedRoute"]
     assert "pinned_positions=" in payload["savedRoute"]
     assert payload["workbookSlot"]["id"] == "ops-review:2026-07-02T12:00:00.000Z"
     assert payload["workbookSlot"]["label"] == "Ops Review"
     assert payload["workbookSlot"]["state"]["query"] == "kind:memory"
+    assert payload["workbookSlot"]["state"]["camera_pose"]["position"] == {
+        "x": 120,
+        "y": -40,
+        "z": 680,
+    }
+    assert "camera_pose=" in payload["workbookSlot"]["route"]
     assert payload["workbookSlot"]["route"].startswith("/explore?")
     assert payload["workbookSlots"][0]["label"] == "Ops Review"
     assert payload["commandSummary"] == {

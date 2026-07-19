@@ -112,14 +112,16 @@ from .ui import (
     screen_manifest,
 )
 from .browser import viewer_runtime_script
+from .camera import GraphFakosCameraPose
 
-__version__ = "0.0.5"
+__version__ = "0.0.6"
 PACKAGE_STATUS = "semantic-alpha"
 STABLE_IMPORT_ROOTS = (
     "graphfakos.artifacts",
     "graphfakos",
     "graphfakos.adapters",
     "graphfakos.browser",
+    "graphfakos.camera",
     "graphfakos.contracts",
     "graphfakos.live",
     "graphfakos.models",
@@ -150,6 +152,7 @@ __all__ = [
     "GraphPreviewOutputPaths",
     "GraphFakosActionStatus",
     "GraphFakosComparisonProvider",
+    "GraphFakosCameraPose",
     "GraphFakosCitation",
     "GraphFakosDiagnostics",
     "GraphFakosEdge",

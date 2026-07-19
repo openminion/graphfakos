@@ -22,7 +22,7 @@ def test_graphfakos_package_imports() -> None:
     import graphfakos.testing
     import graphfakos.ui
 
-    assert graphfakos.__version__ == "0.0.5"
+    assert graphfakos.__version__ == "0.0.6"
     assert graphfakos.PACKAGE_STATUS == "semantic-alpha"
     assert "graphfakos.artifacts" in graphfakos.STABLE_IMPORT_ROOTS
     assert "graphfakos.browser" in graphfakos.STABLE_IMPORT_ROOTS

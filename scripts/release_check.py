@@ -85,7 +85,7 @@ def _assert_project_metadata(root: Path) -> None:
     classifiers = set(project.get("classifiers", []))
     if project.get("name") != "graphfakos":
         raise RuntimeError(f"unexpected project name: {project.get('name')!r}")
-    if project.get("version") != "0.0.5":
+    if project.get("version") != "0.0.6":
         raise RuntimeError(f"unexpected release version: {project.get('version')!r}")
     if "Typing :: Typed" not in classifiers:
         raise RuntimeError("pyproject must advertise typed package support")

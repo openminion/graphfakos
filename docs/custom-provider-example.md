@@ -89,7 +89,38 @@ class PackageGraphProvider(GraphFakosProvider):
 
 ## Validation loop
 
-Use the same local proof shape as the fixture provider:
+Use the reusable conformance helper in the provider package's own tests:
+
+```python
+from graphfakos import GraphFakosRequest
+from graphfakos.testing import (
+    GraphFakosProviderConformanceCase,
+    assert_provider_conformance,
+)
+
+
+def test_package_provider_satisfies_graphfakos_contract(tmp_path):
+    assert_provider_conformance(
+        GraphFakosProviderConformanceCase(
+            provider=PackageGraphProvider(),
+            request=GraphFakosRequest(screen="explore"),
+            expected_role="third_party",
+            expected_provider="Package Graph",
+            expected_node="Integration Guide",
+            expected_edge="documents",
+            required_capabilities=(
+                "search",
+                "neighborhood",
+                "path",
+                "provider_status",
+                "static_export",
+            ),
+            artifact_path=tmp_path / "package-graph.json",
+        )
+    )
+```
+
+Then use the same local proof shape as the fixture provider:
 
 ```bash
 PYTHONDONTWRITEBYTECODE=1 .venv/bin/python3.11 -m ruff check src tests scripts

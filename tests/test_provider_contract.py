@@ -40,6 +40,10 @@ from graphfakos import (
     validate_render_engine,
 )
 from graphfakos.testing import assert_graph_dot_contract, assert_review_preset_contract
+from graphfakos.testing import (
+    GraphFakosProviderConformanceCase,
+    assert_provider_conformance,
+)
 
 
 def test_fixture_provider_satisfies_provider_contract() -> None:
@@ -55,6 +59,31 @@ def test_fixture_provider_satisfies_provider_contract() -> None:
     assert "diff" in graph.capability_details
     assert graph.snapshot is not None
     assert graph.snapshot.snapshot_id == "fixture-current"
+
+
+def test_fixture_provider_satisfies_reusable_conformance_case(tmp_path) -> None:
+    result = assert_provider_conformance(
+        GraphFakosProviderConformanceCase(
+            provider=FixtureGraphProvider(),
+            request=GraphFakosRequest(screen="explore"),
+            expected_role="third_party",
+            expected_provider="Fixture Provider",
+            expected_node="Operator Preference",
+            expected_edge="supports",
+            required_capabilities=(
+                "search",
+                "neighborhood",
+                "path",
+                "provider_status",
+                "static_export",
+            ),
+            artifact_path=tmp_path / "fixture-graph.json",
+        )
+    )
+
+    assert result.graph.provider_id == "fixture"
+    assert result.replay_graph is not None
+    assert result.report["saved_view"]
 
 
 def test_validate_graph_rejects_unknown_edge_references() -> None:

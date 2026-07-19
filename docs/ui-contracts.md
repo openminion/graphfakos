@@ -31,6 +31,13 @@ Provider packages own their data semantics and adapter mapping. They should not
 fork GraphFakos viewer HTML, duplicate local-server behavior, or create a
 parallel test contract for the shared viewer.
 
+Provider packages should prove their adapter with
+`graphfakos.testing.assert_provider_conformance(...)`. The helper validates the
+provider graph, static viewer HTML, report and saved-view envelope, optional
+artifact replay, capability declarations, and protocol consistency while
+leaving provider truth, persistence, and semantic action policy in the provider
+package.
+
 ## Thin Wrapper Rule
 
 Package-local `*-ui` commands are allowed and encouraged for user convenience,

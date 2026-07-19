@@ -1,15 +1,30 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 import shutil
 import subprocess
+from tempfile import TemporaryDirectory
 
 from graphfakos.browser import viewer_runtime_script
 
 
-def test_packaged_runtime_projects_live_spatial_overview() -> None:
+def _run_node_script(script: str) -> str:
     node = shutil.which("node")
     assert node is not None, "Node.js is required for the browser runtime harness"
+    with TemporaryDirectory() as temp_dir:
+        script_path = Path(temp_dir) / "graphfakos-runtime-test.js"
+        script_path.write_text(script, encoding="utf-8")
+        completed = subprocess.run(
+            [node, str(script_path)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    return completed.stdout
+
+
+def test_packaged_runtime_projects_live_spatial_overview() -> None:
     script = (
         viewer_runtime_script()
         + """
@@ -29,13 +44,7 @@ const mappedTarget = spatial.mapPointFromWorld(target, model.bounds, { width: 18
 console.log(JSON.stringify({ model, target, mappedTarget, overviewControl: typeof overviewControl.bind }));
 """
     )
-    completed = subprocess.run(
-        [node, "-e", script],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    payload = json.loads(completed.stdout)
+    payload = json.loads(_run_node_script(script))
 
     assert [item["id"] for item in payload["model"]["positions"]] == ["far", "near"]
     assert payload["model"]["positions"][0] == {
@@ -55,8 +64,6 @@ console.log(JSON.stringify({ model, target, mappedTarget, overviewControl: typeo
 
 
 def test_packaged_runtime_builds_semantic_focus_trails() -> None:
-    node = shutil.which("node")
-    assert node is not None, "Node.js is required for the browser runtime harness"
     script = (
         viewer_runtime_script()
         + """
@@ -72,13 +79,7 @@ const trail = globalThis.GraphFakosFocusTrail.focusTrailModel(
 console.log(JSON.stringify(trail));
 """
     )
-    completed = subprocess.run(
-        [node, "-e", script],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    trail = json.loads(completed.stdout)
+    trail = json.loads(_run_node_script(script))
 
     assert trail["rootIndex"] == 0
     assert trail["backLabel"] == "Alpha"
@@ -88,8 +89,6 @@ console.log(JSON.stringify(trail));
 
 
 def test_packaged_runtime_applies_live_patches_without_resetting_view_state() -> None:
-    node = shutil.which("node")
-    assert node is not None, "Node.js is required for the browser runtime harness"
     script = (
         viewer_runtime_script()
         + """
@@ -123,13 +122,7 @@ const duplicate = runtime.applyGraphPatch(result.graph, result.state, patch);
 console.log(JSON.stringify({ result, duplicate }));
 """
     )
-    completed = subprocess.run(
-        [node, "-e", script],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    payload = json.loads(completed.stdout)
+    payload = json.loads(_run_node_script(script))
 
     assert [node["id"] for node in payload["result"]["graph"]["nodes"]] == ["a", "b"]
     assert payload["result"]["graph"]["edges"][0]["id"] == "ab"
@@ -140,8 +133,6 @@ console.log(JSON.stringify({ result, duplicate }));
 
 
 def test_packaged_viewer_runtime_reducer_runs_in_node() -> None:
-    node = shutil.which("node")
-    assert node is not None, "Node.js is required for the browser runtime harness"
     assert "submitKnowledge" in viewer_runtime_script()
     assert "knowledge-saved" in viewer_runtime_script()
     assert "submitAction" in viewer_runtime_script()
@@ -450,13 +441,7 @@ process.stdout.write(JSON.stringify({
 """
     )
 
-    result = subprocess.run(
-        [node, "-e", script],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    payload = json.loads(result.stdout)
+    payload = json.loads(_run_node_script(script))
 
     assert payload["eventName"] == "graphfakos:select-node"
     assert payload["state"]["selected_node_id"] == "memory:operator-preference"

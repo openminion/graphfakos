@@ -29,6 +29,7 @@ body.gf-page {
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
     "Segoe UI", sans-serif;
   line-height: 1.45;
+  overflow-x: clip;
 }
 body.gf-page[data-theme="ink"] {
   --gf-bg: #111612;
@@ -75,6 +76,8 @@ body.gf-page[data-theme="paper"] {
   min-height: 100vh;
   display: grid;
   grid-template-columns: 188px minmax(0, 1fr);
+  max-width: 100vw;
+  overflow-x: clip;
 }
 .gf-shell[data-nav-collapsed="true"] {
   grid-template-columns: 58px minmax(0, 1fr);
@@ -211,6 +214,9 @@ body.gf-page[data-theme="paper"] {
   border-radius: 999px;
   right: 18px;
   width: auto;
+}
+.gf-context-drawer:not([open]) > :not(summary) {
+  display: none;
 }
 .gf-context-drawer > summary {
   align-items: center;
@@ -1685,7 +1691,15 @@ a {
   text-decoration: none;
 }
 @media (max-width: 840px) {
-  .gf-shell { grid-template-columns: 1fr; }
+  .gf-shell {
+    grid-template-columns: 1fr;
+    width: 100%;
+  }
+  .gf-content,
+  .gf-layout-graph-first {
+    max-width: 100vw;
+    overflow-x: clip;
+  }
   .gf-nav { border-right: 0; border-bottom: 1px solid var(--gf-line); }
   .gf-layout,
   .gf-canvas-grid,

@@ -1,6 +1,6 @@
 # GraphFakos API Compatibility
 
-GraphFakos is a `0.0.5` semantic-alpha release. Public APIs are
+GraphFakos is a `0.0.6` semantic-alpha release. Public APIs are
 intentionally small and centered on provider-neutral graph viewing.
 
 ## Stable Import Roots

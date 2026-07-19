@@ -88,7 +88,10 @@ jobs:
           elif [[ -n "${BEFORE_SHA}" \
             && "${BEFORE_SHA}" != "0000000000000000000000000000000000000000" \
             && -n "$(git rev-parse --verify --quiet "${BEFORE_SHA}^{commit}")" ]]; then
-            mapfile -t commits < <(git rev-list --reverse "${BEFORE_SHA}..HEAD")
+            # A dev sync can merge already-reviewed main commits whose squash
+            # subjects predate this repository's current commit policy. Keep
+            # push validation focused on the newly pushed first-parent line.
+            mapfile -t commits < <(git rev-list --first-parent --reverse "${BEFORE_SHA}..HEAD")
           fi
           if [[ ${#commits[@]} -eq 0 ]]; then
             commits=(HEAD)

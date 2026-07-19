@@ -33,12 +33,10 @@ from graphfakos.ui.viewer.html import (
     summary_note as _summary_note,
     text_list as _list,
 )
+from graphfakos.ui.viewer import surface_controls
 from graphfakos.ui.viewer.layout import _clamped, _layout_positions
-from graphfakos.ui.viewer.routing import (
-    _route_href,
-    state_hidden_inputs as _state_hidden_inputs,
-)
-from graphfakos.ui.viewer.surface_controls import canvas_toolbar, display_controls
+from graphfakos.ui.viewer.routing import _local_node_route, _route_href
+from graphfakos.ui.viewer.routing import state_hidden_inputs as _state_hidden_inputs
 
 _MINIMAP_WIDTH = 180
 _MINIMAP_HEIGHT = 90
@@ -176,10 +174,7 @@ def _graph_canvas(
             else ""
         )
         node_focus_route = _explore_href(request, focus_node_id=node.id)
-        node_local_route = _route_href(
-            request.with_screen("neighborhood"),
-            overrides={"focus_node_id": node.id, "max_depth": 1, "layout": "focus"},
-        )
+        node_local_route = _local_node_route(request, node.id)
         node_evidence_route = _route_href(
             request.with_screen("provenance"),
             overrides={"focus_node_id": node.id},
@@ -246,24 +241,16 @@ def _graph_canvas(
     return (
         "<section class='gf-panel gf-canvas-panel'><div class='gf-panel-heading'>"
         "<h3>Graph Canvas</h3>"
-        f"{canvas_toolbar(request)}</div>"
-        f"{_graph_search_panel(graph, request)}"
+        "<div class='gf-canvas-actions'>"
+        f"{surface_controls.canvas_toolbar(request)}"
+        f"{_graph_search_panel(graph, request)}</div></div>"
         "<div class='gf-scene-status'>"
         f"<span data-gf-scene-counts='true'>{len(graph.nodes):,} of {total_nodes:,} nodes · "
         f"{len(graph.edges):,} of {total_edges:,} links</span>"
         f"<span class='gf-detail-status'><strong data-gf-detail-mode='true'>{escape(detail_mode.title())} view</strong>"
-        " Labels and edges become denser as you zoom in.</span></div>"
-        "<details class='gf-canvas-help'><summary>Navigation help</summary>"
-        f"<p class='gf-note'>Layout {escape(request.layout)}. Rendering {len(graph.nodes)} node(s) "
-        f"and {len(graph.edges)} edge(s). Fit zooms to the current selection or visible graph; "
-        "drag empty canvas to pan; drag a node to pin it; Shift-drag empty canvas to box-select "
-        "nodes; right-click or press Shift+F10 on nodes or edges for actions.</p>"
-        "<p class='gf-shortcut-hint'>Navigation: drag empty space to pan, scroll to zoom toward the cursor, "
-        "Alt/Option-drag a node to move its cluster, WASD or arrows move like a map, "
-        "drag a cluster chip or shell to move that group, Q/E nudges depth in 3D mode, "
-        "0 resets camera, F fullscreen, Delete clears selection.</p>"
-        f"{_renderer_notice(request)}</details>"
-        f"<div class='gf-canvas-grid'>{display_controls(request)}"
+        " Labels and edges become denser as you zoom in.</span>"
+        f"{surface_controls.navigation_help(request, len(graph.nodes), len(graph.edges), _renderer_notice(request))}</div>"
+        f"<div class='gf-canvas-grid'>{surface_controls.display_controls(request)}"
         "<div class='gf-canvas-shell' tabindex='0' "
         f"data-camera-x='{camera_x:.2f}' data-camera-y='{camera_y:.2f}' "
         f"data-camera-zoom='{camera_zoom:.2f}' data-camera-yaw='{camera_yaw:.2f}' "
@@ -275,6 +262,7 @@ def _graph_canvas(
         + (
             "<div class='gf-webgl-surface' data-gf-webgl-surface='true' "
             "role='application' aria-label='Interactive 3D graph scene'></div>"
+            f"{surface_controls.touch_guide(request)}{surface_controls.compass_hud()}"
             if request.render_engine == "3d"
             else ""
         )
@@ -283,9 +271,9 @@ def _graph_canvas(
         "<defs><marker id='gf-arrow' markerWidth='8' markerHeight='8' refX='7' "
         "refY='4' orient='auto'><path d='M0,0 L8,4 L0,8 z'></path></marker></defs>"
         f"<g class='gf-viewport' transform='translate({camera_x:.2f} {camera_y:.2f}) scale({camera_zoom:.2f})'>"
-        f"{edge_lines}{node_marks}</g></svg></div>"
+        f"{edge_lines}{node_marks}</g></svg>{surface_controls.spatial_trail(request)}"
+        f"{_node_inspect_overlay(graph, request.focus_node_id)}</div>"
         "<noscript><p class='gf-note'>JavaScript is off. Use the linked SVG nodes, graph data tables, and route-backed controls to inspect this graph.</p></noscript>"
-        f"{_node_inspect_overlay(graph, selected_id)}"
         f"{_graph_minimap(graph, request, positions, width, height, selected_id, (camera_x, camera_y, camera_zoom))}</div>"
         f"<p class='gf-live-selection' data-gf-live-selection='true' aria-live='polite' "
         f"data-selected-count='{len(selected_node_ids)}' "
@@ -336,6 +324,8 @@ def _graph_search_panel(graph: GraphFakosGraph, request: GraphFakosRequest) -> s
         for node in _ranked_nodes(graph, set())
     )
     return (
+        "<details class='gf-tool-menu gf-command-dock' data-gf-command-dock='true'>"
+        "<summary aria-label='Find graph item'>Find</summary><div>"
         "<form class='gf-command-bar' method='get' action='/explore' "
         "aria-label='Graph search palette' data-gf-search-form='true'>"
         "<input list='gf-node-search-options' name='focus_node_id' class='gf-search-input' "
@@ -345,7 +335,7 @@ def _graph_search_panel(graph: GraphFakosGraph, request: GraphFakosRequest) -> s
         f"{_state_hidden_inputs(request, exclude=('focus_node_id',))}"
         "<button type='submit'>Jump</button>"
         "<span class='gf-command-shortcut'>/ or Ctrl+K</span>"
-        "</form>"
+        "</form></div></details>"
     )
 
 
@@ -583,10 +573,10 @@ def _graph_minimap(
         if node.id in positions
     )
     return (
-        "<aside class='gf-minimap' aria-label='Graph minimap'>"
-        "<div class='gf-minimap-heading'>Minimap</div>"
-        f"<svg viewBox='0 0 {_MINIMAP_WIDTH} {_MINIMAP_HEIGHT}' role='img' "
-        "aria-label='Visible graph minimap'>"
+        "<aside class='gf-minimap' aria-label='Graph minimap' data-gf-minimap='true'>"
+        "<div class='gf-minimap-heading'><span>Overview</span><span><i data-gf-minimap-bearing='true' aria-hidden='true'>&uarr;</i><small data-gf-minimap-orientation='true'>north</small></span></div>"
+        f"<svg viewBox='0 0 {_MINIMAP_WIDTH} {_MINIMAP_HEIGHT}' role='application' tabindex='0' data-gf-minimap-map='true' "
+        "aria-keyshortcuts='ArrowLeft ArrowRight ArrowUp ArrowDown Home' aria-label='Visible graph overview. Drag or use arrow keys to move the camera target.'>"
         f"{_minimap_viewport(width, height, camera)}{nodes}</svg></aside>"
     )
 
@@ -607,11 +597,17 @@ def _minimap_viewport(
     rect_width = abs(max_x - min_x) / width * _MINIMAP_WIDTH
     rect_height = abs(max_y - min_y) / height * _MINIMAP_HEIGHT
     return (
+        "<g class='gf-minimap-camera' data-gf-minimap-camera='true' aria-hidden='true'>"
         "<rect class='gf-minimap-viewport' data-gf-minimap-viewport='true' "
         f"data-camera-x='{camera_x:.2f}' data-camera-y='{camera_y:.2f}' "
         f"data-camera-zoom='{camera_zoom:.2f}' "
         f"x='{rect_x:.1f}' y='{rect_y:.1f}' "
         f"width='{rect_width:.1f}' height='{rect_height:.1f}'></rect>"
+        "<line class='gf-minimap-camera-heading' data-gf-minimap-camera-heading='true'></line>"
+        "<circle class='gf-minimap-camera-target' data-gf-minimap-camera-target='true' r='2.8'></circle>"
+        "<line class='gf-minimap-focus-bearing' data-gf-minimap-focus-bearing='true'></line>"
+        "<circle class='gf-minimap-focus-beacon' data-gf-minimap-focus-beacon='true' r='4.8'></circle>"
+        "</g>"
     )
 
 
@@ -634,7 +630,7 @@ def _minimap_node(
         f"data-gf-minimap-node='true' data-minimap-node-id='{escape(node.id)}' "
         f"data-node-ref='{escape(node.id)}' data-focus-route='{escape(focus_route)}'>"
         f"<circle cx='{scaled_x:.1f}' cy='{scaled_y:.1f}' "
-        f"r='{_MINIMAP_NODE_RADIUS}' data-selected='{selected}' "
+        f"r='{_MINIMAP_NODE_RADIUS}' data-selected='{selected}' data-kind='{escape(node.kind)}' "
         f"data-node-ref='{escape(node.id)}' data-minimap-node-id='{escape(node.id)}'>"
         f"<title>{escape(node.label)}</title></circle></a>"
     )
@@ -649,7 +645,7 @@ def _group_controls(graph: GraphFakosGraph, request: GraphFakosRequest) -> str:
     kind_buttons = "".join(
         f"<button type='button' data-gf-group='{escape(kind)}' "
         f"data-active='{str(kind not in hidden).lower()}' "
-        f"title='Toggle {escape(kind)} nodes'>{escape(kind)}</button>"
+        f"title='Toggle {escape(kind)} nodes. Alt-click to focus.'>{escape(kind)}</button>"
         for kind in kinds
     )
     kind_links = "".join(
@@ -657,11 +653,10 @@ def _group_controls(graph: GraphFakosGraph, request: GraphFakosRequest) -> str:
         for kind in kinds
     )
     cluster_buttons = "".join(
-        f"<button type='button' class='gf-cluster-card' data-gf-group='{escape(cluster_id)}' "
-        f"data-active='{str(cluster_id not in hidden).lower()}' "
-        f"title='Toggle cluster {escape(label)}'>"
-        f"<span>cluster</span><strong>{escape(label)}</strong><small>{count} nodes · {hub}</small>"
-        "</button>"
+        f"<article class='gf-cluster-card' data-gf-group-card='{escape(cluster_id)}' data-active='{str(cluster_id not in hidden).lower()}'>"
+        f"<button type='button' class='gf-cluster-focus' data-gf-group-focus='{escape(cluster_id)}' aria-label='Focus cluster {escape(label)}'><span>cluster</span><strong>{escape(label)}</strong><small>{count} nodes · {hub}</small>"
+        f"</button><button type='button' class='gf-cluster-toggle' data-gf-group='{escape(cluster_id)}' "
+        f"data-active='{str(cluster_id not in hidden).lower()}' aria-pressed='{str(cluster_id not in hidden).lower()}' aria-label='Show or hide cluster {escape(label)}'>Visible</button></article>"
         for cluster_id, label, count, hub in clusters
     )
     return (
@@ -892,19 +887,24 @@ def _node_inspect_overlay(
     metadata = _node_metadata(node) if node is not None else {}
     metadata_json = _json_attribute(metadata)
     properties = _key_values(metadata) if metadata else _empty("No properties yet.")
-    open_state = "false"
+    open_state = "true" if node is not None else "false"
     return (
         "<aside class='gf-inspect-overlay' data-gf-inspect-overlay='true' "
-        f"data-open='{open_state}' aria-live='polite' aria-label='Selected node inspector'>"
+        f"data-open='{open_state}' data-compact='false' aria-live='polite' aria-label='Selected node inspector'>"
         "<div class='gf-inspect-overlay-bar'>"
         "<span data-gf-inspect-kind='true'>"
         f"{escape(kind)}</span>"
-        "<button type='button' data-gf-inspect-close='true' aria-label='Close inspector'>Close</button>"
+        "<div class='gf-inspect-window-actions'><button type='button' data-gf-inspect-compact='true' "
+        "aria-expanded='true'>Collapse</button><button type='button' data-gf-inspect-close='true' "
+        "aria-label='Close inspector' title='Close inspector'>&times;</button></div>"
         "</div>"
         f"<h3 data-gf-inspect-title='true'>{escape(title)}</h3>"
         f"<p data-gf-inspect-summary='true'>{escape(summary)}</p>"
-        "<details class='gf-inspect-section' open>"
-        "<summary>Content</summary>"
+        "<div class='gf-inspect-actions gf-inspect-actions-primary' aria-label='Node navigation actions'>"
+        "<button type='button' data-gf-overlay-action='center'>Center</button><button type='button' data-gf-overlay-action='local'>Local</button>"
+        "<button type='button' data-gf-overlay-action='evidence'>Evidence</button></div>"
+        "<section class='gf-inspect-neighbors' aria-label='Connected nodes'><div><strong>Connected</strong><span data-gf-inspect-neighbor-count='true'>0</span><nav aria-label='Connected item navigation'><button type='button' data-gf-neighbor-step='previous' aria-label='Previous connected item' title='Previous connected item (K)'>&uarr;</button><button type='button' data-gf-neighbor-step='next' aria-label='Next connected item' title='Next connected item (J)'>&darr;</button></nav></div><div data-gf-inspect-neighbors='true'></div></section>"
+        "<details class='gf-inspect-section' data-gf-inspect-content-section='true'><summary>Content &amp; edit</summary>"
         f"<p data-gf-inspect-content='true'>{escape(summary)}</p>"
         "<label class='gf-inspect-field'>Title"
         f"<input type='text' name='title' data-gf-inspect-title-input='true' "
@@ -923,17 +923,15 @@ def _node_inspect_overlay(
         "<p data-gf-inspect-evidence='true'>"
         "Use Evidence for provenance and citations without mutating provider truth.</p>"
         "</details>"
+        "<details class='gf-inspect-section' data-gf-inspect-note-section='true'><summary>Add note</summary>"
         "<form class='gf-inspect-command' data-gf-inspect-command='true'>"
         "<label>Note<textarea name='note' rows='3' "
         "placeholder='Draft a provider-neutral note or follow-up action'></textarea></label>"
         f"<input type='hidden' name='target_id' data-gf-inspect-target-id='true' value='{escape(node_id)}'>"
         f"<input type='hidden' name='source' data-gf-inspect-source='true' value='{escape(source)}'>"
         "<div class='gf-inspect-actions'>"
-        "<button type='button' data-gf-overlay-action='center'>Center</button>"
-        "<button type='button' data-gf-overlay-action='local'>Local</button>"
-        "<button type='button' data-gf-overlay-action='evidence'>Evidence</button>"
         "<button type='button' data-gf-overlay-action='draft_note'>Draft note</button>"
-        "</div></form></aside>"
+        "</div></form></details></aside>"
     )
 
 

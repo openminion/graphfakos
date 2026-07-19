@@ -9,6 +9,7 @@ from graphfakos import (
     build_fixture_graph,
     build_viewer_route,
     GraphFakosActionStatus,
+    GraphFakosCameraPose,
     GraphFakosEdge,
     GraphFakosExpansionRequest,
     GraphFakosGraph,
@@ -212,6 +213,10 @@ def test_viewer_route_helpers_are_public_and_stable() -> None:
         camera_zoom=1.3,
         camera_yaw=18.0,
         camera_pitch=-9.0,
+        camera_pose=GraphFakosCameraPose(
+            position=(120.0, -42.5, 780.25),
+            target=(18.0, 4.5, -9.0),
+        ),
         center_force=0.0,
         label_density=0.0,
     )
@@ -230,6 +235,7 @@ def test_viewer_route_helpers_are_public_and_stable() -> None:
             "camera_zoom": ["1.3"],
             "camera_yaw": ["18"],
             "camera_pitch": ["-9"],
+            "camera_pose": ["120,-42.5,780.25,18,4.5,-9"],
             "center_force": ["0"],
             "label_density": ["0"],
         },
@@ -245,10 +251,59 @@ def test_viewer_route_helpers_are_public_and_stable() -> None:
     assert parsed.camera_zoom == 1.3
     assert parsed.camera_yaw == 18.0
     assert parsed.camera_pitch == -9.0
+    assert parsed.camera_pose == request.camera_pose
     assert parsed.center_force == 0.0
     assert parsed.label_density == 0.0
     assert "center_force=0.0" in route
     assert "label_density=0.0" in route
+    assert "camera_pose=120.000000%2C-42.500000%2C780.250000" in route
+
+
+@pytest.mark.parametrize(
+    "value",
+    (
+        "nan,0,1,2,3,4",
+        "0,inf,1,2,3,4",
+        "0,1,2,3,4",
+    ),
+)
+def test_camera_pose_rejects_invalid_route_values(value: str) -> None:
+    with pytest.raises(ValueError):
+        GraphFakosCameraPose.from_query_value(value)
+
+    fallback = GraphFakosCameraPose(
+        position=(0.0, 0.0, 720.0),
+        target=(0.0, 0.0, 0.0),
+    )
+    parsed = parse_viewer_request(
+        "/explore",
+        {"camera_pose": [value]},
+        base_request=GraphFakosRequest(camera_pose=fallback),
+    )
+    assert parsed.camera_pose == fallback
+
+
+def test_camera_pose_rejects_non_finite_direct_values() -> None:
+    with pytest.raises(ValueError, match="must be finite"):
+        GraphFakosCameraPose(
+            position=(0.0, float("nan"), 720.0),
+            target=(0.0, 0.0, 0.0),
+        )
+
+
+def test_focused_request_normalizes_focus_as_primary_selection() -> None:
+    state = GraphFakosViewerState.from_request(
+        GraphFakosRequest(
+            focus_node_id="provider:third-party",
+            selected_node_ids=("memory:operator-preference",),
+        )
+    )
+
+    assert state.selected_node_id == "provider:third-party"
+    assert state.selected_node_ids == (
+        "provider:third-party",
+        "memory:operator-preference",
+    )
 
 
 def test_dynamic_viewer_contracts_round_trip() -> None:
@@ -263,6 +318,10 @@ def test_dynamic_viewer_contracts_round_trip() -> None:
         camera_zoom=1.4,
         camera_yaw=24.0,
         camera_pitch=-16.0,
+        camera_pose=GraphFakosCameraPose(
+            position=(64.0, -18.0, 640.0),
+            target=(12.0, 8.0, -4.0),
+        ),
         selected_node_ids=("provider:third-party", "memory:operator-preference"),
         center_force=0.02,
         repel_force=1.4,
@@ -318,6 +377,7 @@ def test_dynamic_viewer_contracts_round_trip() -> None:
     assert rebuilt_state.style_color_by == "component"
     assert rebuilt_state.camera_yaw == 24.0
     assert rebuilt_state.camera_pitch == -16.0
+    assert rebuilt_state.camera_pose == request.camera_pose
     assert rebuilt_state.timeline_playback == "step"
     assert rebuilt_state.pivot_mode == "evidence_bundle"
     assert rebuilt_state.to_route_query()["node_kind"] == "provider"
@@ -326,6 +386,10 @@ def test_dynamic_viewer_contracts_round_trip() -> None:
     }
     assert GraphFakosViewerEvent.from_dict(event.to_dict()).state.camera_zoom == 1.4
     assert GraphFakosViewerEvent.from_dict(event.to_dict()).state.camera_yaw == 24.0
+    assert (
+        GraphFakosViewerEvent.from_dict(event.to_dict()).state.camera_pose
+        == request.camera_pose
+    )
     assert GraphFakosExpansionRequest.from_dict(expansion.to_dict()).depth == 2
     assert (
         GraphFakosExpansionRequest.from_dict(expansion.to_dict()).cursor

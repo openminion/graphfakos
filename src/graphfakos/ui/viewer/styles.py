@@ -245,22 +245,22 @@ body.gf-page[data-theme="paper"] {
   font-weight: 800;
   padding: 8px 2px;
 }
-.gf-embed-root[data-graphfakos-screen="explore"] .gf-header {
+.gf-embed-root:is([data-graphfakos-screen="explore"], [data-graphfakos-screen="neighborhood"]) .gf-header {
   align-items: center;
   margin-bottom: 8px;
 }
-.gf-embed-root[data-graphfakos-screen="explore"] .gf-header .gf-eyebrow,
-.gf-embed-root[data-graphfakos-screen="explore"] .gf-header > div:first-child > p:not(:first-child) {
+.gf-embed-root:is([data-graphfakos-screen="explore"], [data-graphfakos-screen="neighborhood"]) .gf-header .gf-eyebrow,
+.gf-embed-root:is([data-graphfakos-screen="explore"], [data-graphfakos-screen="neighborhood"]) .gf-header > div:first-child > p:not(:first-child) {
   display: none;
 }
-.gf-embed-root[data-graphfakos-screen="explore"] .gf-header h2 {
+.gf-embed-root:is([data-graphfakos-screen="explore"], [data-graphfakos-screen="neighborhood"]) .gf-header h2 {
   font-size: 22px;
 }
-.gf-embed-root[data-graphfakos-screen="explore"] .gf-canvas-panel {
+.gf-embed-root:is([data-graphfakos-screen="explore"], [data-graphfakos-screen="neighborhood"]) .gf-canvas-panel {
   margin-bottom: 8px;
   padding: 8px;
 }
-.gf-embed-root[data-graphfakos-screen="explore"] .gf-canvas {
+.gf-embed-root:is([data-graphfakos-screen="explore"], [data-graphfakos-screen="neighborhood"]) .gf-canvas {
   height: calc(100dvh - 190px);
   min-height: 520px;
 }
@@ -376,6 +376,11 @@ body.gf-page[data-theme="paper"] {
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
+}
+.gf-canvas-actions {
+  align-items: center;
+  display: flex;
+  gap: 6px;
 }
 .gf-command-bar {
   display: grid;
@@ -999,20 +1004,6 @@ body.gf-page[data-theme="paper"] {
   outline: none;
   position: relative;
 }
-.gf-webgl-surface {
-  background: var(--gf-canvas-bg);
-  border-radius: 16px;
-  inset: 0;
-  min-height: clamp(520px, 76vh, 980px);
-  overflow: hidden;
-  position: absolute;
-  z-index: 2;
-}
-.gf-webgl-surface canvas {
-  display: block;
-  height: 100% !important;
-  width: 100% !important;
-}
 .gf-canvas-shell[data-webgl-ready="true"] > .gf-canvas {
   opacity: 0;
   pointer-events: none;
@@ -1041,18 +1032,34 @@ body.gf-page[data-theme="paper"] {
 .gf-canvas-help {
   color: var(--gf-muted);
   font-size: 12px;
-  margin: 0 0 6px;
+  margin: 0;
+  position: relative;
 }
 .gf-canvas-help summary {
+  align-items: center;
+  border: 1px solid var(--gf-line);
+  border-radius: 50%;
   cursor: pointer;
+  display: flex;
   font-weight: 800;
-  width: max-content;
+  height: 24px;
+  justify-content: center;
+  list-style: none;
+  width: 24px;
 }
-.gf-canvas-help[open] {
+.gf-canvas-help summary::-webkit-details-marker { display: none; }
+.gf-canvas-help > div {
   background: var(--gf-soft);
   border: 1px solid var(--gf-line);
   border-radius: 10px;
+  box-shadow: 0 16px 40px rgb(0 0 0 / 24%);
+  max-width: min(560px, calc(100vw - 48px));
   padding: 8px 10px;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  width: max-content;
+  z-index: 18;
 }
 .gf-detail-status {
   align-items: center;
@@ -1162,13 +1169,13 @@ body.gf-page[data-theme="space"] .gf-node[data-kind="document"] polygon {
   box-shadow: 0 18px 46px rgb(20 29 44 / 18%);
   display: none;
   gap: 10px;
-  max-height: min(70dvh, 680px);
+  max-height: calc(100% - 32px);
   max-width: min(360px, calc(100% - 32px));
   overflow: auto;
   padding: 12px;
   position: absolute;
-  right: 18px;
-  bottom: 110px;
+  right: 16px;
+  top: 16px;
   z-index: 8;
 }
 .gf-inspect-overlay[data-open="true"] {
@@ -1198,6 +1205,14 @@ body.gf-page[data-theme="space"] .gf-node[data-kind="document"] polygon {
   color: var(--gf-muted);
   margin: 0;
 }
+.gf-inspect-actions-primary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.gf-inspect-actions-primary button {
+  justify-content: center;
+  min-height: 32px;
+}
 .gf-inspect-section {
   background: color-mix(in srgb, var(--gf-soft) 62%, transparent);
   border: 1px solid var(--gf-line);
@@ -1211,6 +1226,7 @@ body.gf-page[data-theme="space"] .gf-node[data-kind="document"] polygon {
 .gf-inspect-command {
   display: grid;
   gap: 8px;
+  margin-top: 8px;
 }
 .gf-inspect-command label {
   color: var(--gf-muted);
@@ -1690,7 +1706,7 @@ a {
     width: auto;
   }
   .gf-context-scroll { max-height: calc(min(70dvh, 620px) - 54px); }
-  .gf-embed-root[data-graphfakos-screen="explore"] .gf-canvas {
+  .gf-embed-root:is([data-graphfakos-screen="explore"], [data-graphfakos-screen="neighborhood"]) .gf-canvas {
     height: calc(100dvh - 250px);
     min-height: 440px;
   }

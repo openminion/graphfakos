@@ -15,6 +15,7 @@ from .adapters import (
     FixtureGraphProvider,
     ProviderEnvelopeGraphProvider,
 )
+from .camera import GraphFakosCameraPose
 from .models import (
     GraphFakosActionStatus,
     GraphFakosGraphAction,
@@ -45,6 +46,24 @@ _SCREENS: tuple[GraphFakosScreen, ...] = (
     "provider_status",
     "context_preview",
 )
+
+
+def _camera_pose_from_arg(value: str) -> GraphFakosCameraPose:
+    try:
+        return GraphFakosCameraPose.from_query_value(value)
+    except (TypeError, ValueError) as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
+
+
+def _add_camera_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--camera-x", type=float)
+    parser.add_argument("--camera-y", type=float)
+    parser.add_argument("--camera-zoom", type=float)
+    parser.add_argument(
+        "--camera-pose",
+        type=_camera_pose_from_arg,
+        help="Exact 3D position and target as x,y,z,target_x,target_y,target_z.",
+    )
 
 
 def smoke_payload() -> dict[str, object]:
@@ -88,6 +107,7 @@ def _request_from_args(args: argparse.Namespace) -> GraphFakosRequest:
         camera_x=args.camera_x,
         camera_y=args.camera_y,
         camera_zoom=args.camera_zoom,
+        camera_pose=args.camera_pose,
         render_engine=args.render_engine,
         theme=args.theme,
         saved_view_id=args.saved_view_id,
@@ -335,9 +355,7 @@ def ui_preview_main(argv: list[str] | None = None) -> int:
     parser.add_argument("--layout", default="force")
     parser.add_argument("--limit", type=int, default=25)
     parser.add_argument("--render-limit", type=int, default=120)
-    parser.add_argument("--camera-x", type=float)
-    parser.add_argument("--camera-y", type=float)
-    parser.add_argument("--camera-zoom", type=float)
+    _add_camera_arguments(parser)
     parser.add_argument("--render-engine", default="svg")
     parser.add_argument("--theme", default="default")
     parser.add_argument("--saved-view-id", default="")

@@ -7,6 +7,7 @@ import json
 from typing import cast
 from urllib.parse import urlencode
 
+from graphfakos.camera import GraphFakosCameraPose
 from graphfakos.models import GraphFakosRequest, GraphFakosScreen
 
 _SCREEN_NAV: tuple[tuple[GraphFakosScreen, str], ...] = (
@@ -86,6 +87,7 @@ def _request_from_query(
         camera_zoom=_float_query_value(query, "camera_zoom", request.camera_zoom),
         camera_yaw=_float_query_value(query, "camera_yaw", request.camera_yaw),
         camera_pitch=_float_query_value(query, "camera_pitch", request.camera_pitch),
+        camera_pose=_camera_pose_query_value(query, request.camera_pose),
         render_engine=_first_query_value(query, "render_engine")
         or request.render_engine,
         theme=_first_query_value(query, "theme") or request.theme,
@@ -154,6 +156,19 @@ def _float_query_value(
     try:
         return float(value)
     except ValueError:
+        return fallback
+
+
+def _camera_pose_query_value(
+    query: dict[str, list[str]],
+    fallback: GraphFakosCameraPose | None,
+) -> GraphFakosCameraPose | None:
+    value = _first_query_value(query, "camera_pose")
+    if value is None:
+        return fallback
+    try:
+        return GraphFakosCameraPose.from_query_value(value)
+    except (TypeError, ValueError):
         return fallback
 
 
@@ -229,6 +244,25 @@ def build_viewer_route(
     return _route_href(request, screen=screen, overrides=overrides)
 
 
+def _local_node_route(request: GraphFakosRequest, node_id: str) -> str:
+    """Open one node's neighborhood with a camera fitted to the new scope."""
+    return _route_href(
+        request.with_screen("neighborhood"),
+        overrides={
+            "camera_scope": "fresh",
+            "camera_x": None,
+            "camera_y": None,
+            "camera_zoom": None,
+            "camera_yaw": None,
+            "camera_pitch": None,
+            "camera_pose": None,
+            "focus_node_id": node_id,
+            "max_depth": 1,
+            "layout": "focus",
+        },
+    )
+
+
 def parse_viewer_request(
     path: str,
     query: dict[str, list[str]],
@@ -292,6 +326,11 @@ def _route_href(
             continue
         route_key = "preset" if key == "preset_id" else key
         if isinstance(value, dict):
+            if route_key == "camera_pose":
+                payload[route_key] = GraphFakosCameraPose.from_dict(
+                    value
+                ).to_query_value()
+                continue
             if route_key == "pinned_positions":
                 if value:
                     payload[route_key] = json.dumps(

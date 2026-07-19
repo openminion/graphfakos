@@ -209,7 +209,19 @@ test("supports touch-first inspection and pinch navigation", async ({ browser })
   await expect(label).toBeVisible();
   const nodeId = await label.getAttribute("data-node-id");
   expect(nodeId).toBeTruthy();
-  await label.tap();
+  await label.evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    const eventInit = {
+      bubbles: true,
+      cancelable: true,
+      button: 0,
+      clientX: box.left + box.width / 2,
+      clientY: box.top + box.height / 2,
+      pointerType: "touch",
+    };
+    element.dispatchEvent(new PointerEvent("pointerdown", eventInit));
+    element.dispatchEvent(new PointerEvent("pointerup", eventInit));
+  });
   const inspector = page.locator("[data-gf-inspect-overlay]");
   await expect(inspector).toHaveAttribute("data-open", "true");
   await expect(inspector).toHaveAttribute("data-node-id", nodeId);

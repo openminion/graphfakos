@@ -2,6 +2,7 @@
 
 from .static import (
     GraphPreviewOutputPaths,
+    build_graph_investigation_session,
     build_graph_replay_bundle,
     build_graph_report,
     render_graph_dot,
@@ -32,6 +33,7 @@ from .ui import (
 
 __all__ = [
     "GraphPreviewOutputPaths",
+    "build_graph_investigation_session",
     "build_graph_replay_bundle",
     "build_graph_report",
     "build_graph_diff",

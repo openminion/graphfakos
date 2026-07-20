@@ -597,6 +597,229 @@ class GraphFakosSavedView:
 
 
 @dataclass(frozen=True, slots=True)
+class GraphFakosConnectionExplanation:
+    edge_id: str
+    source_id: str
+    source_label: str
+    target_id: str
+    target_label: str
+    relationship: str
+    direction: str = "directed"
+    summary: str = ""
+    weight: float | None = None
+    confidence: float | None = None
+    provenance_ids: tuple[str, ...] = ()
+    citation_ids: tuple[str, ...] = ()
+    provider_payload: dict[str, object] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "edge_id": self.edge_id,
+            "source_id": self.source_id,
+            "source_label": self.source_label,
+            "target_id": self.target_id,
+            "target_label": self.target_label,
+            "relationship": self.relationship,
+            "direction": self.direction,
+            "summary": self.summary,
+            "weight": self.weight,
+            "confidence": self.confidence,
+            "provenance_ids": list(self.provenance_ids),
+            "citation_ids": list(self.citation_ids),
+            "provider_payload": _json_compatible_dict(self.provider_payload),
+        }
+
+    @classmethod
+    def from_dict(
+        cls,
+        payload: Mapping[str, object],
+    ) -> GraphFakosConnectionExplanation:
+        return cls(
+            edge_id=_required_string(payload, "edge_id", "connection.edge_id"),
+            source_id=_required_string(payload, "source_id", "connection.source_id"),
+            source_label=_required_string(
+                payload,
+                "source_label",
+                "connection.source_label",
+            ),
+            target_id=_required_string(payload, "target_id", "connection.target_id"),
+            target_label=_required_string(
+                payload,
+                "target_label",
+                "connection.target_label",
+            ),
+            relationship=_required_string(
+                payload,
+                "relationship",
+                "connection.relationship",
+            ),
+            direction=_string(
+                payload.get("direction", "directed"), "connection.direction"
+            ),
+            summary=_string(payload.get("summary", ""), "connection.summary"),
+            weight=_float_or_none(payload.get("weight"), "connection.weight"),
+            confidence=_float_or_none(
+                payload.get("confidence"), "connection.confidence"
+            ),
+            provenance_ids=_string_tuple(
+                payload.get("provenance_ids", ()),
+                "connection.provenance_ids",
+            ),
+            citation_ids=_string_tuple(
+                payload.get("citation_ids", ()),
+                "connection.citation_ids",
+            ),
+            provider_payload=_object_dict(
+                payload.get("provider_payload", {}),
+                "connection.provider_payload",
+            ),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class GraphFakosInvestigationSession:
+    session_id: str
+    label: str
+    viewer_state: GraphFakosViewerState
+    selected_node_ids: tuple[str, ...] = ()
+    selected_edge_id: str = ""
+    pinned_positions: dict[str, tuple[float, float]] = field(default_factory=dict)
+    notes: tuple[GraphFakosKnowledgeCapture, ...] = ()
+    expansion_requests: tuple[GraphFakosExpansionRequest, ...] = ()
+    saved_queries: tuple[GraphFakosSavedQuery, ...] = ()
+    connection_explanations: tuple[GraphFakosConnectionExplanation, ...] = ()
+    schema_version: str = "graphfakos.investigation.v1"
+    created_at: str = ""
+    provider_payload: dict[str, object] = field(default_factory=dict)
+
+    @classmethod
+    def from_request(
+        cls,
+        request: GraphFakosRequest,
+        *,
+        session_id: str = "route-investigation",
+        label: str = "Route Investigation",
+        notes: tuple[GraphFakosKnowledgeCapture, ...] = (),
+        expansion_requests: tuple[GraphFakosExpansionRequest, ...] = (),
+        saved_queries: tuple[GraphFakosSavedQuery, ...] = (),
+        connection_explanations: tuple[GraphFakosConnectionExplanation, ...] = (),
+        created_at: str = "",
+        provider_payload: dict[str, object] | None = None,
+    ) -> GraphFakosInvestigationSession:
+        state = GraphFakosViewerState.from_request(request)
+        return cls(
+            session_id=session_id,
+            label=label,
+            viewer_state=state,
+            selected_node_ids=state.selected_node_ids,
+            selected_edge_id=state.selected_edge_id or "",
+            pinned_positions=dict(state.pinned_positions),
+            notes=notes,
+            expansion_requests=expansion_requests,
+            saved_queries=saved_queries,
+            connection_explanations=connection_explanations,
+            created_at=created_at,
+            provider_payload=provider_payload or {},
+        )
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "schema_version": self.schema_version,
+            "session_id": self.session_id,
+            "label": self.label,
+            "viewer_state": self.viewer_state.to_dict(),
+            "selected_node_ids": list(self.selected_node_ids),
+            "selected_edge_id": self.selected_edge_id,
+            "pinned_positions": {
+                node_id: [x, y]
+                for node_id, (x, y) in sorted(self.pinned_positions.items())
+            },
+            "notes": [note.to_dict() for note in self.notes],
+            "expansion_requests": [
+                request.to_dict() for request in self.expansion_requests
+            ],
+            "saved_queries": [query.to_dict() for query in self.saved_queries],
+            "connection_explanations": [
+                item.to_dict() for item in self.connection_explanations
+            ],
+            "created_at": self.created_at,
+            "provider_payload": _json_compatible_dict(self.provider_payload),
+        }
+
+    @classmethod
+    def from_dict(
+        cls,
+        payload: Mapping[str, object],
+    ) -> GraphFakosInvestigationSession:
+        return cls(
+            session_id=_required_string(
+                payload,
+                "session_id",
+                "investigation_session.session_id",
+            ),
+            label=_required_string(payload, "label", "investigation_session.label"),
+            viewer_state=GraphFakosViewerState.from_dict(
+                _mapping(
+                    payload.get("viewer_state", {}),
+                    "investigation_session.viewer_state",
+                )
+            ),
+            selected_node_ids=_string_tuple(
+                payload.get("selected_node_ids", ()),
+                "investigation_session.selected_node_ids",
+            ),
+            selected_edge_id=_string(
+                payload.get("selected_edge_id", ""),
+                "investigation_session.selected_edge_id",
+            ),
+            pinned_positions=_position_dict(
+                payload.get("pinned_positions", {}),
+                "investigation_session.pinned_positions",
+            ),
+            notes=tuple(
+                GraphFakosKnowledgeCapture.from_dict(item)
+                for item in _mapping_list(
+                    payload.get("notes", []),
+                    "investigation_session.notes",
+                )
+            ),
+            expansion_requests=tuple(
+                GraphFakosExpansionRequest.from_dict(item)
+                for item in _mapping_list(
+                    payload.get("expansion_requests", []),
+                    "investigation_session.expansion_requests",
+                )
+            ),
+            saved_queries=tuple(
+                GraphFakosSavedQuery.from_dict(item)
+                for item in _mapping_list(
+                    payload.get("saved_queries", []),
+                    "investigation_session.saved_queries",
+                )
+            ),
+            connection_explanations=tuple(
+                GraphFakosConnectionExplanation.from_dict(item)
+                for item in _mapping_list(
+                    payload.get("connection_explanations", []),
+                    "investigation_session.connection_explanations",
+                )
+            ),
+            schema_version=_string(
+                payload.get("schema_version", "graphfakos.investigation.v1"),
+                "investigation_session.schema_version",
+            ),
+            created_at=_string(
+                payload.get("created_at", ""),
+                "investigation_session.created_at",
+            ),
+            provider_payload=_object_dict(
+                payload.get("provider_payload", {}),
+                "investigation_session.provider_payload",
+            ),
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class GraphFakosGraphAction:
     action_id: str
     action_type: str
@@ -1609,12 +1832,14 @@ class GraphFakosRequest:
 __all__ = [
     "GraphFakosCitation",
     "GraphFakosActionStatus",
+    "GraphFakosConnectionExplanation",
     "GraphFakosDiagnostics",
     "GraphFakosEdge",
     "GraphFakosExpansionRequest",
     "GraphFakosGraph",
     "GraphFakosGraphAction",
     "GraphFakosGraphAnalytics",
+    "GraphFakosInvestigationSession",
     "GraphFakosKnowledgeCapture",
     "GraphFakosNode",
     "GraphFakosProvenance",

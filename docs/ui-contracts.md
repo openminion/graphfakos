@@ -26,6 +26,8 @@ GraphFakos owns the reusable viewer layer:
     theme DTOs,
 14. packaged browser runtime and true-3D renderer assets,
 15. reusable viewer test assertions.
+16. provider-neutral connection explanations and portable investigation-session
+    artifacts.
 
 Provider packages own their data semantics and adapter mapping. They should not
 fork GraphFakos viewer HTML, duplicate local-server behavior, or create a
@@ -62,7 +64,8 @@ GraphFakos-owned responsibilities:
 7. camera route state, minimap orientation, group toggles, and saved-view links,
 8. dynamic viewer state/event/command payloads,
 9. local workbench action payload shape for provider-owned captures,
-10. common smoke assertions.
+10. provider-owned lazy expansion request/response boundaries,
+11. common smoke assertions.
 
 ## Progressive Enhancement Contract
 
@@ -91,6 +94,14 @@ and live result counts when the packaged browser runtime is available,
 route-backed active-lens summaries with reset links for stacked query, filter,
 focus, selection, camera, and renderer state, provider-neutral expansion
 planners that serialize `GraphFakosExpansionRequest` without fetching neighbors,
+provider-owned expansion providers that may return a validated bounded graph
+slice without making GraphFakos responsible for source ingestion or truth,
+portable investigation sessions that serialize route state, selected nodes,
+selected edges, pins, expansion requests, saved queries, notes, and connection
+explanations for exact-state replay,
+selected-edge "why connected" panels that summarize the structural source,
+target, relationship, weight, confidence, provenance references, and citation
+references without interpreting provider-specific truth,
 canvas visual legends that explain visible node kinds, edge kinds, style rules,
 selection, pins, hubs, and evidence markers,
 visible graph data tables that keep node metrics, selection, evidence counts,

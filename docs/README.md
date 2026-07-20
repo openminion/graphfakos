@@ -55,8 +55,9 @@ It supports:
 - public deep-link helpers for building or parsing stable viewer routes,
 - camera-aware deep links through `camera_x`, `camera_y`, and `camera_zoom`,
 - serializable viewer state plus provider-neutral viewer command, event,
-  expansion-request, knowledge-capture, saved-view, saved-query, graph-action,
-  action-status, graph-analytics, replay-bundle, and theme DTOs,
+  expansion-request, knowledge-capture, saved-view, saved-query,
+  investigation-session, connection-explanation, graph-action, action-status,
+  graph-analytics, replay-bundle, and theme DTOs,
 - package-owned browser runtime helpers through `viewer_runtime_script()`,
 - true WebGL 3D, canvas, and SVG fallback contracts with route-preserved
   renderer/theme state for host workbenches,
@@ -65,6 +66,8 @@ It supports:
   `time>=` tokens,
 - clickable nodes and edges with inspector details, selected-path emphasis,
   provider-neutral shapes, edge arrows, and side-panel cross-highlighting,
+- selected-edge "why connected" summaries with source, target, relationship,
+  confidence, provenance references, and citation references,
 - pan, zoom, fit, reset, fullscreen, and drag controls layered over the static
   SVG canvas,
 - minimap orientation, group toggles, and render-budget fallback links for
@@ -74,7 +77,7 @@ It supports:
   graph-authoring panels,
 - hub-aware navigator panels for global, local-depth, evidence, path, status,
   and context graph lenses,
-- depth-aware neighborhoods,
+- depth-aware neighborhoods and optional provider-owned lazy expansion slices,
 - path source/target controls,
 - preview-server knowledge capture and graph-action forms for provider-owned
   notes, code observations, questions, memory hints, draft nodes, links, and
@@ -88,8 +91,9 @@ GraphFakos also exposes:
 - persisted graph artifact helpers plus a file-backed provider adapter,
 - embeddable HTML fragments for package-local UI shells,
 - JSON graph reports, and
-- Markdown, DOT, and replay-bundle graph reports for issue attachments, review
-  notes, exact-state replay, and external graph tooling.
+- Markdown, DOT, replay-bundle, and investigation-session graph reports for
+  issue attachments, review notes, exact-state replay, and external graph
+  tooling.
 
 GraphFakos does not interpret provider-specific semantics. Adapters should put
 provider-only fields in `provider_payload` unless the field belongs in a stable

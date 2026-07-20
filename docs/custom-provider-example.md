@@ -9,6 +9,7 @@ provider-neutral DTOs and implement `GraphFakosProvider`.
 ```python
 from graphfakos import (
     GraphFakosEdge,
+    GraphFakosExpansionRequest,
     GraphFakosGraph,
     GraphFakosNode,
     GraphFakosProvider,
@@ -26,6 +27,7 @@ class PackageGraphProvider(GraphFakosProvider):
         "path",
         "provider_status",
         "static_export",
+        "lazy_expansion",
     )
 
     def load_graph(self, request: GraphFakosRequest) -> GraphFakosGraph:
@@ -75,6 +77,17 @@ class PackageGraphProvider(GraphFakosProvider):
                 ),
             },
         )
+
+    def expand_graph(
+        self,
+        request: GraphFakosRequest,
+        expansion: GraphFakosExpansionRequest,
+    ) -> GraphFakosGraph | None:
+        """Optional provider-owned lazy expansion hook."""
+        graph = self.load_graph(request)
+        if expansion.source_id not in {node.id for node in graph.nodes}:
+            return None
+        return graph
 ```
 
 ## Provider-neutral rules
@@ -86,6 +99,9 @@ class PackageGraphProvider(GraphFakosProvider):
 - Keep package-local preview commands thin: provider construction, defaults,
   and package labels belong there; shared viewer behavior belongs in
   GraphFakos.
+- Implement optional expansion only when the provider owns the source graph.
+  GraphFakos validates and renders the returned slice, but it does not invent
+  neighbors, ingest files, or persist expanded graph truth.
 
 ## Validation loop
 
@@ -114,6 +130,7 @@ def test_package_provider_satisfies_graphfakos_contract(tmp_path):
                 "path",
                 "provider_status",
                 "static_export",
+                "lazy_expansion",
             ),
             artifact_path=tmp_path / "package-graph.json",
         )

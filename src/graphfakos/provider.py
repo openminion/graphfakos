@@ -7,7 +7,9 @@ from typing import Protocol, runtime_checkable
 
 from .models import (
     GraphFakosActionStatus,
+    GraphFakosConnectionExplanation,
     GraphFakosDiagnostics,
+    GraphFakosExpansionRequest,
     GraphFakosGraph,
     GraphFakosGraphAction,
     GraphFakosGraphAnalytics,
@@ -62,6 +64,16 @@ class GraphFakosGraphActionProvider(Protocol):
         action: GraphFakosGraphAction,
     ) -> GraphFakosActionStatus | dict[str, object] | None:
         """Accept a provider-neutral draft graph edit or merge request."""
+
+
+@runtime_checkable
+class GraphFakosExpansionProvider(Protocol):
+    def expand_graph(
+        self,
+        request: GraphFakosRequest,
+        expansion: GraphFakosExpansionRequest,
+    ) -> GraphFakosGraph | None:
+        """Return a provider-owned graph slice for a viewer expansion request."""
 
 
 def validate_graph(graph: GraphFakosGraph) -> None:
@@ -151,6 +163,54 @@ def analyze_graph(graph: GraphFakosGraph) -> GraphFakosGraphAnalytics:
         max_degree=max_degree,
         average_degree=(sum(degrees.values()) / node_count if node_count else 0.0),
         density=density,
+    )
+
+
+def explain_connection(
+    graph: GraphFakosGraph,
+    edge_id: str,
+) -> GraphFakosConnectionExplanation | None:
+    edge = graph.edge_map().get(edge_id)
+    if edge is None:
+        return None
+    node_map = graph.node_map()
+    source = node_map.get(edge.source_id)
+    target = node_map.get(edge.target_id)
+    provenance_ids = tuple(
+        dict.fromkeys(
+            (
+                *(source.provenance_ids if source is not None else ()),
+                *(target.provenance_ids if target is not None else ()),
+                *edge.provenance_ids,
+            )
+        )
+    )
+    citation_ids = tuple(
+        dict.fromkeys(
+            (
+                *(source.citation_ids if source is not None else ()),
+                *(target.citation_ids if target is not None else ()),
+                *edge.citation_ids,
+            )
+        )
+    )
+    source_label = source.label if source is not None else edge.source_id
+    target_label = target.label if target is not None else edge.target_id
+    relationship = edge.label or edge.kind
+    return GraphFakosConnectionExplanation(
+        edge_id=edge.id,
+        source_id=edge.source_id,
+        source_label=source_label,
+        target_id=edge.target_id,
+        target_label=target_label,
+        relationship=relationship,
+        direction=edge.direction,
+        summary=(f"{source_label} is connected to {target_label} by {relationship}."),
+        weight=edge.weight,
+        confidence=edge.confidence,
+        provenance_ids=provenance_ids,
+        citation_ids=citation_ids,
+        provider_payload=edge.provider_payload,
     )
 
 
@@ -254,16 +314,33 @@ def load_overlay_graphs(
     return graphs
 
 
+def load_expanded_graph(
+    provider: GraphFakosProvider,
+    request: GraphFakosRequest,
+    expansion: GraphFakosExpansionRequest,
+) -> GraphFakosGraph | None:
+    if not isinstance(provider, GraphFakosExpansionProvider):
+        return None
+    graph = provider.expand_graph(request, expansion)
+    if graph is None:
+        return None
+    validate_graph(graph)
+    return graph
+
+
 __all__ = [
     "analyze_graph",
     "diagnose_graph",
+    "explain_connection",
     "GraphFakosComparisonProvider",
+    "GraphFakosExpansionProvider",
     "GraphFakosGraphActionProvider",
     "GraphFakosKnowledgeCaptureProvider",
     "GraphFakosLiveProvider",
     "GraphFakosOverlayProvider",
     "GraphFakosProvider",
     "load_comparison_graph",
+    "load_expanded_graph",
     "load_overlay_graphs",
     "load_provider_graph",
     "validate_graph",

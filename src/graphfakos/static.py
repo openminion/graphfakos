@@ -9,7 +9,10 @@ import webbrowser
 
 from .artifacts import write_graph_artifact
 from .models import (
+    GraphFakosConnectionExplanation,
+    GraphFakosExpansionRequest,
     GraphFakosGraph,
+    GraphFakosInvestigationSession,
     GraphFakosReplayBundle,
     GraphFakosRequest,
     GraphFakosSavedView,
@@ -19,6 +22,7 @@ from .provider import (
     GraphFakosProvider,
     analyze_graph,
     diagnose_graph,
+    explain_connection,
     load_comparison_graph,
     load_overlay_graphs,
     load_provider_graph,
@@ -79,6 +83,12 @@ def _graph_report_payload(
     comparison_graph: GraphFakosGraph | None,
     overlay_graphs: tuple[GraphFakosGraph, ...],
 ) -> dict[str, object]:
+    connection_explanations = _connection_explanations(graph, request)
+    investigation_session = build_graph_investigation_session(
+        graph,
+        request,
+        connection_explanations=connection_explanations,
+    )
     report: dict[str, object] = {
         "request": request.to_dict(),
         "viewer_state": GraphFakosViewerState.from_request(request).to_dict(),
@@ -87,6 +97,8 @@ def _graph_report_payload(
             view_id=request.saved_view_id or "route",
             label="Current route view",
         ).to_dict(),
+        "investigation_session": investigation_session.to_dict(),
+        "connection_explanations": [item.to_dict() for item in connection_explanations],
         "analytics": analyze_graph(graph).to_dict(),
         "graph": graph.to_dict(),
         "diagnostics": diagnose_graph(graph).to_dict(),
@@ -104,6 +116,68 @@ def _graph_report_payload(
         report["comparison_graph"] = comparison_graph.to_dict()
         report["comparison_diff"] = build_graph_diff(graph, comparison_graph)
     return report
+
+
+def build_graph_investigation_session(
+    graph: GraphFakosGraph,
+    request: GraphFakosRequest,
+    *,
+    connection_explanations: tuple[GraphFakosConnectionExplanation, ...] = (),
+) -> GraphFakosInvestigationSession:
+    expansion_requests = _expansion_requests(graph, request)
+    return GraphFakosInvestigationSession.from_request(
+        request,
+        session_id=request.saved_view_id or f"{graph.graph_id}:{request.screen}",
+        label=f"{graph.label} Investigation",
+        expansion_requests=expansion_requests,
+        connection_explanations=connection_explanations,
+        created_at=graph.generated_at,
+        provider_payload={
+            "graph_id": graph.graph_id,
+            "provider_id": graph.provider_id,
+            "provider_label": graph.provider_label,
+            "graph_role": graph.graph_role,
+        },
+    )
+
+
+def _connection_explanations(
+    graph: GraphFakosGraph,
+    request: GraphFakosRequest,
+) -> tuple[GraphFakosConnectionExplanation, ...]:
+    edge_ids: list[str] = []
+    if request.selected_edge_id:
+        edge_ids.append(request.selected_edge_id)
+    if request.focus_node_id:
+        edge_ids.extend(
+            edge.id
+            for edge in graph.edges
+            if edge.source_id == request.focus_node_id
+            or edge.target_id == request.focus_node_id
+        )
+    explanations = tuple(
+        item
+        for edge_id in dict.fromkeys(edge_ids)
+        if (item := explain_connection(graph, edge_id)) is not None
+    )
+    return explanations[:8]
+
+
+def _expansion_requests(
+    graph: GraphFakosGraph,
+    request: GraphFakosRequest,
+) -> tuple[GraphFakosExpansionRequest, ...]:
+    if request.focus_node_id:
+        return (
+            GraphFakosExpansionRequest(
+                source_id=request.focus_node_id,
+                depth=max(request.max_depth, 1),
+            ),
+        )
+    preferred = next((node for node in graph.nodes if node.id), None)
+    if preferred is None:
+        return ()
+    return (GraphFakosExpansionRequest(source_id=preferred.id, depth=1),)
 
 
 def _loaded_graphs(
@@ -524,6 +598,7 @@ def _resolved_output_path(output_path: str) -> Path:
 
 __all__ = [
     "GraphPreviewOutputPaths",
+    "build_graph_investigation_session",
     "build_graph_replay_bundle",
     "build_graph_report",
     "render_graph_dot",

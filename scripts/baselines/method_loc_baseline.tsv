@@ -1,6 +1,5 @@
 # Functions above the method LOC ceiling are pinned here and may only shrink.
 # Format: path<TAB>qualname<TAB>loc<TAB>reason
-src/graphfakos/adapters/demo.py	build_demo_graph	102	demo graph builder still needs a focused fixture-data split
 src/graphfakos/adapters/demo_scenarios.py	_agent_memory_graph	107	scenario generator still needs a focused data-shape split
 src/graphfakos/adapters/demo_scenarios.py	_workbench_mixed_graph	161	scenario generator still needs a focused data-shape split
 src/graphfakos/adapters/fixture.py	build_fixture_graph	181	fixture graph builder still needs a focused parsing split

@@ -1066,6 +1066,8 @@ def test_explore_screen_renders_filter_controls_and_edge_inspector() -> None:
     assert "Edge kind" in html
     assert "selected" in html
     assert "Selected Edge" in html
+    assert "Why connected?" in html
+    assert "Third-party Provider is connected to Viewer Spec by serves." in html
     assert "edge:provider-serves-spec" in html
     assert "Third-party Provider" in html
     assert "Workflow" in html

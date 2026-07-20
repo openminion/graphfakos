@@ -15,6 +15,7 @@ from graphfakos.models import (
     GraphFakosProvenance,
     GraphFakosRequest,
 )
+from graphfakos.provider import explain_connection
 from graphfakos.ui.viewer.filtering import _facet_values
 from graphfakos.ui.viewer.graph_ops import (
     _node_cluster_id,
@@ -770,7 +771,12 @@ def _inspector(
     selected_edge: GraphFakosEdge | None,
 ) -> str:
     if node is None:
-        return _panel("Inspector", _empty("Select a node."))
+        if selected_edge is None:
+            return _panel("Inspector", _empty("Select a node or edge."))
+        return _panel(
+            "Inspector",
+            "<h3>Selected Edge</h3>" + _edge_detail(graph, selected_edge),
+        )
     incident = tuple(
         edge
         for edge in graph.edges
@@ -804,6 +810,7 @@ def _edge_detail(
 ) -> str:
     if edge is None:
         return _empty("Click an edge to inspect its relationship metadata.")
+    explanation = explain_connection(graph, edge.id)
     node_map = graph.node_map()
     source = node_map.get(edge.source_id)
     target = node_map.get(edge.target_id)
@@ -820,9 +827,13 @@ def _edge_detail(
         "target": target.label if target else edge.target_id,
         "weight": edge.weight,
         "confidence": edge.confidence,
+        "provenance refs": len(explanation.provenance_ids) if explanation else 0,
+        "citation refs": len(explanation.citation_ids) if explanation else 0,
     }
     return (
         f"{_badges([(edge.kind, 'accent'), (edge.direction, 'blue')])}"
+        "<h4>Why connected?</h4>"
+        f"{_summary_note(explanation.summary if explanation else 'Connection metadata is unavailable.')}"
         f"{_key_values(metadata)}"
         f"{''.join(_provenance_card(item) for item in provenance)}"
         f"{''.join(_citation_card(item) for item in citations)}"

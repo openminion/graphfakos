@@ -7,6 +7,7 @@ from dataclasses import replace
 from graphfakos.models import (
     GraphFakosActionStatus,
     GraphFakosEdge,
+    GraphFakosExpansionRequest,
     GraphFakosGraph,
     GraphFakosGraphAction,
     GraphFakosKnowledgeCapture,
@@ -46,6 +47,39 @@ DEMO_SCENARIOS = (
     "budget",
     "islands",
 )
+_DEMO_CAPABILITIES = (
+    "search",
+    "neighborhood",
+    "path",
+    "provenance",
+    "timeline",
+    "diff",
+    "overlay",
+    "provider_status",
+    "static_export",
+    "local_preview",
+    "knowledge_capture",
+    "graph_action",
+    "lazy_expansion",
+)
+_DEMO_CAPABILITY_DETAILS = {
+    "local_preview": "Serve deterministic demo graphs for UI iteration.",
+    "diff": "Compare the current demo graph against a trimmed baseline.",
+    "overlay": "Show a companion provider view for layout stress testing.",
+    "timeline": "Exercise timestamp-aware layouts and freshness panels.",
+    "path": "Exercise shortest-path source and target controls.",
+    "provenance": "Exercise evidence coverage and citation panels.",
+    "provider_status": "Exercise diagnostics, facets, and warning states.",
+    "knowledge_capture": (
+        "Accept temporary workbench captures during local preview sessions."
+    ),
+    "graph_action": (
+        "Render provider-neutral graph edit requests as preview-only action nodes."
+    ),
+    "lazy_expansion": (
+        "Return bounded provider-owned neighborhood slices for viewer expansion."
+    ),
+}
 
 
 def build_demo_graph(
@@ -85,20 +119,7 @@ def build_demo_graph(
         provider_id="demo",
         provider_label="Demo Data Provider",
         graph_role="demo",
-        capabilities=(
-            "search",
-            "neighborhood",
-            "path",
-            "provenance",
-            "timeline",
-            "diff",
-            "overlay",
-            "provider_status",
-            "static_export",
-            "local_preview",
-            "knowledge_capture",
-            "graph_action",
-        ),
+        capabilities=_DEMO_CAPABILITIES,
         nodes=nodes,
         edges=edges,
         provenance=provenance,
@@ -123,21 +144,7 @@ def build_demo_graph(
             "scenario": scenario,
             "purpose": "Viewer-side iteration without real provider data.",
         },
-        capability_details={
-            "local_preview": "Serve deterministic demo graphs for UI iteration.",
-            "diff": "Compare the current demo graph against a trimmed baseline.",
-            "overlay": "Show a companion provider view for layout stress testing.",
-            "timeline": "Exercise timestamp-aware layouts and freshness panels.",
-            "path": "Exercise shortest-path source and target controls.",
-            "provenance": "Exercise evidence coverage and citation panels.",
-            "provider_status": "Exercise diagnostics, facets, and warning states.",
-            "knowledge_capture": (
-                "Accept temporary workbench captures during local preview sessions."
-            ),
-            "graph_action": (
-                "Render provider-neutral graph edit requests as preview-only action nodes."
-            ),
-        },
+        capability_details=_DEMO_CAPABILITY_DETAILS,
         available_facets=_facets(nodes, edges),
         provider_payload={
             "integration_summary": (
@@ -246,20 +253,7 @@ class DemoGraphProvider:
     provider_id = "demo"
     provider_label = "Demo Data Provider"
     graph_role = "demo"
-    capabilities = (
-        "search",
-        "neighborhood",
-        "path",
-        "provenance",
-        "timeline",
-        "diff",
-        "overlay",
-        "provider_status",
-        "static_export",
-        "local_preview",
-        "knowledge_capture",
-        "graph_action",
-    )
+    capabilities = _DEMO_CAPABILITIES
 
     def __init__(self, scenario: str = "agent-memory") -> None:
         self.scenario = _normalize_scenario(scenario)
@@ -306,6 +300,14 @@ class DemoGraphProvider:
             },
         )
 
+    def expand_graph(
+        self,
+        request: GraphFakosRequest,
+        expansion: GraphFakosExpansionRequest,
+    ) -> GraphFakosGraph:
+        graph = self.load_graph(request)
+        return _expanded_neighborhood(graph, expansion)
+
 
 def _graph_with_workbench_items(
     graph: GraphFakosGraph,
@@ -314,6 +316,75 @@ def _graph_with_workbench_items(
 ) -> GraphFakosGraph:
     graph = _graph_with_captures(graph, captures)
     return _graph_with_actions(graph, actions)
+
+
+def _expanded_neighborhood(
+    graph: GraphFakosGraph,
+    expansion: GraphFakosExpansionRequest,
+) -> GraphFakosGraph:
+    if not expansion.source_id:
+        return graph
+    node_ids = _node_ids_within_depth(graph, expansion)
+    if not node_ids:
+        return graph
+    nodes = tuple(node for node in graph.nodes if node.id in node_ids)
+    edges = tuple(
+        edge
+        for edge in graph.edges
+        if edge.source_id in node_ids
+        and edge.target_id in node_ids
+        and (not expansion.edge_kind or edge.kind == expansion.edge_kind)
+    )
+    return replace(
+        graph,
+        graph_id=f"{graph.graph_id}:expanded:{expansion.source_id}",
+        label=f"{graph.label} Expanded Neighborhood",
+        nodes=nodes,
+        edges=edges,
+        stats={
+            **graph.stats,
+            "expanded_source_id": expansion.source_id,
+            "expanded_depth": expansion.depth,
+            "expanded_node_count": len(nodes),
+            "expanded_edge_count": len(edges),
+            "raw_node_count": len(graph.nodes),
+            "raw_edge_count": len(graph.edges),
+            "hidden_nodes": max(len(graph.nodes) - len(nodes), 0),
+            "hidden_edges": max(len(graph.edges) - len(edges), 0),
+        },
+        available_facets=_facets(nodes, edges),
+    )
+
+
+def _node_ids_within_depth(
+    graph: GraphFakosGraph,
+    expansion: GraphFakosExpansionRequest,
+) -> set[str]:
+    node_ids = {node.id for node in graph.nodes}
+    if expansion.source_id not in node_ids:
+        return set()
+    allowed_kinds = {
+        node.id
+        for node in graph.nodes
+        if not expansion.node_kind or node.kind == expansion.node_kind
+    }
+    selected = {expansion.source_id}
+    frontier = {expansion.source_id}
+    for _depth in range(max(expansion.depth, 1)):
+        next_frontier: set[str] = set()
+        for edge in graph.edges:
+            if expansion.edge_kind and edge.kind != expansion.edge_kind:
+                continue
+            if edge.source_id in frontier and edge.target_id in allowed_kinds:
+                next_frontier.add(edge.target_id)
+            if edge.target_id in frontier and edge.source_id in allowed_kinds:
+                next_frontier.add(edge.source_id)
+        next_frontier -= selected
+        if not next_frontier:
+            break
+        selected.update(next_frontier)
+        frontier = next_frontier
+    return selected
 
 
 def _graph_with_actions(

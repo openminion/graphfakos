@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from graphfakos import (
+    DemoGraphProvider,
     FixtureGraphProvider,
     build_graph_report,
     build_graph_replay_bundle,
@@ -10,11 +11,13 @@ from graphfakos import (
     build_viewer_route,
     GraphFakosActionStatus,
     GraphFakosCameraPose,
+    GraphFakosConnectionExplanation,
     GraphFakosEdge,
     GraphFakosExpansionRequest,
     GraphFakosGraph,
     GraphFakosGraphAction,
     GraphFakosGraphAnalytics,
+    GraphFakosInvestigationSession,
     GraphFakosKnowledgeCapture,
     GraphFakosNode,
     GraphFakosReplayBundle,
@@ -27,6 +30,8 @@ from graphfakos import (
     GraphFakosViewerState,
     analyze_graph,
     diagnose_graph,
+    explain_connection,
+    load_expanded_graph,
     load_comparison_graph,
     load_overlay_graphs,
     load_provider_graph,
@@ -515,6 +520,80 @@ def test_saved_view_action_analytics_and_replay_contracts_round_trip() -> None:
     rebuilt_bundle = GraphFakosReplayBundle.from_dict(bundle.to_dict())
     assert rebuilt_bundle.viewer_state.render_engine == "canvas"
     assert rebuilt_bundle.saved_views[0].saved_queries[0].query == "degree>=3"
+
+
+def test_investigation_session_and_connection_explanation_round_trip() -> None:
+    request = GraphFakosRequest(
+        screen="explore",
+        focus_node_id="provider:third-party",
+        selected_edge_id="edge:provider-serves-spec",
+        selected_node_ids=("document:viewer-spec",),
+        pinned_positions={"provider:third-party": (120.0, 80.0)},
+    )
+    graph = load_provider_graph(FixtureGraphProvider(), request)
+    explanation = explain_connection(graph, "edge:provider-serves-spec")
+
+    assert explanation is not None
+    assert explanation.source_label == "Third-party Provider"
+    assert explanation.target_label == "Viewer Spec"
+    assert "serves" in explanation.summary
+
+    session = GraphFakosInvestigationSession.from_request(
+        request,
+        session_id="fixture-session",
+        label="Fixture Session",
+        expansion_requests=(
+            GraphFakosExpansionRequest(source_id="provider:third-party", depth=2),
+        ),
+        connection_explanations=(explanation,),
+    )
+    rebuilt = GraphFakosInvestigationSession.from_dict(session.to_dict())
+    rebuilt_connection = GraphFakosConnectionExplanation.from_dict(
+        explanation.to_dict()
+    )
+
+    assert rebuilt.session_id == "fixture-session"
+    assert rebuilt.selected_edge_id == "edge:provider-serves-spec"
+    assert rebuilt.expansion_requests[0].depth == 2
+    assert rebuilt.connection_explanations[0].relationship == "serves"
+    assert rebuilt_connection.citation_ids == ("cite:provider-doc",)
+
+
+def test_graph_report_includes_investigation_session_and_connection_explanation() -> (
+    None
+):
+    report = build_graph_report(
+        FixtureGraphProvider(),
+        GraphFakosRequest(
+            screen="explore",
+            focus_node_id="provider:third-party",
+            selected_edge_id="edge:provider-serves-spec",
+        ),
+    )
+
+    session = report["investigation_session"]
+    explanations = report["connection_explanations"]
+
+    assert isinstance(session, dict)
+    assert session["selected_edge_id"] == "edge:provider-serves-spec"
+    assert session["expansion_requests"][0]["source_id"] == "provider:third-party"
+    assert isinstance(explanations, list)
+    assert explanations[0]["relationship"] == "serves"
+
+
+def test_demo_provider_expands_bounded_neighborhood() -> None:
+    provider = DemoGraphProvider("workbench-mixed")
+    request = GraphFakosRequest(screen="neighborhood", focus_node_id="agent:reviewer")
+    expanded = load_expanded_graph(
+        provider,
+        request,
+        GraphFakosExpansionRequest(source_id="agent:reviewer", depth=1),
+    )
+
+    assert expanded is not None
+    assert expanded.graph_id.endswith(":expanded:agent:reviewer")
+    assert expanded.stats["expanded_source_id"] == "agent:reviewer"
+    assert 1 <= len(expanded.nodes) < len(provider.load_graph(request).nodes)
 
 
 def test_build_graph_replay_bundle_uses_provider_neutral_state() -> None:

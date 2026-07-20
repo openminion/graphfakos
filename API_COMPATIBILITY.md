@@ -27,6 +27,9 @@ release note says otherwise:
 - DTO class names
 - dynamic viewer DTO names for state, command, event, expansion request, and
   knowledge-capture/theme payloads
+- investigation-session and connection-explanation DTO names and top-level
+  report keys
+- optional expansion provider protocol and `load_expanded_graph()` helper name
 - deterministic demo scenario names and `DemoGraphProvider` for viewer
   iteration
 - `viewer_runtime_script()` helper name and packaged `assets/viewer.js`

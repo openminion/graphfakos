@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { shapeLinks } from "../src/link-shape.js";
+import { nodeColorForKind } from "../src/visual-contrast.js";
 import {
   detailLevelForCamera,
   labelBudgetForDetail,
@@ -24,6 +25,11 @@ test("maps camera distance to semantic graph detail", () => {
   expect(labelBudgetForDetail("detail", 1, 240)).toBe(16);
   expect(nodeScaleForCount(12)).toBeGreaterThan(nodeScaleForCount(48));
   expect(nodeScaleForCount(48)).toBeGreaterThan(nodeScaleForCount(240));
+});
+
+test("keeps dense cluster summaries brighter than generic graph items", () => {
+  expect(nodeColorForKind("cluster")).toBe("#8fdaff");
+  expect(nodeColorForKind("unknown")).toBe("#a8c5f2");
 });
 
 test("chooses the nearest visible node in a screen direction", () => {
@@ -1069,6 +1075,18 @@ for (const fixture of [
     expect(firstSceneMs).toBeLessThan(fixture.maxFirstSceneMs);
     const labels = await page.locator(".gf-webgl-label").count();
     expect(labels).toBeLessThanOrEqual(8);
+    if (fixture.label === "1M") {
+      await expect.poll(async () => Number(await graph.getAttribute("data-reference-distance")))
+        .toBeGreaterThan(0);
+      const referenceDistance = Number(await graph.getAttribute("data-reference-distance"));
+      const zoomIn = page.getByRole("button", { name: "Zoom in" });
+      await zoomIn.click();
+      await zoomIn.click();
+      await expect(graph).toHaveAttribute("data-detail-mode", "detail");
+      expect(Number(await graph.getAttribute("data-reference-distance")))
+        .toBeCloseTo(referenceDistance, 1);
+      expect(await page.locator(".gf-webgl-label").count()).toBeGreaterThan(labels);
+    }
     await testInfo.attach("performance", {
       body: JSON.stringify({
         fixture: fixture.label,

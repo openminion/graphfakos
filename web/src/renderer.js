@@ -14,14 +14,7 @@ import {
   semanticZoom,
 } from "./semantic-detail.js";
 import { directionalNodeId } from "./spatial-navigation.js";
-
-const colorByKind = {
-  artifact: "#ff936b",
-  document: "#f4d06f",
-  memory: "#9ce070",
-  provider: "#5de1e6",
-  warning: "#ff6b7a",
-};
+import { nodeColorForKind } from "./visual-contrast.js";
 
 const nodeHitGeometry = new SphereGeometry(4.5, 8, 6);
 const nodeHitMaterial = new MeshBasicMaterial({
@@ -291,9 +284,9 @@ function mount(element, scene, callbacks = {}) {
     if (selectedNodeIds.has(node.id)) return "#ffffff";
     if (node.id === hoveredNodeId || node.id === previewedNodeId) return "#f8fbff";
     if (activeFocusId && !focusedNodeIds.has(node.id)) {
-      return activeScene.theme === "space" ? "#435171" : "#aebbb7";
+      return activeScene.theme === "space" ? "#53617e" : "#aebbb7";
     }
-    return colorByKind[node.kind] || "#8aa4c8";
+    return nodeColorForKind(node.kind);
   };
   const linkEndpoints = (link) => ({
     source: typeof link.source === "object" ? link.source.id : link.source,
@@ -307,15 +300,15 @@ function mount(element, scene, callbacks = {}) {
     if (link.selected) return "#72ddff";
     if (linkTouchesFocus(link)) return activeScene.theme === "space" ? "#c2f3ff" : "#17677c";
     if (activeFocusId) return activeScene.theme === "space" ? "#3e4a68" : "#a4afac";
-    return activeScene.theme === "space" ? "#7890b8" : "#7f908c";
+    return activeScene.theme === "space" ? "#829bc3" : "#7f908c";
   };
   const linkWidth = (link) => (link.selected ? 2.1 : linkTouchesFocus(link) ? 1.35 : 0.28);
   const visibleNodeCount = () => activeScene.nodes.filter((node) => !node.hidden).length;
   const sceneLinkOpacity = () => {
     const visibleCount = visibleNodeCount();
     let base = {
-      overview: 0.13,
-      balanced: 0.22,
+      overview: 0.16,
+      balanced: 0.26,
       detail: 0.32,
       precision: 0.42,
     }[semanticDetail] || 0.13;
@@ -411,6 +404,7 @@ function mount(element, scene, callbacks = {}) {
     });
   };
   const pointerDown = (event) => {
+    markCameraInteraction();
     if (event.pointerType === "touch") markTouchEngaged();
     if (event.button !== 0) return;
     const labelNodeId = event.target.closest?.(".gf-webgl-label")?.dataset.nodeId || "";
@@ -449,6 +443,7 @@ function mount(element, scene, callbacks = {}) {
   const pointerCancel = () => {
     pointerGesture = null;
   };
+  const wheel = () => markCameraInteraction();
   const doubleClick = (event) => {
     const labelNodeId = event.target.closest?.(".gf-webgl-label")?.dataset.nodeId || "";
     const node = nodes.find((item) => item.id === (labelNodeId || hoveredNodeId));
@@ -698,7 +693,7 @@ function mount(element, scene, callbacks = {}) {
     .nodeId("id")
     .nodeColor(nodeColor)
     .nodeVal(nodeSize)
-    .nodeOpacity(0.92)
+    .nodeOpacity(0.98)
     .nodeVisibility((node) => !activeScene.nodes.find((item) => item.id === node.id)?.hidden)
     .nodeResolution(8)
     .linkColor(linkColor)
@@ -788,7 +783,6 @@ function mount(element, scene, callbacks = {}) {
     controls.zoomSpeed = 0.9;
     controls.panSpeed = 0.72;
   }
-  controls?.addEventListener?.("start", markCameraInteraction);
   controls?.addEventListener?.("change", reportCamera);
   reportCamera();
 
@@ -802,6 +796,7 @@ function mount(element, scene, callbacks = {}) {
   element.addEventListener("pointermove", pointerMove);
   element.addEventListener("pointerup", pointerUp);
   element.addEventListener("pointercancel", pointerCancel);
+  element.addEventListener("wheel", wheel, { passive: true });
   element.addEventListener("dblclick", doubleClick);
   resize();
   frameGraph();
@@ -890,12 +885,12 @@ function mount(element, scene, callbacks = {}) {
       window.cancelAnimationFrame(cameraFrame);
       window.cancelAnimationFrame(labelFrame);
       window.cancelAnimationFrame(labelLayoutFrame);
-      controls?.removeEventListener?.("start", markCameraInteraction);
       controls?.removeEventListener?.("change", reportCamera);
       element.removeEventListener("pointerdown", pointerDown);
       element.removeEventListener("pointermove", pointerMove);
       element.removeEventListener("pointerup", pointerUp);
       element.removeEventListener("pointercancel", pointerCancel);
+      element.removeEventListener("wheel", wheel);
       element.removeEventListener("dblclick", doubleClick);
       nodeObjects.clear();
       window.removeEventListener("keydown", setClusterDrag);

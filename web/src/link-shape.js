@@ -73,3 +73,18 @@ export function shapeLinks(nodes, links) {
     ...profileById.get(link.id),
   }));
 }
+
+export function linkVisibleForDetail(link, detailLevel, focusId = "") {
+  if (link.hidden) return false;
+  const source = endpointId(link.source ?? link.sourceId);
+  const target = endpointId(link.target ?? link.targetId);
+  if (link.selected || (focusId && (source === focusId || target === focusId))) return true;
+  if (link.kind === "edge_bundle" || link.aggregate === true) return true;
+  const threshold = {
+    overview: 18,
+    balanced: 46,
+    detail: 78,
+    precision: 100,
+  }[detailLevel] || 18;
+  return stableHash(link.id || `${source}:${target}`) % 100 < threshold;
+}

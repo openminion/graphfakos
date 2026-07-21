@@ -18,9 +18,12 @@ from graphfakos import (
     GraphFakosGraphAction,
     GraphFakosGraphAnalytics,
     GraphFakosInvestigationSession,
+    GraphFakosInspectorField,
+    GraphFakosInspectorSchema,
     GraphFakosKnowledgeCapture,
     GraphFakosNode,
     GraphFakosReplayBundle,
+    GraphFakosPerspective,
     GraphFakosRequest,
     GraphFakosSavedQuery,
     GraphFakosSavedView,
@@ -557,6 +560,34 @@ def test_investigation_session_and_connection_explanation_round_trip() -> None:
     assert rebuilt.expansion_requests[0].depth == 2
     assert rebuilt.connection_explanations[0].relationship == "serves"
     assert rebuilt_connection.citation_ids == ("cite:provider-doc",)
+
+
+def test_viewer_declaration_contracts_round_trip() -> None:
+    perspective = GraphFakosPerspective.from_dict(
+        {
+            "perspective_id": "evidence",
+            "label": "Evidence",
+            "filters": {"evidence_filter": "with_evidence"},
+            "node_kinds": ["document"],
+        }
+    )
+    schema = GraphFakosInspectorSchema.from_dict(
+        {
+            "schema_id": "document-inspector",
+            "node_kind": "document",
+            "fields": [{"key": "path", "label": "Path", "source": "provider_payload"}],
+        }
+    )
+
+    assert GraphFakosPerspective.from_dict(perspective.to_dict()) == perspective
+    assert GraphFakosInspectorSchema.from_dict(schema.to_dict()) == schema
+    assert schema.fields == (
+        GraphFakosInspectorField(
+            key="path",
+            label="Path",
+            source="provider_payload",
+        ),
+    )
 
 
 def test_graph_report_includes_investigation_session_and_connection_explanation() -> (

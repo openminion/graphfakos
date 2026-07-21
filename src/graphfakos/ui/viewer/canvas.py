@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from dataclasses import replace
 from html import escape
 from math import sqrt
 
@@ -38,45 +37,17 @@ from graphfakos.ui.viewer import surface_controls
 from graphfakos.ui.viewer.layout import _clamped, _layout_positions
 from graphfakos.ui.viewer.routing import _local_node_route, _route_href
 from graphfakos.ui.viewer.routing import state_hidden_inputs as _state_hidden_inputs
+from graphfakos.ui.viewer.workbench_tools import (
+    canvas_workbench,
+    density_tuned_request,
+    focus_locator,
+    performance_hud,
+    provider_inspector_fields,
+)
 
 _MINIMAP_WIDTH = 180
 _MINIMAP_HEIGHT = 90
 _MINIMAP_NODE_RADIUS = 4
-
-
-def _density_tuned_request(
-    graph: GraphFakosGraph,
-    request: GraphFakosRequest,
-) -> GraphFakosRequest:
-    total_nodes = int(
-        graph.stats.get("raw_node_count", len(graph.nodes)) or len(graph.nodes)
-    )
-    visible_nodes = len(graph.nodes)
-    node_scale = request.node_scale
-    label_density = request.label_density
-    edge_opacity = request.edge_opacity
-    if request.node_scale == 1.0 and total_nodes >= 100_000:
-        node_scale = 0.42
-    elif request.node_scale == 1.0 and visible_nodes >= 160:
-        node_scale = 0.58
-    if request.label_density == 1.0 and total_nodes >= 100_000:
-        label_density = 0.3
-    elif request.label_density == 1.0 and visible_nodes >= 160:
-        label_density = 0.48
-    if request.edge_opacity == 1.0 and (total_nodes >= 100_000 or visible_nodes >= 160):
-        edge_opacity = 0.62
-    if (
-        node_scale == request.node_scale
-        and label_density == request.label_density
-        and edge_opacity == request.edge_opacity
-    ):
-        return request
-    return replace(
-        request,
-        node_scale=node_scale,
-        label_density=label_density,
-        edge_opacity=edge_opacity,
-    )
 
 
 def _graph_canvas(
@@ -87,7 +58,7 @@ def _graph_canvas(
 ) -> str:
     if not graph.nodes:
         return _panel("Graph Canvas", _empty("No graph nodes."))
-    request = _density_tuned_request(graph, request)
+    request = density_tuned_request(graph, request)
     width = 1280
     height = 720
     positions = _layout_positions(graph, request, width, height, selected_id)
@@ -220,7 +191,8 @@ def _graph_canvas(
             f"data-style-color='{escape(_style_value(node, request.style_color_by, component_ids))}' "
             f"data-style-size='{escape(_style_value(node, request.style_size_by, component_ids, degree=degree))}' "
             f"data-pinned='{pinned}' data-provider-pinned='{str(node.visual.pinned).lower()}' "
-            f"data-degree='{degree}' data-x='{x:.1f}' data-y='{y:.1f}' data-z='{z:.1f}' "
+            f"data-degree='{degree}' data-score='{node.score if node.score is not None else ''}' "
+            f"data-x='{x:.1f}' data-y='{y:.1f}' data-z='{z:.1f}' "
             f"data-layout-x='{x:.1f}' data-layout-y='{y:.1f}' data-layout-z='{z:.1f}' "
             f"transform='translate({x:.1f} {y:.1f})'>"
             f"{_node_shape(node, request, degree)}"
@@ -264,6 +236,7 @@ def _graph_canvas(
             "<div class='gf-webgl-surface' data-gf-webgl-surface='true' "
             "role='application' aria-label='Interactive 3D graph scene'></div>"
             f"{surface_controls.touch_guide(request)}{surface_controls.compass_hud()}"
+            f"{focus_locator()}{performance_hud()}"
             if request.render_engine == "3d"
             else ""
         )
@@ -284,6 +257,7 @@ def _graph_canvas(
         "<button type='button' class='gf-compact-button' data-gf-live-resync='true' "
         "hidden>Resync live graph</button>"
         f"{_group_controls(graph, request)}"
+        f"{canvas_workbench(graph, request)}"
         f"{_render_budget_panel(request, hidden_nodes, hidden_edges)}"
         f"{_graph_canvas_legend(graph, request)}</section>"
     )
@@ -792,6 +766,7 @@ def _inspector(
         f"{_badges(_node_badges(node, graph))}"
         f"<p>{escape(node.summary or node.source or node.id)}</p>"
         f"{_key_values(_node_metadata(node))}"
+        f"{provider_inspector_fields(graph, node)}"
         "<h3>Connections</h3>"
         f"{_edge_list(incident)}"
         "<h3>Selected Edge</h3>"

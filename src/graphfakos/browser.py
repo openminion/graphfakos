@@ -16,6 +16,7 @@ def viewer_runtime_script() -> str:
             "spatial-map.js",
             "overview-control.js",
             "viewer.js",
+            "viewer-workflows.js",
         )
     )
 

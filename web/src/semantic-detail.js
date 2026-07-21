@@ -38,3 +38,9 @@ export function nodeScaleForCount(nodeCount) {
   if (count <= 110) return 3;
   return 1;
 }
+
+export function zoomStableNodeScale(zoom) {
+  const value = Number(zoom);
+  if (!Number.isFinite(value) || value <= 0) return 1;
+  return clamp(1 / Math.sqrt(value), 0.52, 1.65);
+}

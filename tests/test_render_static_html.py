@@ -1058,6 +1058,7 @@ def test_explore_screen_renders_filter_controls_and_edge_inspector() -> None:
             query="provider",
             selected_edge_id="edge:provider-serves-spec",
             filters={"node_kind": "provider", "edge_kind": "serves"},
+            render_engine="3d",
         ),
     )
 
@@ -1071,6 +1072,12 @@ def test_explore_screen_renders_filter_controls_and_edge_inspector() -> None:
     assert "edge:provider-serves-spec" in html
     assert "Third-party Provider" in html
     assert "Workflow" in html
+    assert "Open data" in html
+    assert "Distributions" in html
+    assert "Perspectives" in html
+    assert "data-gf-focus-locator='true'" in html
+    assert "data-gf-performance-hud='true'" in html
+    assert "data-gf-selection-action='expand'" in html
     assert "Navigator" in html
     assert "Relationship Trail" in html
     assert "data-gf-relationship-trail='true'" in html
@@ -1101,6 +1108,24 @@ def test_explore_screen_renders_relationship_trail_routes() -> None:
     assert trail["focus_id"] == "provider:third-party"
     assert trail["neighbors"][0]["path_route"].startswith("/path?")
     assert trail["path_targets"][0]["hop_count"] >= 1
+
+
+def test_provider_declared_inspector_schema_renders_for_matching_node_kind() -> None:
+    provider = DemoGraphProvider("workbench-mixed")
+    graph = provider.load_graph(GraphFakosRequest())
+    provider_node = next(node for node in graph.nodes if node.kind == "provider")
+
+    html = render_static_html(
+        provider,
+        GraphFakosRequest(
+            focus_node_id=provider_node.id,
+            render_engine="3d",
+        ),
+    )
+
+    assert "data-schema-id='demo-provider-fields'" in html
+    assert "Stable id" in html
+    assert "Provider cluster" in html
 
 
 def test_explore_screen_renders_search_result_path_routes_from_visible_graph() -> None:

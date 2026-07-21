@@ -30,6 +30,10 @@ release note says otherwise:
 - investigation-session and connection-explanation DTO names and top-level
   report keys
 - optional expansion provider protocol and `load_expanded_graph()` helper name
+- typed `GraphFakosPerspective`, `GraphFakosInspectorField`, and
+  `GraphFakosInspectorSchema` declaration names
+- provider declaration reader names `graph_perspectives()`,
+  `inspector_schema_for()`, and `inspector_values()`
 - deterministic demo scenario names and `DemoGraphProvider` for viewer
   iteration
 - `viewer_runtime_script()` helper name and packaged `assets/viewer.js`
@@ -52,6 +56,8 @@ release note says otherwise:
   application helpers
 - local preview action handler helper shape and `POST /api/knowledge` JSON
   behavior
+- local preview `POST /api/import`, `POST /api/expand`, and `POST /api/reset`
+  endpoint purposes and top-level `ok`, `graph`, and `error` response keys
 - screen manifest helper names
 - testing assertion helper names
 - PEP 561 type marker presence through `graphfakos/py.typed`

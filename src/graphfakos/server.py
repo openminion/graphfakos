@@ -23,6 +23,7 @@ RenderPath = Callable[[str, dict[str, list[str]]], str]
 ActionHandler = Callable[[str, dict[str, object]], dict[str, object]]
 RequestAuthorizer = Callable[[str, str, Mapping[str, str]], bool]
 _MAX_ACTION_BYTES = 1024 * 1024
+_MAX_IMPORT_BYTES = 64 * 1024 * 1024
 _VIEWER_CONTEXT_FIELD = "viewer_context"
 
 
@@ -164,7 +165,7 @@ def make_local_viewer_server(
                     {"ok": False, "error": "Content-Length must be numeric"},
                 )
                 return
-            if content_length <= 0 or content_length > _MAX_ACTION_BYTES:
+            if content_length <= 0 or content_length > _max_action_bytes(parsed.path):
                 self._send_json(
                     413,
                     {"ok": False, "error": "request body is empty or too large"},
@@ -325,6 +326,10 @@ def make_local_viewer_server(
     bound_host, bound_port = server.server_address
     server.preview_url = f"http://{bound_host}:{bound_port}{default_path}"
     return server
+
+
+def _max_action_bytes(path: str) -> int:
+    return _MAX_IMPORT_BYTES if path == "/api/import" else _MAX_ACTION_BYTES
 
 
 def _normalize_form_action_payload(payload: dict[str, object]) -> dict[str, object]:

@@ -155,6 +155,31 @@ def build_demo_graph(
                 f"graphfakos-ui --demo-scenario {item} --serve --open"
                 for item in DEMO_SCENARIOS
             ),
+            "perspectives": (
+                {
+                    "perspective_id": "provider-evidence",
+                    "label": "Provider evidence",
+                    "summary": "Review sourced items with confidence-sized nodes.",
+                    "filters": {"evidence_filter": "with_evidence"},
+                    "style_color_by": "source",
+                    "style_size_by": "confidence",
+                },
+            ),
+            "inspector_schemas": (
+                {
+                    "schema_id": "demo-provider-fields",
+                    "node_kind": "provider",
+                    "fields": (
+                        {"key": "id", "label": "Stable id"},
+                        {"key": "source", "label": "Source"},
+                        {
+                            "key": "cluster_id",
+                            "label": "Provider cluster",
+                            "source": "provider_payload",
+                        },
+                    ),
+                },
+            ),
         },
     )
 

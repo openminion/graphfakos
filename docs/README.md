@@ -66,6 +66,10 @@ It supports:
   `time>=` tokens,
 - clickable nodes and edges with inspector details, selected-path emphasis,
   provider-neutral shapes, edge arrows, and side-panel cross-highlighting,
+- compact surface workflows for bounded provider drill-down, local JSON import,
+  incoming/outgoing selection, linked distributions, reusable perspectives,
+  provider-declared inspector fields, off-screen focus location, semantic edge
+  detail, zoom-stable node marks, and renderer performance diagnostics,
 - selected-edge "why connected" summaries with source, target, relationship,
   confidence, provenance references, and citation references,
 - pan, zoom, fit, reset, fullscreen, and drag controls layered over the static
@@ -158,7 +162,7 @@ Provider-envelope scale preview:
 
 ```bash
 graphfakos-ui \
-  --provider-envelope ../workspace-tmp/pragmagraph-viewer-support/viewer-scale-200k.json \
+  --provider-envelope .graphfakos-preview/viewer-scale-200k.json \
   --render-engine 3d \
   --theme space \
   --layout grouped \

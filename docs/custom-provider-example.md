@@ -75,6 +75,24 @@ class PackageGraphProvider(GraphFakosProvider):
                 "integration_commands": (
                     "python -m package_graph preview --screen explore --serve",
                 ),
+                "perspectives": (
+                    {
+                        "perspective_id": "docs",
+                        "label": "Documentation",
+                        "summary": "Review document nodes",
+                        "node_kinds": ("document",),
+                    },
+                ),
+                "inspector_schemas": (
+                    {
+                        "schema_id": "service-fields",
+                        "node_kind": "service",
+                        "fields": (
+                            {"key": "source", "label": "Source"},
+                            {"key": "id", "label": "Stable id"},
+                        ),
+                    },
+                ),
             },
         )
 
@@ -102,6 +120,9 @@ class PackageGraphProvider(GraphFakosProvider):
 - Implement optional expansion only when the provider owns the source graph.
   GraphFakos validates and renders the returned slice, but it does not invent
   neighbors, ingest files, or persist expanded graph truth.
+- Use typed perspectives and inspector schemas only for portable presentation.
+  Provider-specific mutation, authorization, and semantic query behavior still
+  requires an explicit provider-owned protocol or host integration.
 
 ## Validation loop
 

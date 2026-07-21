@@ -119,6 +119,13 @@ from .ui import (
 )
 from .browser import viewer_runtime_script
 from .camera import GraphFakosCameraPose
+from .viewer_contracts import (
+    GraphFakosInspectorField,
+    GraphFakosInspectorSchema,
+    GraphFakosPerspective,
+    graph_perspectives,
+    inspector_schema_for,
+)
 
 __version__ = "0.0.6"
 PACKAGE_STATUS = "semantic-alpha"
@@ -173,6 +180,8 @@ __all__ = [
     "GraphFakosGraphPatch",
     "GraphFakosGraphRevision",
     "GraphFakosInvestigationSession",
+    "GraphFakosInspectorField",
+    "GraphFakosInspectorSchema",
     "GraphFakosKnowledgeCapture",
     "GraphFakosKnowledgeCaptureProvider",
     "GraphFakosLiveGraphState",
@@ -185,6 +194,7 @@ __all__ = [
     "GraphFakosNode",
     "GraphFakosOverlayProvider",
     "GraphFakosPatchOperation",
+    "GraphFakosPerspective",
     "GraphFakosProvider",
     "GraphFakosProvenance",
     "GraphFakosRequest",
@@ -217,6 +227,8 @@ __all__ = [
     "graph_artifact_schema",
     "graph_from_provider_envelope",
     "graph_from_dict",
+    "graph_perspectives",
+    "inspector_schema_for",
     "load_comparison_graph",
     "load_expanded_graph",
     "load_graph_artifact",

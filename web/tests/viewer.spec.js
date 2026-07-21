@@ -1,12 +1,13 @@
 import { expect, test } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
-import { shapeLinks } from "../src/link-shape.js";
+import { linkVisibleForDetail, shapeLinks } from "../src/link-shape.js";
 import { nodeColorForKind } from "../src/visual-contrast.js";
 import {
   detailLevelForCamera,
   labelBudgetForDetail,
   nodeScaleForCount,
   semanticZoom,
+  zoomStableNodeScale,
 } from "../src/semantic-detail.js";
 import { directionalNodeId } from "../src/spatial-navigation.js";
 
@@ -25,6 +26,22 @@ test("maps camera distance to semantic graph detail", () => {
   expect(labelBudgetForDetail("detail", 1, 240)).toBe(16);
   expect(nodeScaleForCount(12)).toBeGreaterThan(nodeScaleForCount(48));
   expect(nodeScaleForCount(48)).toBeGreaterThan(nodeScaleForCount(240));
+});
+
+test("keeps node marks readable while camera zoom changes", () => {
+  expect(zoomStableNodeScale(4)).toBeLessThan(zoomStableNodeScale(1));
+  expect(zoomStableNodeScale(0.25)).toBeGreaterThan(zoomStableNodeScale(1));
+  expect(zoomStableNodeScale(100)).toBeGreaterThanOrEqual(0.52);
+});
+
+test("progressive edge detail preserves aggregates and active context", () => {
+  const aggregate = { id: "bundle", kind: "edge_bundle", source: "a", target: "b" };
+  const selected = { id: "selected", selected: true, source: "a", target: "c" };
+  const focused = { id: "focus", source: "focus-node", target: "d" };
+  expect(linkVisibleForDetail(aggregate, "overview")).toBe(true);
+  expect(linkVisibleForDetail(selected, "overview")).toBe(true);
+  expect(linkVisibleForDetail(focused, "overview", "focus-node")).toBe(true);
+  expect(linkVisibleForDetail({ id: "any", source: "a", target: "b" }, "precision")).toBe(true);
 });
 
 test("keeps dense cluster summaries brighter than generic graph items", () => {
@@ -548,6 +565,74 @@ test("keeps Obsidian-style display controls on the graph surface", async ({ page
   expect(state.node_scale).toBeLessThan(1);
   expect(state.scene_level).toBe("cluster");
   await expect(display.locator("[data-gf-scene-level='cluster']")).toHaveAttribute("data-active", "true");
+});
+
+test("runs selection, distribution, perspective, and import workflows", async ({ page }) => {
+  await page.goto("/explore");
+  await expect(page.locator(".gf-canvas-shell")).toHaveAttribute("data-webgl-ready", "true");
+  await page.evaluate(() => localStorage.removeItem("graphfakos:viewer-perspectives:v1"));
+  const viewer = page.locator("graphfakos-viewer");
+  await viewer.evaluate((element) => element.dispatch({
+    name: "select-node",
+    target_id: "provider:cluster-1",
+  }));
+
+  await page.locator("[data-gf-selection-action='outgoing']").click();
+  await expect.poll(() => viewer.evaluate(
+    (element) => element.getState().selected_node_ids.length,
+  )).toBeGreaterThan(1);
+
+  await page.locator(".gf-workbench-tool").filter({ hasText: "Distributions" }).locator("summary").click();
+  await page.locator("[data-gf-histogram='degree'] button:not([title^='0 '])").first().click();
+  await expect.poll(() => viewer.evaluate(
+    (element) => element.getState().selected_node_ids.length,
+  )).toBeGreaterThan(0);
+  await page.locator("[data-gf-selection-action='only']").click();
+  await expect.poll(() => viewer.evaluate((element) => (
+    element.graph.nodes.filter((node) => node.provider_payload?.viewer_hidden).length
+  ))).toBeGreaterThan(0);
+
+  await page.locator(".gf-workbench-tool").filter({ hasText: "Perspectives" }).locator("summary").click();
+  await page.locator("[data-gf-perspective-save]").click();
+  await expect(page.locator("[data-gf-local-perspectives] button")).toHaveText("View 1");
+  await page.reload();
+  await page.locator(".gf-workbench-tool").filter({ hasText: "Perspectives" }).locator("summary").click();
+  await expect(page.locator("[data-gf-local-perspectives] button")).toHaveText("View 1");
+
+  await page.locator(".gf-workbench-tool").filter({ hasText: "Open data" }).locator("summary").click();
+  const importResponse = page.waitForResponse((response) => response.url().endsWith("/api/import"));
+  await page.locator("[data-gf-import-form] input[type='file']").setInputFiles(
+    "fixtures/viewer-scale-1000.json",
+  );
+  await page.locator("[data-gf-import-form] button[type='submit']").click();
+  const response = await importResponse;
+  expect(response.ok()).toBe(true);
+  expect((await response.json()).ok).toBe(true);
+  await expect(page).toHaveURL(/\/explore/);
+});
+
+test("loads provider-backed details and reports live rendering performance", async ({ page }) => {
+  await page.goto("/explore");
+  const viewer = page.locator("graphfakos-viewer");
+  await expect(viewer.locator(".gf-canvas-shell")).toHaveAttribute("data-webgl-ready", "true");
+  await viewer.evaluate((element) => element.dispatch({
+    name: "select-node",
+    target_id: "provider:cluster-1",
+  }));
+
+  const expansionResponse = page.waitForResponse((response) => response.url().endsWith("/api/expand"));
+  await page.locator("[data-gf-selection-action='expand']").click();
+  const response = await expansionResponse;
+  expect(response.ok()).toBe(true);
+  expect((await response.json()).ok).toBe(true);
+
+  const performance = page.locator("[data-gf-performance-hud]");
+  await performance.locator("summary").click();
+  await expect.poll(async () => performance.locator("[data-gf-perf-fps]").textContent())
+    .not.toBe("--");
+  await expect(performance.locator("[data-gf-perf-detail]")).toHaveText(
+    /overview|balanced|detail|precision/,
+  );
 });
 
 test("preserves theme and group visibility across viewer routes", async ({ page }) => {

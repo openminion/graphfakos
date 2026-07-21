@@ -117,6 +117,10 @@ python3.11 -m pip install -e .
 - provider-neutral visual hierarchy with node shapes, edge arrows, selected
   path emphasis, minimap orientation, group toggles, and side-panel
   cross-highlighting
+- provider-backed bounded drill-down, local visual JSON import, direct
+  selection operations, linked degree/score distributions, reusable
+  perspectives, provider-declared inspector fields, off-screen focus location,
+  zoom-stable node marks, progressive edge detail, and a compact performance HUD
 - depth-aware neighborhood expansion, orphan visibility, neighbor-link
   visibility, edge-clutter controls, analytics overlays, and path source/target
   controls

@@ -6,12 +6,13 @@ import {
   rectanglesOverlap,
   translatedCameraForReservation,
 } from "./focus-readability.js";
-import { shapeLinks, stableHash } from "./link-shape.js";
+import { linkVisibleForDetail, shapeLinks, stableHash } from "./link-shape.js";
 import {
   detailLevelForCamera,
   labelBudgetForDetail,
   nodeScaleForCount,
   semanticZoom,
+  zoomStableNodeScale,
 } from "./semantic-detail.js";
 import { directionalNodeId } from "./spatial-navigation.js";
 import { nodeColorForKind } from "./visual-contrast.js";
@@ -223,6 +224,7 @@ function mount(element, scene, callbacks = {}) {
   let previewedNodeId = "";
   let semanticReferenceDistance = 0;
   let semanticDetail = detailLevelForCamera({ nodeCount: nodes.length });
+  let semanticNodeScale = 1;
   let visibleLabelIds = labelIds(nodes, activeScene, semanticDetail);
   const nodeObjects = new Map();
   let initialFit = true;
@@ -303,6 +305,7 @@ function mount(element, scene, callbacks = {}) {
     return activeScene.theme === "space" ? "#829bc3" : "#7f908c";
   };
   const linkWidth = (link) => (link.selected ? 2.1 : linkTouchesFocus(link) ? 1.35 : 0.28);
+  const linkVisible = (link) => linkVisibleForDetail(link, semanticDetail, activeFocusId);
   const visibleNodeCount = () => activeScene.nodes.filter((node) => !node.hidden).length;
   const sceneLinkOpacity = () => {
     const visibleCount = visibleNodeCount();
@@ -338,7 +341,68 @@ function mount(element, scene, callbacks = {}) {
       ? 1.8
       : focusedNodeIds.has(node.id) && activeFocusId ? 1.4 : 1;
     const sparseScale = nodeScaleForCount(visibleNodeCount());
-    return Math.max(0.3, Math.min(16, baseSize * focusBoost * sparseScale * (activeScene.nodeScale || 1)));
+    return Math.max(0.3, Math.min(16, baseSize * focusBoost * sparseScale * semanticNodeScale * (activeScene.nodeScale || 1)));
+  };
+  const shell = element.closest(".gf-canvas-shell");
+  const focusLocator = shell?.querySelector("[data-gf-focus-locator]");
+  const updateFocusLocator = () => {
+    if (!focusLocator) return;
+    const focusId = [...selectedNodeIds][0] || "";
+    const node = nodes.find((item) => item.id === focusId && !item.hidden);
+    if (!node) {
+      focusLocator.hidden = true;
+      return;
+    }
+    const point = graph.graph2ScreenCoords(node.x || 0, node.y || 0, node.z || 0);
+    const width = element.clientWidth;
+    const height = element.clientHeight;
+    const margin = 36;
+    const onScreen = point.x >= margin && point.x <= width - margin
+      && point.y >= margin && point.y <= height - margin;
+    focusLocator.hidden = onScreen;
+    if (onScreen) return;
+    const x = Math.max(margin, Math.min(width - margin, point.x));
+    const y = Math.max(margin, Math.min(height - margin, point.y));
+    focusLocator.style.left = `${x}px`;
+    focusLocator.style.top = `${y}px`;
+    focusLocator.style.setProperty("--bearing", `${Math.atan2(point.y - y, point.x - x)}rad`);
+    focusLocator.dataset.nodeId = node.id;
+    const label = focusLocator.querySelector("[data-gf-focus-locator-label]");
+    if (label) label.textContent = node.label || node.id;
+  };
+  focusLocator?.addEventListener("click", () => {
+    const nodeId = focusLocator.dataset.nodeId || "";
+    if (nodeId) focusNeighborhood(nodeId);
+  });
+  const performanceHud = shell?.querySelector("[data-gf-performance-hud]");
+  let performanceFrame = 0;
+  let frameCount = 0;
+  let frameDurationTotal = 0;
+  let frameStartedAt = performance.now();
+  let lastFrameAt = frameStartedAt;
+  const updatePerformanceHud = () => {
+    if (!performanceHud) return;
+    const now = performance.now();
+    frameDurationTotal += now - lastFrameAt;
+    lastFrameAt = now;
+    frameCount += 1;
+    if (now - frameStartedAt < 500) return;
+    const elapsed = now - frameStartedAt;
+    const fps = Math.round(frameCount * 1000 / elapsed);
+    const frame = frameDurationTotal / Math.max(1, frameCount);
+    const visibleLinks = links.filter(linkVisible).length;
+    performanceHud.querySelector("[data-gf-perf-fps]").textContent = String(fps);
+    performanceHud.querySelector("[data-gf-perf-frame]").textContent = frame.toFixed(1);
+    performanceHud.querySelector("[data-gf-perf-visible]").textContent = `${visibleNodeCount()} / ${nodes.length}`;
+    performanceHud.querySelector("[data-gf-perf-links]").textContent = `${visibleLinks} / ${links.length}`;
+    performanceHud.querySelector("[data-gf-perf-detail]").textContent = semanticDetail;
+    frameCount = 0;
+    frameDurationTotal = 0;
+    frameStartedAt = now;
+  };
+  const samplePerformance = () => {
+    updatePerformanceHud();
+    performanceFrame = window.requestAnimationFrame(samplePerformance);
   };
   const scheduleLabelLayout = () => {
     window.cancelAnimationFrame(labelLayoutFrame);
@@ -555,6 +619,9 @@ function mount(element, scene, callbacks = {}) {
     });
     const changed = next !== semanticDetail;
     semanticDetail = next;
+    semanticNodeScale = zoomStableNodeScale(camera.semanticZoom);
+    graph.nodeVal(nodeSize);
+    graph.linkVisibility(linkVisible);
     if (changed) {
       visibleLabelIds = labelIds(nodes, activeScene, semanticDetail);
       graph.linkOpacity(sceneLinkOpacity());
@@ -683,6 +750,7 @@ function mount(element, scene, callbacks = {}) {
       refreshSemanticDetail(camera);
       callbacks.onCameraChange?.({ ...camera, detailLevel: semanticDetail });
       callbacks.onOverview?.(overviewState());
+      updateFocusLocator();
       scheduleLabelLayout();
     });
   };
@@ -698,7 +766,7 @@ function mount(element, scene, callbacks = {}) {
     .nodeResolution(8)
     .linkColor(linkColor)
     .linkOpacity(sceneLinkOpacity())
-    .linkVisibility((link) => !activeScene.links.find((item) => item.id === link.id)?.hidden)
+    .linkVisibility(linkVisible)
     .linkWidth(linkWidth)
     .linkCurvature("curvature")
     .linkCurveRotation("curveRotation")
@@ -739,6 +807,8 @@ function mount(element, scene, callbacks = {}) {
       initialFit = false;
       frameGraph(0);
     });
+
+  performanceFrame = window.requestAnimationFrame(samplePerformance);
 
   const frameGraph = (duration = 0, { preserve = false, resetReference = false } = {}) => {
     const establishReference = resetReference || !semanticReferenceDistance || !preserve;
@@ -874,7 +944,7 @@ function mount(element, scene, callbacks = {}) {
       graph.nodeVal(nodeSize);
       graph.linkOpacity(sceneLinkOpacity());
       graph.nodeVisibility(graph.nodeVisibility());
-      graph.linkVisibility(graph.linkVisibility());
+      graph.linkVisibility(linkVisible);
       refreshVisuals();
       reportCamera();
     },
@@ -885,6 +955,7 @@ function mount(element, scene, callbacks = {}) {
       window.cancelAnimationFrame(cameraFrame);
       window.cancelAnimationFrame(labelFrame);
       window.cancelAnimationFrame(labelLayoutFrame);
+      window.cancelAnimationFrame(performanceFrame);
       controls?.removeEventListener?.("change", reportCamera);
       element.removeEventListener("pointerdown", pointerDown);
       element.removeEventListener("pointermove", pointerMove);

@@ -18,6 +18,7 @@ from .adapters import (
 from .camera import GraphFakosCameraPose
 from .models import (
     GraphFakosActionStatus,
+    GraphFakosExpansionRequest,
     GraphFakosGraphAction,
     GraphFakosGraph,
     GraphFakosKnowledgeCapture,
@@ -28,7 +29,9 @@ from .provider import (
     GraphFakosGraphActionProvider,
     GraphFakosKnowledgeCaptureProvider,
     GraphFakosProvider,
+    load_expanded_graph,
 )
+from .preview import LocalPreviewProviderSession
 from .server import serve_local_viewer
 from .static import (
     GraphPreviewOutputPaths,
@@ -289,9 +292,47 @@ def handle_provider_action(
     path: str,
     payload: dict[str, object],
 ) -> dict[str, object]:
+    if path == "/api/import":
+        if not isinstance(provider, LocalPreviewProviderSession):
+            return {
+                "ok": False,
+                "error": "visual import is available only in local preview",
+            }
+        payload_format = payload.get("format")
+        graph_payload = payload.get("payload")
+        if not isinstance(payload_format, str) or not isinstance(graph_payload, dict):
+            raise TypeError("import requires string format and object payload")
+        graph = provider.import_payload(payload_format, graph_payload)
+        return {"ok": True, "graph": graph.to_dict()}
+    if path == "/api/expand":
+        expansion = GraphFakosExpansionRequest.from_dict(payload)
+        request_payload = payload.get("request", {})
+        request = (
+            GraphFakosRequest.from_dict(request_payload)
+            if isinstance(request_payload, dict)
+            else GraphFakosRequest()
+        )
+        graph = load_expanded_graph(provider, request, expansion)
+        if graph is None:
+            return {"ok": False, "error": "provider does not support bounded expansion"}
+        return {
+            "ok": True,
+            "graph": graph.to_dict(),
+            "expansion": expansion.to_dict(),
+        }
+    if path == "/api/reset":
+        if not isinstance(provider, LocalPreviewProviderSession):
+            return {"ok": False, "error": "reset is available only in local preview"}
+        return {"ok": True, "graph": provider.reset_graph().to_dict()}
     if path == "/api/action":
         action = GraphFakosGraphAction.from_dict(payload)
-        if not isinstance(provider, GraphFakosGraphActionProvider):
+        actions_supported = (
+            not isinstance(provider, LocalPreviewProviderSession)
+            or provider.supports_graph_actions
+        )
+        if not actions_supported or not isinstance(
+            provider, GraphFakosGraphActionProvider
+        ):
             status = GraphFakosActionStatus(
                 action_id=action.action_id,
                 status="unsupported",
@@ -312,7 +353,13 @@ def handle_provider_action(
     if path != "/api/knowledge":
         return {"ok": False, "error": f"unsupported GraphFakos action path: {path}"}
     capture = GraphFakosKnowledgeCapture.from_dict(payload)
-    if not isinstance(provider, GraphFakosKnowledgeCaptureProvider):
+    capture_supported = (
+        not isinstance(provider, LocalPreviewProviderSession)
+        or provider.supports_knowledge_capture
+    )
+    if not capture_supported or not isinstance(
+        provider, GraphFakosKnowledgeCaptureProvider
+    ):
         return {
             "ok": False,
             "error": "provider does not support workbench knowledge capture",
@@ -409,21 +456,22 @@ def ui_preview_main(argv: list[str] | None = None) -> int:
     provider = _provider_from_args(args)
     request = _request_from_args(args)
     if args.serve:
+        preview_provider = LocalPreviewProviderSession(provider)
         result = serve_local_viewer(
             render_path=lambda path, query: render_provider_path(
-                provider,
+                preview_provider,
                 request,
                 path,
                 query,
             ),
             render_fragment_path=lambda path, query: render_provider_path_fragment(
-                provider,
+                preview_provider,
                 request,
                 path,
                 query,
             ),
             handle_action=lambda path, payload: handle_provider_action(
-                provider,
+                preview_provider,
                 path,
                 payload,
             ),

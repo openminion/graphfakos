@@ -1375,6 +1375,7 @@
       kind: node.dataset.kind || "node",
       clusterId: node.dataset.clusterId || node.dataset.kind || "",
       degree: number(node.dataset.degree, 0),
+      score: number(node.dataset.score, 0),
       summary: node.dataset.summary || "",
       contentPreview: node.dataset.contentPreview || node.dataset.summary || "",
       priority: node.dataset.labelPriority || "ambient",
@@ -1387,6 +1388,7 @@
       sourceId: edge.dataset.sourceId || "",
       targetId: edge.dataset.targetId || "",
       kind: edge.dataset.kind || "edge",
+      aggregate: edge.dataset.kind === "edge_bundle",
       selected: edge.dataset.edgeId === state.selected_edge_id,
       hidden: edge.dataset.hidden === "true",
     })),
@@ -1400,20 +1402,23 @@
       kind: node.kind || "node",
       clusterId: node.provider_payload?.cluster_id || node.visual?.group || node.kind || "",
       degree: 0,
+      score: number(node.score, 0),
       summary: node.summary || node.source || node.id,
       contentPreview: node.content_preview || node.provider_payload?.content_preview || node.summary || "",
       priority: state.selected_node_ids.includes(node.id) ? "focus" : "ambient",
       selected: state.selected_node_ids.includes(node.id),
       hidden: state.hidden_groups.includes(node.kind || "")
-        || state.hidden_groups.includes(node.provider_payload?.cluster_id || node.visual?.group || ""),
+        || state.hidden_groups.includes(node.provider_payload?.cluster_id || node.visual?.group || "")
+        || node.provider_payload?.viewer_hidden === true,
     })),
     links: (graph.edges || []).map((edge) => ({
       id: edge.id,
       sourceId: edge.source_id,
       targetId: edge.target_id,
       kind: edge.kind || "edge",
+      aggregate: edge.kind === "edge_bundle",
       selected: edge.id === state.selected_edge_id,
-      hidden: false,
+      hidden: edge.provider_payload?.viewer_hidden === true,
     })),
   });
 

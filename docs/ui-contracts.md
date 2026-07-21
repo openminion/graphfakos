@@ -25,9 +25,12 @@ GraphFakos owns the reusable viewer layer:
 13. reusable viewer state, command, event, expansion, knowledge-capture, and
     theme DTOs,
 14. packaged browser runtime and true-3D renderer assets,
-15. reusable viewer test assertions.
+15. reusable viewer test assertions,
 16. provider-neutral connection explanations and portable investigation-session
-    artifacts.
+    artifacts,
+17. provider-declared perspectives and inspector field schemas,
+18. local visual import, linked distributions, direct selection workflows,
+    focus location, progressive edge detail, and renderer diagnostics.
 
 Provider packages own their data semantics and adapter mapping. They should not
 fork GraphFakos viewer HTML, duplicate local-server behavior, or create a
@@ -250,6 +253,40 @@ stale node.
 At narrow breakpoints, package navigation starts as a compact sticky header so
 the graph remains in the initial viewport. The menu toggle exposes its expanded
 state, and Escape closes an expanded menu while returning focus to the toggle.
+
+## Graph Analysis Workflows
+
+The graph surface may expose compact workflows without becoming a second graph
+database or inventing provider semantics:
+
+1. `Load details` sends `GraphFakosExpansionRequest` to an optional expansion
+   provider and replaces only the local preview slice with the validated result.
+2. `Open data` accepts a graph artifact or provider-envelope JSON file in the
+   local preview process. It does not upload, persist, or rewrite provider truth.
+3. Edge level of detail keeps selected, focused, bundled, and aggregate links
+   visible while sampling ambient links more aggressively at overview distance.
+4. An off-screen focus locator identifies the primary selected node and returns
+   the camera to its neighborhood without changing graph membership.
+5. Incoming, outgoing, inverse, isolate, exclude, and connected-only selection
+   workflows operate on visible provider-neutral ids and remain reversible.
+6. Degree and score distributions select the nodes represented by a bin. They
+   do not infer semantic categories or update provider data.
+7. Perspectives combine portable layout, renderer, filter, and style fields.
+   Built-in and provider-declared perspectives use routes; user-saved
+   perspectives use browser-local storage.
+8. Node marks adjust within bounded limits as camera distance changes so zoom
+   does not turn points into oversized discs or invisible pixels.
+9. Providers may declare inspector fields for a node kind. Field declarations
+   choose a stable node field or `provider_payload` key; editability remains an
+   affordance until an explicit provider action accepts the change.
+10. The optional performance HUD reports sampled browser FPS, average frame
+    time, semantic detail, and visible versus available node and link counts.
+
+Provider declarations belong in `GraphFakosGraph.provider_payload` under
+`perspectives` and `inspector_schemas`, or under the same keys in a nested
+`viewer_envelope`. Invalid typed declarations fail during rendering rather than
+being silently reinterpreted. Provider expansion, actions, captures,
+authorization, persistence, and semantic queries remain provider-owned.
 
 ## Local Workbench Server Contract
 

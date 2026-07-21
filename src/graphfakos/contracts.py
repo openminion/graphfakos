@@ -51,6 +51,13 @@ from .provider import (
     validate_graph,
 )
 from .renderers import SUPPORTED_RENDER_ENGINES, validate_render_engine
+from .viewer_contracts import (
+    GraphFakosInspectorField,
+    GraphFakosInspectorSchema,
+    GraphFakosPerspective,
+    graph_perspectives,
+    inspector_schema_for,
+)
 
 __all__ = [
     "GRAPHFAKOS_ARTIFACT_SCHEMA",
@@ -68,10 +75,13 @@ __all__ = [
     "GraphFakosGraphActionProvider",
     "GraphFakosGraphAnalytics",
     "GraphFakosInvestigationSession",
+    "GraphFakosInspectorField",
+    "GraphFakosInspectorSchema",
     "GraphFakosKnowledgeCapture",
     "GraphFakosKnowledgeCaptureProvider",
     "GraphFakosNode",
     "GraphFakosOverlayProvider",
+    "GraphFakosPerspective",
     "GraphFakosProvider",
     "GraphFakosProvenance",
     "GraphFakosRequest",
@@ -90,6 +100,8 @@ __all__ = [
     "explain_connection",
     "graph_artifact_schema",
     "graph_from_dict",
+    "graph_perspectives",
+    "inspector_schema_for",
     "load_comparison_graph",
     "load_expanded_graph",
     "load_graph_artifact",

@@ -16,6 +16,7 @@ from graphfakos import (
     make_local_viewer_server,
 )
 from graphfakos.cli import handle_provider_action
+from graphfakos.preview import LocalPreviewProviderSession
 from graphfakos.ui import render_provider_path, render_provider_path_fragment
 
 
@@ -392,3 +393,88 @@ def test_local_preview_server_redirects_browser_form_actions_to_viewer() -> None
     assert "<graphfakos-viewer" in action_html
     assert "Browser form capture returns to the graph." in capture_html
     assert "Browser form action" in action_html
+
+
+def test_local_preview_imports_graph_artifact_and_keeps_it_across_routes() -> None:
+    session = LocalPreviewProviderSession(FixtureGraphProvider())
+    request = GraphFakosRequest(screen="explore")
+    server = make_local_viewer_server(
+        render_path=lambda path, query: render_provider_path(
+            session, request, path, query
+        ),
+        render_fragment_path=lambda path, query: render_provider_path_fragment(
+            session, request, path, query
+        ),
+        handle_action=lambda path, payload: handle_provider_action(
+            session, path, payload
+        ),
+        port=0,
+    )
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    imported_graph = DemoGraphProvider("agent-memory").load_graph(request)
+    try:
+        base_url = server.preview_url.rsplit("/", 1)[0]
+        import_request = Request(
+            f"{base_url}/api/import",
+            data=json.dumps(
+                {"format": "graph_artifact", "payload": imported_graph.to_dict()}
+            ).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urlopen(import_request, timeout=5) as response:
+            result = json.loads(response.read().decode("utf-8"))
+        with urlopen(f"{base_url}/explore", timeout=5) as response:
+            html = response.read().decode("utf-8")
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+    assert result["ok"] is True
+    assert result["graph"]["graph_id"] == imported_graph.graph_id
+    assert imported_graph.label in html
+    assert (
+        handle_provider_action(session, "/api/reset", {})["graph"]["graph_id"]
+        == imported_graph.graph_id
+    )
+
+
+def test_local_preview_does_not_advertise_unsupported_provider_mutations() -> None:
+    session = LocalPreviewProviderSession(FixtureGraphProvider())
+
+    action = handle_provider_action(
+        session,
+        "/api/action",
+        {
+            "action_id": "unsupported:action",
+            "action_type": "draft_node",
+            "label": "Unsupported draft",
+        },
+    )
+    capture = handle_provider_action(
+        session,
+        "/api/knowledge",
+        {"text": "Unsupported capture"},
+    )
+
+    assert action["ok"] is False
+    assert action["status"]["status"] == "unsupported"
+    assert capture["ok"] is False
+
+
+def test_local_preview_applies_provider_backed_expansion() -> None:
+    provider = DemoGraphProvider("workbench-mixed")
+    session = LocalPreviewProviderSession(provider)
+    request = GraphFakosRequest(screen="explore")
+    source_id = provider.load_graph(request).nodes[0].id
+    result = handle_provider_action(
+        session,
+        "/api/expand",
+        {"source_id": source_id, "depth": 1, "request": request.to_dict()},
+    )
+
+    assert result["ok"] is True
+    assert result["graph"]["stats"]["expanded_source_id"] == source_id
+    assert session.load_graph(request).graph_id.endswith(f":expanded:{source_id}")

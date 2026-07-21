@@ -28,16 +28,17 @@ const nodeHitMaterial = new MeshBasicMaterial({
 function clusterCenters(nodes) {
   const clusterIds = [...new Set(nodes.map((node) => node.clusterId || node.kind || "unclustered"))].sort();
   if (clusterIds.length === 1) return new Map([[clusterIds[0], { x: 0, y: 0, z: 0 }]]);
-  const spread = Math.min(1460, 310 + Math.sqrt(clusterIds.length) * 138);
+  const spread = Math.min(5200, 540 + Math.sqrt(clusterIds.length) * 260);
   const goldenAngle = Math.PI * (3 - Math.sqrt(5));
   return new Map(clusterIds.map((clusterId, index) => {
-    const ring = Math.sqrt((index + 0.9) / clusterIds.length);
-    const radius = spread * ring;
-    const angle = index * goldenAngle;
+    const ring = Math.sqrt((index + 1.4) / clusterIds.length);
+    const wobble = ((stableHash(`${clusterId}:wobble`) % 100) - 50) / 100;
+    const radius = spread * ring * (0.88 + Math.abs(wobble) * 0.28);
+    const angle = index * goldenAngle + wobble * 0.36;
     return [clusterId, {
       x: Math.cos(angle) * radius,
       y: Math.sin(angle) * radius,
-      z: ((index % 7) - 3) * 92,
+      z: ((index % 11) - 5) * 104 + wobble * 64,
     }];
   }));
 }
@@ -46,11 +47,11 @@ function seededPosition(id, clusterId, centers) {
   const nodeHash = stableHash(id);
   const center = centers.get(clusterId || "unclustered") || { x: 0, y: 0, z: 0 };
   const localAngle = (nodeHash % 360) * (Math.PI / 180);
-  const localRadius = 12 + (nodeHash % 46);
+  const localRadius = 18 + (nodeHash % 78);
   return {
     x: center.x + Math.cos(localAngle) * localRadius,
     y: center.y + Math.sin(localAngle) * localRadius,
-    z: center.z + ((nodeHash % 47) - 23) * 1.7,
+    z: center.z + ((nodeHash % 47) - 23) * 2.3,
   };
 }
 
@@ -70,6 +71,19 @@ function clusterForce(nodes, centers) {
     return force;
   };
   return force;
+}
+
+function forceProfile(visibleCount) {
+  return visibleCount > 160
+    ? { charge: -420, linkDistance: 180, linkStrength: 0.14, clusterStrength: 0.09 }
+    : { charge: -240, linkDistance: 118, linkStrength: 0.2, clusterStrength: 0.15 };
+}
+
+function applyForces(graph, nodes, centers, visibleCount) {
+  const profile = forceProfile(visibleCount);
+  graph.d3Force("charge")?.strength(profile.charge);
+  graph.d3Force("link")?.distance(profile.linkDistance).strength(profile.linkStrength);
+  graph.d3Force("cluster", clusterForce(nodes, centers).strength(profile.clusterStrength));
 }
 
 function labelContext(node) {
@@ -142,12 +156,12 @@ const hash = (value) => {
 const position = (id, clusterId, center) => {
   const nodeHash = hash(id);
   const localAngle = (nodeHash % 360) * Math.PI / 180;
-  const localRadius = 12 + (nodeHash % 46);
+  const localRadius = 18 + (nodeHash % 78);
   return {
     id,
     x: center.x + Math.cos(localAngle) * localRadius,
     y: center.y + Math.sin(localAngle) * localRadius,
-    z: center.z + ((nodeHash % 47) - 23) * 1.7,
+    z: center.z + ((nodeHash % 47) - 23) * 2.3,
   };
 };
 self.onmessage = ({ data }) => {
@@ -336,12 +350,12 @@ function mount(element, scene, callbacks = {}) {
     );
   };
   const nodeSize = (node) => {
-    const baseSize = 0.42 + Math.sqrt(Math.max(0, node.degree || 0)) * 0.09;
+    const baseSize = 0.24 + Math.sqrt(Math.max(0, node.degree || 0)) * 0.052;
     const focusBoost = selectedNodeIds.has(node.id) || node.id === hoveredNodeId || node.id === previewedNodeId
-      ? 1.8
-      : focusedNodeIds.has(node.id) && activeFocusId ? 1.4 : 1;
+      ? 1.62
+      : focusedNodeIds.has(node.id) && activeFocusId ? 1.28 : 1;
     const sparseScale = nodeScaleForCount(visibleNodeCount());
-    return Math.max(0.3, Math.min(16, baseSize * focusBoost * sparseScale * semanticNodeScale * (activeScene.nodeScale || 1)));
+    return Math.max(0.16, Math.min(9, baseSize * focusBoost * sparseScale * semanticNodeScale * (activeScene.nodeScale || 1)));
   };
   const shell = element.closest(".gf-canvas-shell");
   const focusLocator = shell?.querySelector("[data-gf-focus-locator]");
@@ -842,9 +856,7 @@ function mount(element, scene, callbacks = {}) {
     }, reducedMotion ? 0 : duration + 20);
   };
 
-  graph.d3Force("charge")?.strength(-210);
-  graph.d3Force("link")?.distance(112).strength(0.2);
-  graph.d3Force("cluster", clusterForce(nodes, centers));
+  applyForces(graph, nodes, centers, visibleNodeCount());
   graph.nodeThreeObject(nodeObject);
   graph.nodeThreeObjectExtend(true);
   const controls = graph.controls?.();
@@ -935,7 +947,7 @@ function mount(element, scene, callbacks = {}) {
         links = shapeLinks(nodes, nextScene.links);
         if (!nodes.some((node) => node.id === previewedNodeId && !node.hidden)) previewedNodeId = "";
         graph.graphData({ nodes, links });
-        graph.d3Force("cluster", clusterForce(nodes, centers));
+        applyForces(graph, nodes, centers, visibleNodeCount());
         if (!reducedMotion) graph.d3ReheatSimulation();
       }
       refreshInteractionContext();

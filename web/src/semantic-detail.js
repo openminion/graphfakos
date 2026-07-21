@@ -1,8 +1,8 @@
 const detailBudgets = {
-  overview: 2,
-  balanced: 8,
-  detail: 16,
-  precision: 32,
+  overview: 1,
+  balanced: 4,
+  detail: 9,
+  precision: 16,
 };
 
 const clamp = (value, minimum, maximum) => Math.max(minimum, Math.min(maximum, value));
@@ -33,10 +33,11 @@ export function labelBudgetForDetail(level, density = 1, nodeCount = Infinity) {
 
 export function nodeScaleForCount(nodeCount) {
   const count = Math.max(0, Number(nodeCount) || 0);
-  if (count <= 16) return 32;
-  if (count <= 48) return 10;
-  if (count <= 110) return 3;
-  return 1;
+  if (count <= 16) return 18;
+  if (count <= 48) return 7;
+  if (count <= 110) return 2.2;
+  if (count <= 260) return 0.72;
+  return 0.52;
 }
 
 export function zoomStableNodeScale(zoom) {

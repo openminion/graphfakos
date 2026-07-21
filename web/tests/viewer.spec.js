@@ -23,9 +23,10 @@ test("maps camera distance to semantic graph detail", () => {
   expect(detailLevelForCamera({ nodeCount: 240, referenceDistance: 900, cameraDistance: 360 }))
     .toBe("precision");
   expect(labelBudgetForDetail("overview", 1, 240)).toBe(2);
-  expect(labelBudgetForDetail("detail", 1, 240)).toBe(16);
+  expect(labelBudgetForDetail("detail", 1, 240)).toBe(9);
   expect(nodeScaleForCount(12)).toBeGreaterThan(nodeScaleForCount(48));
   expect(nodeScaleForCount(48)).toBeGreaterThan(nodeScaleForCount(240));
+  expect(nodeScaleForCount(240)).toBeLessThan(1);
 });
 
 test("keeps node marks readable while camera zoom changes", () => {
@@ -77,6 +78,7 @@ test("shapes natural curves and separates parallel links", () => {
     { id: "parallel:a", sourceId: "a", targetId: "b" },
     { id: "parallel:b", sourceId: "a", targetId: "b" },
     { id: "cross", sourceId: "a", targetId: "c" },
+    { id: "bundle", kind: "edge_bundle", sourceId: "b", targetId: "c" },
     { id: "loop", sourceId: "a", targetId: "a" },
   ];
 
@@ -85,7 +87,8 @@ test("shapes natural curves and separates parallel links", () => {
   expect(byId.get("parallel:a").curvature).toBeLessThan(0);
   expect(byId.get("parallel:b").curvature).toBeGreaterThan(0);
   expect(byId.get("parallel:a").curveRotation).toBe(byId.get("parallel:b").curveRotation);
-  expect(Math.abs(byId.get("cross").curvature)).toBeLessThan(Math.abs(byId.get("parallel:a").curvature));
+  expect(Math.abs(byId.get("cross").curvature)).toBeGreaterThan(0.3);
+  expect(Math.abs(byId.get("bundle").curvature)).toBeGreaterThan(Math.abs(byId.get("cross").curvature));
   expect(Math.abs(byId.get("loop").curvature)).toBeGreaterThan(0.5);
   expect(shapeLinks(nodes, links)).toEqual(shaped);
 });

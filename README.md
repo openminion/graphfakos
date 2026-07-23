@@ -36,7 +36,18 @@ frames the shared graph workbench as a provider-neutral lens over nodes, edges,
 provenance, citations, and package-owned graph semantics rather than as a graph
 builder or memory store.
 
-## Initial Release Status
+## Read This First
+
+1. Use [At a Glance](#at-a-glance) to confirm the package shape.
+2. Use [Installation](#installation) for a local install.
+3. Use [Provider Adapter Contract](#provider-adapter-contract) if you want to
+   plug in your own graph source.
+4. Use [Examples](#examples) to render or preview a graph.
+5. Use [What the Package Does Not Provide](#what-the-package-does-not-provide)
+   to avoid confusing GraphFakos with a memory engine, indexer, or source of
+   graph truth.
+
+## Public Status
 
 GraphFakos is a `0.0.6` semantic-alpha release intended for local package
 integrations, adapter development, and visual graph inspection.
@@ -69,6 +80,21 @@ GraphFakos.
 - type marker: `py.typed`
 - local viewer: static HTML and local preview server
 - compatibility proof: fake third-party provider plus package viewer tests
+
+## Common Commands
+
+```bash
+python3.11 -m pip install graphfakos
+graphfakos-smoke
+graphfakos-ui --serve --open
+```
+
+For local development:
+
+```bash
+python3.11 -m pip install -e ".[dev]"
+make check
+```
 
 ## Installation
 

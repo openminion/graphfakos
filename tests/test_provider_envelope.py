@@ -5,6 +5,7 @@ import subprocess
 import sys
 
 from graphfakos.adapters.provider_envelope import graph_from_provider_envelope
+from scripts.generate_benchmark_envelopes import benchmark_envelope
 
 
 def _provider_envelope() -> dict[str, object]:
@@ -158,3 +159,25 @@ def test_provider_envelope_cli_renders_3d_space_route(tmp_path) -> None:
     assert "render-engine='3d'" in html
     assert "3D navigation mode is selected" in html
     assert "199998 node(s)" in html
+
+
+def test_benchmark_envelopes_keep_large_clusters_and_dynamic_bundles() -> None:
+    envelope = benchmark_envelope(1_000_000)
+    cluster_counts = [item["node_count"] for item in envelope["clusters"]]
+    bundle_targets = {
+        (item["source_cluster_id"], item["target_cluster_id"])
+        for item in envelope["edge_bundles"]
+    }
+
+    assert envelope["graph_stats"]["raw_node_count"] == 1_000_000
+    assert envelope["graph_stats"]["min_nodes_per_cluster"] >= 100
+    assert min(cluster_counts) >= 100
+    assert len(envelope["clusters"]) == 1_000
+    assert len({item["kind"] for item in envelope["clusters"]}) > 3
+    assert len(bundle_targets) > 240
+    assert envelope["nodes"][0]["content"]
+    assert envelope["render_hint"] == {
+        "preferred_engine": "3d",
+        "theme": "space",
+        "layout": "islands",
+    }

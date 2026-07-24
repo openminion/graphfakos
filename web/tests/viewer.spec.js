@@ -22,17 +22,17 @@ test("maps camera distance to semantic graph detail", () => {
     .toBe("detail");
   expect(detailLevelForCamera({ nodeCount: 240, referenceDistance: 900, cameraDistance: 360 }))
     .toBe("precision");
-  expect(labelBudgetForDetail("overview", 1, 240)).toBe(2);
+  expect(labelBudgetForDetail("overview", 1, 240)).toBe(1);
   expect(labelBudgetForDetail("detail", 1, 240)).toBe(9);
   expect(nodeScaleForCount(12)).toBeGreaterThan(nodeScaleForCount(48));
   expect(nodeScaleForCount(48)).toBeGreaterThan(nodeScaleForCount(240));
-  expect(nodeScaleForCount(240)).toBeLessThan(1);
+  expect(nodeScaleForCount(240)).toBeLessThan(0.5);
 });
 
 test("keeps node marks readable while camera zoom changes", () => {
   expect(zoomStableNodeScale(4)).toBeLessThan(zoomStableNodeScale(1));
   expect(zoomStableNodeScale(0.25)).toBeGreaterThan(zoomStableNodeScale(1));
-  expect(zoomStableNodeScale(100)).toBeGreaterThanOrEqual(0.52);
+  expect(zoomStableNodeScale(100)).toBeGreaterThanOrEqual(0.4);
 });
 
 test("progressive edge detail preserves aggregates and active context", () => {
@@ -110,6 +110,7 @@ test("mounts and navigates the packaged 3D graph", async ({ page }, testInfo) =>
   await page.getByRole("button", { name: "Fit selected or visible graph" }).click();
   await page.getByRole("link", { name: "Light" }).click();
   await expect(page.locator("body")).toHaveAttribute("data-theme", "default");
+  await expect(page.getByRole("link", { name: "Dark" })).toBeVisible();
   await page.screenshot({ path: "test-results/graphfakos-3d-1280x720.png", fullPage: false });
   await testInfo.attach("performance", {
     body: JSON.stringify({
@@ -231,7 +232,7 @@ test("supports touch-first inspection and pinch navigation", async ({ browser })
   await expect(shell).toHaveAttribute("data-touch-engaged", "true");
   await expect(guide).toHaveCSS("opacity", "0");
 
-  const label = page.locator(".gf-webgl-label[data-collided='false']").first();
+  const label = page.locator(".gf-webgl-label").first();
   await expect(label).toBeVisible();
   const nodeId = await label.getAttribute("data-node-id");
   expect(nodeId).toBeTruthy();
@@ -568,6 +569,28 @@ test("keeps Obsidian-style display controls on the graph surface", async ({ page
   expect(state.node_scale).toBeLessThan(1);
   expect(state.scene_level).toBe("cluster");
   await expect(display.locator("[data-gf-scene-level='cluster']")).toHaveAttribute("data-active", "true");
+});
+
+test("runs graph operating dock controls without leaving the canvas", async ({ page }) => {
+  await page.goto("/explore?theme=space&render_engine=3d&layout=grouped");
+  await expect(page.locator(".gf-canvas-shell")).toHaveAttribute("data-webgl-ready", "true");
+  await expect(page.locator("[data-gf-operating-dock]")).toBeVisible();
+
+  const viewer = page.locator("graphfakos-viewer");
+  await page.locator("[data-gf-edge-mode='focus']").click();
+  await expect.poll(() => viewer.evaluate((element) => element.getState().edge_clutter))
+    .toBe("focus");
+  await expect(page.locator("[data-gf-edge-mode='focus']")).toHaveAttribute("data-active", "true");
+
+  await page.locator("[data-gf-workbook-name]").first().fill("Focus pass");
+  await page.locator("[data-gf-workbook-action='save']").first().click();
+  await expect(page.locator("[data-gf-workbook-status]").first()).toContainText("Saved local slot");
+  await expect(page.locator("[data-gf-workbook-list]").first()).toContainText("Focus pass");
+
+  const localRoute = await page.locator("[data-gf-expand-neighborhood]").first().getAttribute("href");
+  expect(localRoute).toContain("/neighborhood?");
+  expect(localRoute).toContain("max_depth=1");
+  expect(await page.locator("[data-gf-search-jump]").count()).toBeGreaterThan(0);
 });
 
 test("runs selection, distribution, perspective, and import workflows", async ({ page }) => {

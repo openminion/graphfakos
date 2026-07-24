@@ -246,6 +246,9 @@ SURFACE_STYLE = """
   opacity: 0;
   pointer-events: none;
 }
+.gf-node[data-query-match="false"] {
+  opacity: .2;
+}
 .gf-webgl-label strong { font: inherit; }
 .gf-webgl-label small { display: none; }
 .gf-webgl-label:hover,

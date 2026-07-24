@@ -28,6 +28,8 @@ def _layout_positions(
         positions = _ring_positions(graph, width, height)
     elif request.layout == "grouped":
         positions = _grouped_positions(graph, width, height)
+    elif request.layout == "islands":
+        positions = _island_positions(graph, width, height)
     elif request.layout == "focus":
         positions = _focus_positions(graph, width, height, focus_node_id)
     elif request.layout == "radial":
@@ -308,6 +310,39 @@ def _grouped_positions(
                 height,
                 34.0,
             )
+    return positions
+
+
+def _island_positions(
+    graph: GraphFakosGraph,
+    width: int,
+    height: int,
+) -> dict[str, tuple[float, float]]:
+    groups: dict[str, list[GraphFakosNode]] = defaultdict(list)
+    for node in _ranked_nodes(graph, set()):
+        groups[_node_cluster_id(node) or node.kind or "node"].append(node)
+    group_names = sorted(groups)
+    if not group_names:
+        return {}
+    center_x = width / 2
+    center_y = height / 2
+    usable_x = width * 0.43
+    usable_y = height * 0.38
+    golden_angle = pi * (3 - sqrt(5))
+    positions: dict[str, tuple[float, float]] = {}
+    for group_index, group_name in enumerate(group_names):
+        ring = sqrt((group_index + 1.2) / max(len(group_names), 1))
+        angle = group_index * golden_angle - (pi / 2)
+        cluster_nodes = groups[group_name]
+        cluster_center_x = center_x + usable_x * ring * cos(angle)
+        cluster_center_y = center_y + usable_y * ring * sin(angle)
+        local_radius = max(16.0, min(64.0, 7.0 + sqrt(len(cluster_nodes)) * 8.5))
+        for node_index, node in enumerate(cluster_nodes):
+            local_angle = node_index * golden_angle
+            local_ring = sqrt((node_index + 0.5) / max(len(cluster_nodes), 1))
+            local_x = cluster_center_x + local_radius * local_ring * cos(local_angle)
+            local_y = cluster_center_y + local_radius * local_ring * sin(local_angle)
+            positions[node.id] = _bounded_point(local_x, local_y, width, height, 34.0)
     return positions
 
 

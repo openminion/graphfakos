@@ -225,6 +225,7 @@ const sceneState = runtime.reduce(
   runtime.reduce(state, { name: "scene-setting", payload: { key: "node_scale", value: 0.65 } }),
   { name: "scene-level", payload: { value: "cluster" } }
 );
+const edgeModeState = runtime.reduce(state, { name: "edge-mode", value: "focus" });
 state = runtime.reduce(state, { name: "camera", payload: { x: 8, y: -2, zoom: 1.25, yaw: 16, pitch: -12 } });
 state = runtime.reduce(state, { name: "group-toggle", target_id: "provider" });
 state = runtime.reduce(state, { name: "filter", target_id: "node_kind", payload: { value: "memory" } });
@@ -404,6 +405,7 @@ process.stdout.write(JSON.stringify({
   clusterPinnedState,
   restoredGroupsState,
   sceneState,
+  edgeModeState,
   bounded,
   emptyStatus,
   selectedStatus,
@@ -458,6 +460,7 @@ process.stdout.write(JSON.stringify({
     assert payload["restoredGroupsState"]["hidden_groups"] == []
     assert payload["sceneState"]["node_scale"] == 0.65
     assert payload["sceneState"]["scene_level"] == "cluster"
+    assert payload["edgeModeState"]["edge_clutter"] == "focus"
     assert payload["bounded"] == ["inside:a", "inside:b"]
     assert payload["emptyStatus"] == (
         "No selected graph items. Shift-click nodes or Shift-drag canvas to select several."

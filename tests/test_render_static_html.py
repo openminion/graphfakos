@@ -147,6 +147,7 @@ def test_static_viewer_renders_graph_canvas_and_inspector() -> None:
     assert ".gf-surface-menu" in html
     assert ".gf-selection-box" in html
     assert "data-gf-theme-toggle='true'" in html
+    assert ">Dark</a>" in html
     assert "data-gf-spatial-trail='true'" in html
     assert "data-gf-spatial-root='true'" in html
 
@@ -185,6 +186,17 @@ def test_local_lens_keeps_focus_but_requests_a_fresh_camera() -> None:
     assert "data-state-json=" in html
     assert 'customElements.define("graphfakos-viewer"' in html
     assert "<script>" in html
+
+
+def test_space_theme_toolbar_offers_light_mode() -> None:
+    html = render_static_html(
+        FixtureGraphProvider(),
+        GraphFakosRequest(render_engine="3d", theme="space"),
+    )
+
+    assert "data-theme='space'" in html
+    assert "data-gf-theme-toggle='true'" in html
+    assert ">Light</a>" in html
 
 
 def test_static_viewer_renders_route_backed_command_palette() -> None:
@@ -340,6 +352,15 @@ def test_static_viewer_renders_competitive_workbench_controls() -> None:
     assert "provider_decides" in html
     assert "data-gf-saved-view='true'" in html
     assert "data-gf-saved-queries='true'" in html
+    assert "data-gf-operating-dock='true'" in html
+    assert "Saved views" in html
+    assert "Search paths" in html
+    assert "data-gf-search-jump=" in html
+    assert "data-gf-expand-neighborhood='true'" in html
+    assert "Provider-owned expansion plan" in html
+    assert "data-gf-edge-mode='focus'" in html
+    assert "edge_clutter=focus" in html
+    assert "Provider proof" in html
     assert "data-gf-workbook='true'" in html
     assert "data-gf-workbook-action='save'" in html
     assert "data-gf-workbook-action='clear'" in html

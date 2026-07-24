@@ -41,6 +41,7 @@ from graphfakos.ui.viewer.workbench_tools import (
     canvas_workbench,
     density_tuned_request,
     focus_locator,
+    graph_operating_dock,
     performance_hud,
     provider_inspector_fields,
 )
@@ -257,6 +258,7 @@ def _graph_canvas(
         "<button type='button' class='gf-compact-button' data-gf-live-resync='true' "
         "hidden>Resync live graph</button>"
         f"{_group_controls(graph, request)}"
+        f"{graph_operating_dock(graph, request)}"
         f"{canvas_workbench(graph, request)}"
         f"{_render_budget_panel(request, hidden_nodes, hidden_edges)}"
         f"{_graph_canvas_legend(graph, request)}</section>"
@@ -845,12 +847,22 @@ def _node_provider_content(
 
 def _node_content_title(graph: GraphFakosGraph, node: GraphFakosNode) -> str:
     content = _node_provider_content(graph, node)
-    return str(content.get("title") or node.label or node.id)
+    payload = node.provider_payload
+    return str(content.get("title") or payload.get("title") or node.label or node.id)
 
 
 def _node_content_preview(graph: GraphFakosGraph, node: GraphFakosNode) -> str:
     content = _node_provider_content(graph, node)
-    text = str(content.get("text") or content.get("preview") or "")
+    payload = node.provider_payload
+    text = str(
+        content.get("text")
+        or content.get("preview")
+        or payload.get("content")
+        or payload.get("text")
+        or payload.get("preview")
+        or payload.get("summary")
+        or ""
+    )
     if text.strip():
         return text.strip()
     return node.summary or node.source or node.id

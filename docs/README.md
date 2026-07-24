@@ -11,6 +11,8 @@ Start with:
 - [Artifact interchange](artifact-interchange.md)
 - [Source tree owner map](source-tree-owner-map.md)
 - [UI contracts](ui-contracts.md)
+- [Dense graph usability next pass spec](specs/dense-graph-usability-next-pass.md)
+- [Dense graph usability next pass tracker](trackers/dense-graph-usability-next-pass-tracker.md)
 - [Viewer accessibility matrix](accessibility.md)
 - [Provider envelope](provider-envelope.md)
 - [Live graph sessions](live-sessions.md)

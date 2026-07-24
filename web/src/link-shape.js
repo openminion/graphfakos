@@ -25,10 +25,10 @@ function rounded(value) {
   return Math.round(value * 10_000) / 10_000;
 }
 
-const localCurve = 0.2;
-const bridgeCurve = 0.32;
-const bundleCurve = 0.42;
-const parallelSpacing = 0.13;
+const localCurve = 0.22;
+const bridgeCurve = 0.38;
+const bundleCurve = 0.56;
+const parallelSpacing = 0.16;
 
 function curveProfile(source, target, sameCluster, key, index, lane, aggregate) {
   if (source === target) {
@@ -38,12 +38,17 @@ function curveProfile(source, target, sameCluster, key, index, lane, aggregate) 
     };
   }
 
+  const rawWeight = aggregate?.edgeCount || aggregate?.weight || aggregate?.edge_count || 1;
+  const weight = Math.min(
+    0.2,
+    Math.log10(Math.max(1, Number(rawWeight))) * 0.04,
+  );
   const base = (
     aggregate ? bundleCurve : sameCluster ? localCurve : bridgeCurve
-  ) + (stableHash(key) % 7) * 0.018;
+  ) + weight + (stableHash(key) % 9) * 0.018;
   const sign = lane === 0 ? curveSign(key) : Math.sign(lane);
   return {
-    curvature: rounded(sign * Math.min(0.62, base + Math.abs(lane) * parallelSpacing)),
+    curvature: rounded(sign * Math.min(0.82, base + Math.abs(lane) * parallelSpacing)),
     curveRotation: (stableHash(`${key}:${source}:${target}:rotation`) % 6283) / 1000,
   };
 }
@@ -66,7 +71,10 @@ export function shapeLinks(nodes, links) {
       const sameCluster = clusterByNode.get(source) === clusterByNode.get(target);
       const aggregate = link.kind === "edge_bundle" || link.aggregate === true;
       const lane = index - (ordered.length - 1) / 2;
-      profileById.set(link.id, curveProfile(source, target, sameCluster, key, index, lane, aggregate));
+      profileById.set(
+        link.id,
+        curveProfile(source, target, sameCluster, key, index, lane, aggregate ? link : null),
+      );
     });
   }
 

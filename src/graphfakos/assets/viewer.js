@@ -276,6 +276,10 @@
     if (action === "scene-level" && ["overview", "islands", "cluster", "local", "precision"].includes(payload.value)) {
       next.scene_level = payload.value;
     }
+    if (action === "edge-mode") {
+      const mode = command.value || payload.value || payload.mode;
+      if (["normal", "reduced", "bundles", "local", "focus"].includes(mode)) next.edge_clutter = mode;
+    }
     if (action === "filter") {
       const key = payload.key || command.target_id;
       if (key) {
@@ -440,30 +444,30 @@
   };
 
   const renderWorkbookSlots = (root, slots, navigate) => {
-    const list = root.querySelector("[data-gf-workbook-list]");
-    if (!list) return;
-    list.replaceChildren();
-    if (!slots.length) {
-      const empty = document.createElement("p");
-      empty.className = "gf-note";
-      empty.textContent = "No local saved slots yet. Save one to keep this camera, filters, selection, and pins in this browser.";
-      list.appendChild(empty);
-      return;
-    }
-    slots.forEach((slot) => {
-      const row = document.createElement("div");
-      row.className = "gf-workbook-slot";
-      const summary = document.createElement("span");
-      summary.textContent = `${slot.label || "Local saved view"} · ${slot.state?.screen || "explore"}`;
-      const link = document.createElement("a");
-      link.href = slot.route || "/";
-      link.textContent = "Load";
-      link.addEventListener("click", (event) => {
-        event.preventDefault();
-        navigate(slot.route || "/");
+    root.querySelectorAll("[data-gf-workbook-list]").forEach((list) => {
+      list.replaceChildren();
+      if (!slots.length) {
+        const empty = document.createElement("p");
+        empty.className = "gf-note";
+        empty.textContent = "No local saved slots yet. Save one to keep this camera, filters, selection, and pins in this browser.";
+        list.appendChild(empty);
+        return;
+      }
+      slots.forEach((slot) => {
+        const row = document.createElement("div");
+        row.className = "gf-workbook-slot";
+        const summary = document.createElement("span");
+        summary.textContent = `${slot.label || "Local saved view"} · ${slot.state?.screen || "explore"}`;
+        const link = document.createElement("a");
+        link.href = slot.route || "/";
+        link.textContent = "Load";
+        link.addEventListener("click", (event) => {
+          event.preventDefault();
+          navigate(slot.route || "/");
+        });
+        row.append(summary, link);
+        list.appendChild(row);
       });
-      row.append(summary, link);
-      list.appendChild(row);
     });
   };
 
@@ -617,6 +621,50 @@
   const connectedEdges = (shell, nodeId) => [
     ...shell.querySelectorAll(`[data-source-id="${CSS.escape(nodeId)}"], [data-target-id="${CSS.escape(nodeId)}"]`),
   ];
+
+  const edgeVisibleForMode = (edge, state, source, target) => {
+    if (source?.dataset.hidden === "true" || target?.dataset.hidden === "true") return false;
+    const selectedNodes = new Set(state.selected_node_ids || []);
+    const selected = edge.dataset.edgeId === state.selected_edge_id;
+    const incident = selectedNodes.has(edge.dataset.sourceId || "")
+      || selectedNodes.has(edge.dataset.targetId || "");
+    const aggregate = edge.dataset.kind === "edge_bundle" || edge.dataset.aggregate === "true";
+    const sameCluster = source?.dataset.clusterId
+      && source.dataset.clusterId === target?.dataset.clusterId;
+    const mode = state.edge_clutter || "normal";
+    if (mode === "focus") return selected || incident;
+    if (mode === "bundles" || mode === "reduced") return selected || incident || aggregate;
+    if (mode === "local") return selected || incident || sameCluster || aggregate;
+    return true;
+  };
+
+  const queryTokens = (query) => String(query || "")
+    .toLowerCase()
+    .split(/[^\w:.-]+/)
+    .map((token) => token.trim())
+    .filter(Boolean);
+
+  const applyQueryMarks = (root, state) => {
+    const tokens = queryTokens(state.query);
+    root.querySelectorAll(".gf-node").forEach((node) => {
+      if (!tokens.length) {
+        node.dataset.queryMatch = "true";
+        return;
+      }
+      const haystack = [
+        node.dataset.nodeId,
+        node.dataset.label,
+        node.dataset.kind,
+        node.dataset.clusterId,
+        node.dataset.source,
+        node.dataset.summary,
+        node.dataset.contentPreview,
+      ].filter(Boolean).join(" ").toLowerCase();
+      node.dataset.queryMatch = tokens.every((token) => haystack.includes(token))
+        ? "true"
+        : "false";
+    });
+  };
 
   const curvedEdgeControl = (x1, y1, x2, y2, edgeId = "") => {
     const dx = x2 - x1;
@@ -1365,6 +1413,7 @@
     nodeScale: state.node_scale,
     edgeOpacity: state.edge_opacity,
     labelDensity: state.label_density,
+    edgeMode: state.edge_clutter,
   });
 
   const webglSceneFromShell = (shell, state) => ({
@@ -1404,7 +1453,15 @@
       degree: 0,
       score: number(node.score, 0),
       summary: node.summary || node.source || node.id,
-      contentPreview: node.content_preview || node.provider_payload?.content_preview || node.summary || "",
+      contentPreview: node.content_preview
+        || node.provider_payload?.content_preview
+        || node.provider_payload?.content
+        || node.provider_payload?.text
+        || node.provider_payload?.preview
+        || node.provider_payload?.summary
+        || node.summary
+        || "",
+      provider_payload: clone(node.provider_payload),
       priority: state.selected_node_ids.includes(node.id) ? "focus" : "ambient",
       selected: state.selected_node_ids.includes(node.id),
       hidden: state.hidden_groups.includes(node.kind || "")
@@ -1417,6 +1474,7 @@
       targetId: edge.target_id,
       kind: edge.kind || "edge",
       aggregate: edge.kind === "edge_bundle",
+      weight: number(edge.weight || edge.provider_payload?.edge_count, 1),
       selected: edge.id === state.selected_edge_id,
       hidden: edge.provider_payload?.viewer_hidden === true,
     })),
@@ -2416,10 +2474,10 @@
     }
 
     #setWorkbookStatus(message, state = "") {
-      const status = this.querySelector("[data-gf-workbook-status]");
-      if (!status) return;
-      status.textContent = message;
-      status.dataset.state = state;
+      this.querySelectorAll("[data-gf-workbook-status]").forEach((status) => {
+        status.textContent = message;
+        status.dataset.state = state;
+      });
     }
 
     #renderWorkbook() {
@@ -2498,6 +2556,7 @@
       writeStoredTheme(this.state.theme);
       this.querySelectorAll(".gf-canvas-shell").forEach((shell) => applyCamera(shell, this.state));
       this.querySelectorAll(".gf-canvas-shell").forEach((shell) => applyPinnedPositions(shell, this.state));
+      applyQueryMarks(this, this.state);
       this.querySelectorAll(".gf-node").forEach((node) => {
         node.dataset.selected = this.state.selected_node_ids.includes(node.dataset.nodeId) ? "true" : "false";
         node.dataset.pinned = this.state.pinned_positions[node.dataset.nodeId] ? "true" : node.dataset.pinned || "false";
@@ -2511,7 +2570,7 @@
         const source = this.querySelector(`.gf-node[data-node-id="${CSS.escape(edge.dataset.sourceId || "")}"]`);
         const target = this.querySelector(`.gf-node[data-node-id="${CSS.escape(edge.dataset.targetId || "")}"]`);
         edge.dataset.selected = selected ? "true" : "false";
-        edge.dataset.hidden = source?.dataset.hidden === "true" || target?.dataset.hidden === "true" ? "true" : "false";
+        edge.dataset.hidden = edgeVisibleForMode(edge, this.state, source, target) ? "false" : "true";
         edge.dataset.stretched = "false";
       });
       this.querySelectorAll(".gf-canvas-shell").forEach((shell) => {
@@ -2545,6 +2604,9 @@
       });
       this.querySelectorAll("[data-gf-scene-level]").forEach((button) => {
         button.dataset.active = button.dataset.gfSceneLevel === this.state.scene_level ? "true" : "false";
+      });
+      this.querySelectorAll("[data-gf-edge-mode]").forEach((button) => {
+        button.dataset.active = button.dataset.gfEdgeMode === this.state.edge_clutter ? "true" : "false";
       });
       emit(this, action, { previous, state: this.getState() });
     }
@@ -3087,6 +3149,12 @@
         button.addEventListener("click", () => this.dispatch({
           name: "scene-level",
           payload: { value: button.dataset.gfSceneLevel || "overview" },
+        }));
+      });
+      this.querySelectorAll("[data-gf-edge-mode]").forEach((button) => {
+        button.addEventListener("click", () => this.dispatch({
+          name: "edge-mode",
+          value: button.dataset.gfEdgeMode || "normal",
         }));
       });
       this.querySelectorAll("[data-gf-pin='reset']").forEach((button) => {

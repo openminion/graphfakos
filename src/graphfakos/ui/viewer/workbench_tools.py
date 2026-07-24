@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from html import escape
 from math import ceil
-from dataclasses import replace
 
 from graphfakos.models import GraphFakosGraph, GraphFakosNode, GraphFakosRequest
 from graphfakos.ui.viewer.graph_ops import _node_degree_map
@@ -28,6 +28,20 @@ def canvas_workbench(graph: GraphFakosGraph, request: GraphFakosRequest) -> str:
     )
 
 
+def graph_operating_dock(graph: GraphFakosGraph, request: GraphFakosRequest) -> str:
+    """Render graph-first controls for repeatable navigation and review."""
+    return (
+        "<section class='gf-operating-dock' aria-label='Graph operating dock' "
+        "data-gf-operating-dock='true'>"
+        f"{_saved_view_tool(request)}"
+        f"{_search_navigation_tool(graph, request)}"
+        f"{_expansion_tool(graph, request)}"
+        f"{_edge_mode_tool(request)}"
+        f"{_provider_proof_tool(graph, request)}"
+        "</section>"
+    )
+
+
 def density_tuned_request(
     graph: GraphFakosGraph,
     request: GraphFakosRequest,
@@ -39,16 +53,30 @@ def density_tuned_request(
     node_scale = request.node_scale
     label_density = request.label_density
     edge_opacity = request.edge_opacity
-    if request.node_scale == 1.0 and total_nodes >= 100_000:
-        node_scale = 0.42
+    if request.node_scale == 1.0 and total_nodes >= 1_000_000:
+        node_scale = 0.24
+    elif request.node_scale == 1.0 and total_nodes >= 200_000:
+        node_scale = 0.3
+    elif request.node_scale == 1.0 and total_nodes >= 100_000:
+        node_scale = 0.36
     elif request.node_scale == 1.0 and visible_nodes >= 160:
-        node_scale = 0.58
-    if request.label_density == 1.0 and total_nodes >= 100_000:
-        label_density = 0.3
+        node_scale = 0.46
+    if request.label_density == 1.0 and total_nodes >= 1_000_000:
+        label_density = 0.16
+    elif request.label_density == 1.0 and total_nodes >= 200_000:
+        label_density = 0.22
+    elif request.label_density == 1.0 and total_nodes >= 100_000:
+        label_density = 0.26
     elif request.label_density == 1.0 and visible_nodes >= 160:
-        label_density = 0.48
-    if request.edge_opacity == 1.0 and (total_nodes >= 100_000 or visible_nodes >= 160):
-        edge_opacity = 0.62
+        label_density = 0.38
+    if request.edge_opacity == 1.0 and total_nodes >= 1_000_000:
+        edge_opacity = 0.38
+    elif request.edge_opacity == 1.0 and total_nodes >= 200_000:
+        edge_opacity = 0.46
+    elif request.edge_opacity == 1.0 and (
+        total_nodes >= 100_000 or visible_nodes >= 160
+    ):
+        edge_opacity = 0.55
     if (node_scale, label_density, edge_opacity) == (
         request.node_scale,
         request.label_density,
@@ -82,6 +110,123 @@ def performance_hud() -> str:
         "<div><dt>Links</dt><dd data-gf-perf-links>--</dd></div>"
         "<div><dt>Detail</dt><dd data-gf-perf-detail>--</dd></div>"
         "</dl></details>"
+    )
+
+
+def _saved_view_tool(request: GraphFakosRequest) -> str:
+    route = _route_href(request)
+    return (
+        "<article class='gf-operating-card gf-operating-card-views' "
+        "data-gf-workbook='true'>"
+        "<header><span>Saved views</span><strong>Return to this graph state</strong></header>"
+        "<div class='gf-operating-row'>"
+        "<input data-gf-workbook-name='true' value='' "
+        f"placeholder='{escape(request.saved_view_id or 'Name this view')}'>"
+        "<button type='button' data-gf-workbook-action='save'>Save</button>"
+        f"<a href='{escape(route)}' data-gf-save-view='true'>Share</a>"
+        "</div>"
+        "<div class='gf-workbook-list' data-gf-workbook-list='true'>"
+        "<p class='gf-note'>Local browser slots capture camera, theme, hidden groups, selection, and pins.</p>"
+        "</div>"
+        "<p class='gf-capture-status' data-gf-workbook-status='true'></p>"
+        "</article>"
+    )
+
+
+def _search_navigation_tool(graph: GraphFakosGraph, request: GraphFakosRequest) -> str:
+    degree_map = _node_degree_map(graph)
+    ranked = sorted(
+        graph.nodes,
+        key=lambda node: (-(degree_map.get(node.id, 0)), node.label.casefold()),
+    )[:4]
+    links = "".join(
+        "<a href='"
+        f"{escape(_route_href(request.with_screen('explore'), overrides={'focus_node_id': node.id}))}' "
+        f"data-gf-search-jump='{escape(node.id)}'>"
+        f"<strong>{escape(node.label)}</strong><small>{degree_map.get(node.id, 0)} links</small></a>"
+        for node in ranked
+    )
+    return (
+        "<article class='gf-operating-card'>"
+        "<header><span>Search paths</span><strong>Jump, isolate, then trace</strong></header>"
+        f"<div class='gf-operating-links'>{links}</div>"
+        "<p>Use / or Ctrl+K for the search box; results keep theme and camera context.</p>"
+        "</article>"
+    )
+
+
+def _expansion_tool(graph: GraphFakosGraph, request: GraphFakosRequest) -> str:
+    degree_map = _node_degree_map(graph)
+    anchor = max(graph.nodes, key=lambda node: degree_map.get(node.id, 0), default=None)
+    if anchor is None:
+        return (
+            "<article class='gf-operating-card'><header><span>Expand</span>"
+            "<strong>No graph nodes</strong></header></article>"
+        )
+    route = _route_href(
+        request.with_screen("neighborhood"),
+        overrides={
+            "focus_node_id": request.focus_node_id or anchor.id,
+            "max_depth": 1,
+            "layout": "focus",
+        },
+    )
+    return (
+        "<article class='gf-operating-card'>"
+        "<header><span>Neighborhood</span><strong>Provider-owned expansion plan</strong></header>"
+        f"<a class='gf-operating-primary' href='{escape(route)}' data-gf-expand-neighborhood='true'>"
+        "Open local graph</a>"
+        "<p>GraphFakos previews the bounded request; providers own fetching, rebuilds, and persistence.</p>"
+        "</article>"
+    )
+
+
+def _edge_mode_tool(request: GraphFakosRequest) -> str:
+    modes = (
+        ("normal", "All", "Show the normal progressive edge field."),
+        ("bundles", "Bundles", "Keep bundles and selected context visible."),
+        ("local", "Local", "Prefer within-cluster edges for island reading."),
+        ("focus", "Focus", "Keep only selected or incident relationships."),
+    )
+    links = "".join(
+        f"<button type='button' data-gf-edge-mode='{escape(mode)}' "
+        f"data-active='{str(request.edge_clutter == mode).lower()}' "
+        f"title='{escape(title)}'>{escape(label)}</button>"
+        for mode, label, title in modes
+    )
+    fallback = "".join(
+        f"<a href='{escape(_route_href(request, overrides={'edge_clutter': mode}))}'>"
+        f"{escape(label)}</a>"
+        for mode, label, _title in modes
+    )
+    return (
+        "<article class='gf-operating-card'>"
+        "<header><span>Edges</span><strong>Relationship field</strong></header>"
+        f"<div class='gf-edge-mode-row'>{links}</div>"
+        f"<nav class='gf-operating-fallback'>{fallback}</nav>"
+        "</article>"
+    )
+
+
+def _provider_proof_tool(graph: GraphFakosGraph, request: GraphFakosRequest) -> str:
+    raw_nodes = int(
+        graph.stats.get("raw_node_count", len(graph.nodes)) or len(graph.nodes)
+    )
+    raw_edges = int(
+        graph.stats.get("raw_edge_count", len(graph.edges)) or len(graph.edges)
+    )
+    capabilities = ", ".join(sorted(graph.capabilities)[:4]) or "viewer"
+    return (
+        "<article class='gf-operating-card'>"
+        "<header><span>Provider proof</span><strong>"
+        f"{escape(graph.provider_label)}</strong></header>"
+        "<dl class='gf-operating-metrics'>"
+        f"<div><dt>raw nodes</dt><dd>{raw_nodes:,}</dd></div>"
+        f"<div><dt>raw edges</dt><dd>{raw_edges:,}</dd></div>"
+        f"<div><dt>mode</dt><dd>{escape(request.render_engine)} / {escape(request.theme)}</dd></div>"
+        f"<div><dt>caps</dt><dd>{escape(capabilities)}</dd></div>"
+        "</dl>"
+        "</article>"
     )
 
 
@@ -249,6 +394,7 @@ __all__ = [
     "canvas_workbench",
     "density_tuned_request",
     "focus_locator",
+    "graph_operating_dock",
     "performance_hud",
     "provider_inspector_fields",
 ]

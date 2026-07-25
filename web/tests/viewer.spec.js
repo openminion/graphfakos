@@ -586,6 +586,27 @@ test("runs graph operating dock controls without leaving the canvas", async ({ p
   await page.locator("[data-gf-workbook-action='save']").first().click();
   await expect(page.locator("[data-gf-workbook-status]").first()).toContainText("Saved local slot");
   await expect(page.locator("[data-gf-workbook-list]").first()).toContainText("Focus pass");
+  const downloadPromise = page.waitForEvent("download");
+  await page.locator("[data-gf-workbook-action='export']").first().click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toMatch(/^graphfakos-workspace-\d{4}-\d{2}-\d{2}\.json$/);
+  await expect(page.locator("[data-gf-workbook-status]").first()).toContainText("Exported 1 saved slot");
+  await page.locator("[data-gf-workbook-import]").first().setInputFiles({
+    name: "graphfakos-workspace.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify({
+      kind: "graphfakos.saved-workspace",
+      schema_version: "graphfakos.saved-workspace.v1",
+      slots: [{
+        id: "imported-focus",
+        label: "Imported Focus",
+        route: "/explore?theme=space&render_engine=3d",
+        state: { screen: "explore", theme: "space", render_engine: "3d" },
+      }],
+    })),
+  });
+  await expect(page.locator("[data-gf-workbook-status]").first()).toContainText("Imported 1 saved slot");
+  await expect(page.locator("[data-gf-workbook-list]").first()).toContainText("Imported Focus");
 
   const localRoute = await page.locator("[data-gf-expand-neighborhood]").first().getAttribute("href");
   expect(localRoute).toContain("/neighborhood?");

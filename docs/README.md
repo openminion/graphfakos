@@ -13,6 +13,8 @@ Start with:
 - [UI contracts](ui-contracts.md)
 - [Dense graph usability next pass spec](specs/dense-graph-usability-next-pass.md)
 - [Dense graph usability next pass tracker](trackers/dense-graph-usability-next-pass-tracker.md)
+- [Provider workflow gap closure spec](specs/provider-workflow-gap-closure.md)
+- [Provider workflow gap closure tracker](trackers/provider-workflow-gap-closure-tracker.md)
 - [Viewer accessibility matrix](accessibility.md)
 - [Provider envelope](provider-envelope.md)
 - [Live graph sessions](live-sessions.md)

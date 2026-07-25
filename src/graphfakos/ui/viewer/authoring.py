@@ -341,9 +341,11 @@ def _action_readiness_panel(graph: GraphFakosGraph, supported: bool) -> str:
         "supported": supported,
         "lifecycle": (
             "draft",
-            "preview_or_submit",
-            "provider_decides",
-            "refresh_or_replay",
+            "queued",
+            "previewed",
+            "applied",
+            "rejected",
+            "unsupported",
         ),
         "host_boundary": (
             "GraphFakos shapes provider-neutral action payloads; the provider "
@@ -358,14 +360,17 @@ def _action_readiness_panel(graph: GraphFakosGraph, supported: bool) -> str:
     )
     steps = (
         ("Draft", "GraphFakos prepares node, edge, merge, or alias payloads."),
-        ("Preview or submit", "The host can preview, queue, or execute the action."),
         (
-            "Provider decides",
-            "The provider returns applied, blocked, conflict, recovery, or unsupported.",
+            "Queued / previewed",
+            "The host has received the action but may not persist it.",
         ),
         (
-            "Refresh/replay",
-            "The viewer refreshes graph state without owning durable truth.",
+            "Applied / rejected",
+            "The provider accepts, rejects, or asks for a safer retry.",
+        ),
+        (
+            "Unsupported",
+            "Providers that do not implement this action return a visible unsupported status.",
         ),
     )
     rows = "".join(

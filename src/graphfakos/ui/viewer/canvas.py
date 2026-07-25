@@ -56,6 +56,7 @@ def _graph_canvas(
     request: GraphFakosRequest,
     selected_id: str | None,
     selected_edge_id: str | None,
+    context_graph: GraphFakosGraph | None = None,
 ) -> str:
     if not graph.nodes:
         return _panel("Graph Canvas", _empty("No graph nodes."))
@@ -258,7 +259,7 @@ def _graph_canvas(
         "<button type='button' class='gf-compact-button' data-gf-live-resync='true' "
         "hidden>Resync live graph</button>"
         f"{_group_controls(graph, request)}"
-        f"{graph_operating_dock(graph, request)}"
+        f"{graph_operating_dock(graph, request, context_graph)}"
         f"{canvas_workbench(graph, request)}"
         f"{_render_budget_panel(request, hidden_nodes, hidden_edges)}"
         f"{_graph_canvas_legend(graph, request)}</section>"

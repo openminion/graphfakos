@@ -4,7 +4,7 @@ OPERATING_STYLE = """
 .gf-operating-dock {
   display: grid;
   gap: 8px;
-  grid-template-columns: minmax(180px, 1.15fr) repeat(4, minmax(140px, 1fr));
+  grid-template-columns: minmax(180px, 1.15fr) repeat(5, minmax(140px, 1fr));
   margin-top: 10px;
 }
 .gf-operating-card {
@@ -48,9 +48,13 @@ OPERATING_STYLE = """
   gap: 5px;
   grid-template-columns: minmax(0, 1fr) auto auto;
 }
+.gf-operating-row-secondary {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
 .gf-operating-row input,
 .gf-operating-row button,
 .gf-operating-row a,
+.gf-workbook-import,
 .gf-operating-primary,
 .gf-edge-mode-row button,
 .gf-operating-fallback a {
@@ -69,11 +73,24 @@ OPERATING_STYLE = """
 }
 .gf-operating-row button,
 .gf-operating-row a,
+.gf-workbook-import,
 .gf-operating-primary,
 .gf-edge-mode-row button {
   background: color-mix(in srgb, var(--gf-accent-soft) 72%, var(--gf-panel));
   color: var(--gf-accent);
   cursor: pointer;
+}
+.gf-workbook-import {
+  align-items: center;
+  display: inline-flex;
+  justify-content: center;
+}
+.gf-workbook-import input {
+  block-size: 1px;
+  inline-size: 1px;
+  opacity: 0;
+  overflow: hidden;
+  position: absolute;
 }
 .gf-operating-primary { display: inline-flex; justify-content: center; }
 .gf-operating-links,
@@ -100,6 +117,10 @@ OPERATING_STYLE = """
   white-space: nowrap;
 }
 .gf-operating-links small { color: var(--gf-muted); font-size: 9px; }
+.gf-operating-links-inline a { display: inline-flex; }
+.gf-operating-card-connection {
+  border-color: color-mix(in srgb, var(--gf-blue) 42%, var(--gf-line));
+}
 .gf-edge-mode-row button[data-active="true"] {
   background: var(--gf-accent);
   border-color: color-mix(in srgb, var(--gf-accent) 72%, white);

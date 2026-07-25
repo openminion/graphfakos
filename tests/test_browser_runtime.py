@@ -174,6 +174,8 @@ def test_packaged_viewer_runtime_reducer_runs_in_node() -> None:
     assert "captureTemplatePayload" in viewer_runtime_script()
     assert "Template selected:" in viewer_runtime_script()
     assert "workbookSlotPayload" in viewer_runtime_script()
+    assert "workbookExportPayload" in viewer_runtime_script()
+    assert "workbookSlotsFromPayload" in viewer_runtime_script()
     assert "workbook-saved" in viewer_runtime_script()
     assert "graphfakos:viewer-workbook:v1" in viewer_runtime_script()
     assert "graphfakos:viewer-theme:v1" in viewer_runtime_script()
@@ -362,6 +364,8 @@ const storage = {
   getItem: () => storage.value
 };
 const workbookSlots = runtime.workbookSlotsFromStorage(storage);
+const workbookExport = runtime.workbookExportPayload(workbookSlots);
+const workbookImport = runtime.workbookSlotsFromPayload(workbookExport);
 const commandActions = [
   { id: "local", label: "Local neighborhood", summary: "Inspect focus node", group: "navigate", route: "/neighborhood" },
   { id: "capture", label: "Capture knowledge", summary: "Jump to authoring form", group: "author", route: "/explore#capture-knowledge" },
@@ -420,6 +424,8 @@ process.stdout.write(JSON.stringify({
   savedRoute,
   workbookSlot,
   workbookSlots,
+  workbookExport,
+  workbookImport,
   commandSummary,
   projectedPoint,
   overviewDetailMode,
@@ -548,6 +554,11 @@ process.stdout.write(JSON.stringify({
     assert "camera_pose=" in payload["workbookSlot"]["route"]
     assert payload["workbookSlot"]["route"].startswith("/explore?")
     assert payload["workbookSlots"][0]["label"] == "Ops Review"
+    assert payload["workbookExport"]["kind"] == "graphfakos.saved-workspace"
+    assert (
+        payload["workbookExport"]["schema_version"] == "graphfakos.saved-workspace.v1"
+    )
+    assert payload["workbookImport"][0]["label"] == "Ops Review"
     assert payload["commandSummary"] == {
         "query": "author capture",
         "total_count": 3,

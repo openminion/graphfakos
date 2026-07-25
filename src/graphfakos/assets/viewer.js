@@ -443,6 +443,39 @@
     return true;
   };
 
+  const workbookExportPayload = (slots) => ({
+    kind: "graphfakos.saved-workspace",
+    schema_version: "graphfakos.saved-workspace.v1",
+    generated_at: new Date().toISOString(),
+    slots: slots.filter((item) => item?.route && item?.state),
+  });
+
+  const workbookSlotsFromPayload = (payload) => {
+    const slots = Array.isArray(payload?.slots) ? payload.slots : payload;
+    if (!Array.isArray(slots)) throw new Error("workspace JSON must contain a slots array");
+    const cleanSlots = slots.filter((slot) => {
+      return slot
+        && typeof slot.route === "string"
+        && slot.route.startsWith("/")
+        && slot.state
+        && typeof slot.state === "object";
+    });
+    if (!cleanSlots.length) throw new Error("workspace JSON does not contain saved view slots");
+    return cleanSlots.slice(0, 8);
+  };
+
+  const downloadTextFile = (filename, text, type = "application/json") => {
+    const blob = new Blob([text], { type });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  };
+
   const renderWorkbookSlots = (root, slots, navigate) => {
     root.querySelectorAll("[data-gf-workbook-list]").forEach((list) => {
       list.replaceChildren();
@@ -2515,6 +2548,41 @@
       emit(this, "workbook-cleared", { state: this.getState() });
     }
 
+    #exportWorkbookSlots() {
+      const slots = workbookSlotsFromStorage(this.#workbookStorage());
+      if (!slots.length) {
+        this.#setWorkbookStatus("Save at least one local slot before exporting.", "error");
+        return;
+      }
+      const payload = workbookExportPayload(slots);
+      downloadTextFile(
+        `graphfakos-workspace-${new Date().toISOString().slice(0, 10)}.json`,
+        `${JSON.stringify(payload, null, 2)}\n`,
+      );
+      this.#setWorkbookStatus(`Exported ${payload.slots.length} saved slot(s).`, "saved");
+      emit(this, "workbook-exported", { payload, state: this.getState() });
+    }
+
+    async #importWorkbookSlots(file) {
+      const storage = this.#workbookStorage();
+      if (!storage) {
+        this.#setWorkbookStatus("Local saved slots are unavailable in this browser context.", "error");
+        return;
+      }
+      if (!file) return;
+      try {
+        const payload = JSON.parse(await file.text());
+        const slots = workbookSlotsFromPayload(payload);
+        writeWorkbookSlots(storage, slots);
+        this.#renderWorkbook();
+        this.#setWorkbookStatus(`Imported ${slots.length} saved slot(s).`, "saved");
+        emit(this, "workbook-imported", { slots, state: this.getState() });
+      } catch (error) {
+        this.#setWorkbookStatus(error?.message || String(error), "error");
+        emit(this, "error", { message: error?.message || String(error), action: "workbook-import" });
+      }
+    }
+
     #wireCommandPalette() {
       this.querySelectorAll("[data-gf-command-palette-panel]").forEach((panel) => {
         const input = panel.querySelector("[data-gf-command-palette-search]");
@@ -3174,6 +3242,13 @@
         button.addEventListener("click", () => {
           if (button.dataset.gfWorkbookAction === "save") this.#saveWorkbookSlot();
           if (button.dataset.gfWorkbookAction === "clear") this.#clearWorkbookSlots();
+          if (button.dataset.gfWorkbookAction === "export") this.#exportWorkbookSlots();
+        });
+      });
+      this.querySelectorAll("[data-gf-workbook-import]").forEach((input) => {
+        input.addEventListener("change", () => {
+          this.#importWorkbookSlots(input.files?.[0]);
+          input.value = "";
         });
       });
       this.#wireCommandPalette();
@@ -3274,6 +3349,8 @@
     commandPaletteFilterSummary,
     savedViewRoute,
     workbookSlotPayload,
+    workbookExportPayload,
+    workbookSlotsFromPayload,
     workbookSlotsFromStorage,
     openInspectOverlay,
     applyGraphPatch,

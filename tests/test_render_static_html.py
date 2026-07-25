@@ -349,7 +349,11 @@ def test_static_viewer_renders_competitive_workbench_controls() -> None:
     assert "data-gf-action-readiness='true'" in html
     assert "Action readiness" in html
     assert "read only" in html
-    assert "provider_decides" in html
+    assert "queued" in html
+    assert "previewed" in html
+    assert "applied" in html
+    assert "rejected" in html
+    assert "unsupported" in html
     assert "data-gf-saved-view='true'" in html
     assert "data-gf-saved-queries='true'" in html
     assert "data-gf-operating-dock='true'" in html
@@ -387,9 +391,11 @@ def test_static_viewer_renders_competitive_workbench_controls() -> None:
     assert action_readiness["supported"] is False
     assert action_readiness["lifecycle"] == [
         "draft",
-        "preview_or_submit",
-        "provider_decides",
-        "refresh_or_replay",
+        "queued",
+        "previewed",
+        "applied",
+        "rejected",
+        "unsupported",
     ]
     assert action_readiness["host_boundary"].startswith(
         "GraphFakos shapes provider-neutral action payloads"
@@ -906,6 +912,9 @@ def test_demo_viewer_marks_workbench_editor_capabilities_supported() -> None:
     assert "data-gf-knowledge-form='true' data-gf-capability-supported='true'" in html
     assert "data-gf-action-form='true' data-gf-capability-supported='true'" in html
     assert "data-gf-action-readiness='true'" in html
+    assert "Queued / previewed" in html
+    assert "Applied / rejected" in html
+    assert "Unsupported" in html
     assert "submit enabled" in html
     assert "Current provider does not advertise" not in html
     assert "<button type='submit'>Add to graph</button>" in html
@@ -1090,6 +1099,9 @@ def test_explore_screen_renders_filter_controls_and_edge_inspector() -> None:
     assert "Selected Edge" in html
     assert "Why connected?" in html
     assert "Third-party Provider is connected to Viewer Spec by serves." in html
+    assert "data-gf-edge-explanation-card='true'" in html
+    assert "Trace path" in html
+    assert "Filter kind" in html
     assert "edge:provider-serves-spec" in html
     assert "Third-party Provider" in html
     assert "Workflow" in html
@@ -1105,6 +1117,8 @@ def test_explore_screen_renders_filter_controls_and_edge_inspector() -> None:
     assert "Nearest Hops" in html
     assert "Path Targets" in html
     assert "Search Results" in html
+    assert "Export JSON" in html
+    assert "data-gf-workbook-import='true'" in html
     search_results = _json_script_payload(html, "data-gf-search-results")
     assert search_results["query"] == "provider"
     assert search_results["mode"] == "query_matches"

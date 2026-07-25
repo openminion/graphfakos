@@ -7,6 +7,7 @@ from html import escape
 from math import ceil
 
 from graphfakos.models import GraphFakosGraph, GraphFakosNode, GraphFakosRequest
+from graphfakos.provider import explain_connection
 from graphfakos.ui.viewer.graph_ops import _node_degree_map
 from graphfakos.ui.viewer.routing import _route_href
 from graphfakos.viewer_contracts import (
@@ -28,7 +29,11 @@ def canvas_workbench(graph: GraphFakosGraph, request: GraphFakosRequest) -> str:
     )
 
 
-def graph_operating_dock(graph: GraphFakosGraph, request: GraphFakosRequest) -> str:
+def graph_operating_dock(
+    graph: GraphFakosGraph,
+    request: GraphFakosRequest,
+    context_graph: GraphFakosGraph | None = None,
+) -> str:
     """Render graph-first controls for repeatable navigation and review."""
     return (
         "<section class='gf-operating-dock' aria-label='Graph operating dock' "
@@ -36,6 +41,7 @@ def graph_operating_dock(graph: GraphFakosGraph, request: GraphFakosRequest) -> 
         f"{_saved_view_tool(request)}"
         f"{_search_navigation_tool(graph, request)}"
         f"{_expansion_tool(graph, request)}"
+        f"{_edge_explanation_tool(context_graph or graph, request)}"
         f"{_edge_mode_tool(request)}"
         f"{_provider_proof_tool(graph, request)}"
         "</section>"
@@ -128,6 +134,12 @@ def _saved_view_tool(request: GraphFakosRequest) -> str:
         "<div class='gf-workbook-list' data-gf-workbook-list='true'>"
         "<p class='gf-note'>Local browser slots capture camera, theme, hidden groups, selection, and pins.</p>"
         "</div>"
+        "<div class='gf-operating-row gf-operating-row-secondary'>"
+        "<button type='button' data-gf-workbook-action='export'>Export JSON</button>"
+        "<label class='gf-workbook-import'>Import JSON"
+        "<input type='file' accept='application/json,.json' "
+        "data-gf-workbook-import='true'></label>"
+        "</div>"
         "<p class='gf-capture-status' data-gf-workbook-status='true'></p>"
         "</article>"
     )
@@ -177,6 +189,60 @@ def _expansion_tool(graph: GraphFakosGraph, request: GraphFakosRequest) -> str:
         f"<a class='gf-operating-primary' href='{escape(route)}' data-gf-expand-neighborhood='true'>"
         "Open local graph</a>"
         "<p>GraphFakos previews the bounded request; providers own fetching, rebuilds, and persistence.</p>"
+        "</article>"
+    )
+
+
+def _edge_explanation_tool(graph: GraphFakosGraph, request: GraphFakosRequest) -> str:
+    if not request.selected_edge_id:
+        return (
+            "<article class='gf-operating-card'>"
+            "<header><span>Connection</span><strong>Select an edge</strong></header>"
+            "<p>Click a line to see why two graph items are connected, then trace, filter, or draft a fix.</p>"
+            "</article>"
+        )
+    explanation = explain_connection(graph, request.selected_edge_id)
+    edge = graph.edge_map().get(request.selected_edge_id)
+    if explanation is None or edge is None:
+        return (
+            "<article class='gf-operating-card'>"
+            "<header><span>Connection</span><strong>Edge unavailable</strong></header>"
+            f"<p>{escape(request.selected_edge_id)} is not in the current visible graph.</p>"
+            "</article>"
+        )
+    path_route = _route_href(
+        request.with_screen("path"),
+        overrides={
+            "source_node_id": edge.source_id,
+            "target_node_id": edge.target_id,
+            "selected_edge_id": edge.id,
+            "layout": "focus",
+        },
+    )
+    kind_route = _route_href(
+        request.with_screen("explore"),
+        overrides={"edge_kind": edge.kind, "selected_edge_id": edge.id},
+    )
+    confidence = (
+        f"{explanation.confidence:.2f}" if explanation.confidence is not None else "n/a"
+    )
+    return (
+        "<article class='gf-operating-card gf-operating-card-connection' "
+        "data-gf-edge-explanation-card='true'>"
+        "<header><span>Why connected?</span>"
+        f"<strong>{escape(explanation.relationship)}</strong></header>"
+        f"<p>{escape(explanation.summary)}</p>"
+        "<dl class='gf-operating-metrics'>"
+        f"<div><dt>source</dt><dd>{escape(explanation.source_label)}</dd></div>"
+        f"<div><dt>target</dt><dd>{escape(explanation.target_label)}</dd></div>"
+        f"<div><dt>confidence</dt><dd>{escape(confidence)}</dd></div>"
+        f"<div><dt>evidence</dt><dd>{len(explanation.provenance_ids)} provenance / "
+        f"{len(explanation.citation_ids)} citation(s)</dd></div>"
+        "</dl>"
+        "<div class='gf-operating-links gf-operating-links-inline'>"
+        f"<a href='{escape(path_route)}'>Trace path</a>"
+        f"<a href='{escape(kind_route)}'>Filter kind</a>"
+        "</div>"
         "</article>"
     )
 

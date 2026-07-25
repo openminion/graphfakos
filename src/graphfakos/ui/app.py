@@ -548,7 +548,7 @@ def _render_explore(graph: GraphFakosGraph, request: GraphFakosRequest) -> str:
     selected_edge = _selected_edge(graph, request)
     active_query = _active_query_terms(request)
     primary = (
-        f"{_graph_canvas(filtered_graph, request, focus.id if focus else None, selected_edge.id if selected_edge else None)}"
+        f"{_graph_canvas(filtered_graph, request, focus.id if focus else None, selected_edge.id if selected_edge else None, graph)}"
         f"{_selection_summary(filtered_graph, focus, selected_edge)}"
         f"{_query_summary(active_query)}"
     )
@@ -620,7 +620,7 @@ def _render_neighborhood(graph: GraphFakosGraph, request: GraphFakosRequest) -> 
         f"<p class='gf-empty'>Depth {max(request.max_depth, 1)} neighborhood.</p>{_node_cards(neighbors, request) if neighbors else _empty('No neighboring nodes match this view yet.')}",
     )
     edge_id = request.selected_edge_id
-    primary = _graph_canvas(neighborhood_graph, request, focus.id, edge_id)
+    primary = _graph_canvas(neighborhood_graph, request, focus.id, edge_id, graph)
     context = panel_stack(
         (
             _neighborhood_toolbar(graph, request, focus.id),
@@ -655,7 +655,7 @@ def _render_path(graph: GraphFakosGraph, request: GraphFakosRequest) -> str:
     path_graph = _graph_with_items(graph, path_nodes, tuple(path_edges))
     primary = (
         f"{_path_toolbar(graph, request, source.id, target.id)}"
-        f"{_graph_canvas(path_graph, request, source.id, request.selected_edge_id)}"
+        f"{_graph_canvas(path_graph, request, source.id, request.selected_edge_id, graph)}"
     )
     primary += _panel(
         f"{source.label} to {target.label}",

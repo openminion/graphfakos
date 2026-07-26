@@ -23,33 +23,15 @@ from graphfakos.ui.viewer.graph_ops import (
     _node_degree_map,
     _ranked_nodes,
 )
-from graphfakos.ui.viewer.html import (
-    badges as _badges,
-)
-from graphfakos.ui.viewer.html import (
-    empty as _empty,
-)
-from graphfakos.ui.viewer.html import (
-    json_attribute as _json_attribute,
-)
-from graphfakos.ui.viewer.html import (
-    json_script as _json_script,
-)
-from graphfakos.ui.viewer.html import (
-    key_values as _key_values,
-)
-from graphfakos.ui.viewer.html import (
-    panel as _panel,
-)
-from graphfakos.ui.viewer.html import (
-    panel_body as _panel_body,
-)
-from graphfakos.ui.viewer.html import (
-    summary_note as _summary_note,
-)
-from graphfakos.ui.viewer.html import (
-    text_list as _list,
-)
+from graphfakos.ui.viewer.html import badges as _badges
+from graphfakos.ui.viewer.html import empty as _empty
+from graphfakos.ui.viewer.html import json_attribute as _json_attribute
+from graphfakos.ui.viewer.html import json_script as _json_script
+from graphfakos.ui.viewer.html import key_values as _key_values
+from graphfakos.ui.viewer.html import panel as _panel
+from graphfakos.ui.viewer.html import panel_body as _panel_body
+from graphfakos.ui.viewer.html import summary_note as _summary_note
+from graphfakos.ui.viewer.html import text_list as _list
 from graphfakos.ui.viewer.layout import _clamped, _layout_positions
 from graphfakos.ui.viewer.routing import _local_node_route, _route_href
 from graphfakos.ui.viewer.routing import state_hidden_inputs as _state_hidden_inputs

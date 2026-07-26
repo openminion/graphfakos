@@ -127,7 +127,7 @@ from .viewer_contracts import (
     inspector_schema_for,
 )
 
-__version__ = "0.0.6"
+__version__ = "0.0.7rc1"
 PACKAGE_STATUS = "semantic-alpha"
 STABLE_IMPORT_ROOTS = (
     "graphfakos.artifacts",

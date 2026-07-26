@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import ipaddress
 import json
-from threading import Lock
-from typing import Callable, Mapping
-from urllib.parse import parse_qs, urlparse
 import webbrowser
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, replace
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from threading import Lock
+from urllib.parse import parse_qs, urlparse
 
 from .live import (
     GraphFakosGraphPatch,
@@ -23,6 +23,7 @@ RenderPath = Callable[[str, dict[str, list[str]]], str]
 ActionHandler = Callable[[str, dict[str, object]], dict[str, object]]
 RequestAuthorizer = Callable[[str, str, Mapping[str, str]], bool]
 _MAX_ACTION_BYTES = 1024 * 1024
+_MAX_IMPORT_BYTES = 64 * 1024 * 1024
 _VIEWER_CONTEXT_FIELD = "viewer_context"
 
 
@@ -164,7 +165,7 @@ def make_local_viewer_server(
                     {"ok": False, "error": "Content-Length must be numeric"},
                 )
                 return
-            if content_length <= 0 or content_length > _MAX_ACTION_BYTES:
+            if content_length <= 0 or content_length > _max_action_bytes(parsed.path):
                 self._send_json(
                     413,
                     {"ok": False, "error": "request body is empty or too large"},
@@ -184,7 +185,7 @@ def make_local_viewer_server(
             except (TypeError, ValueError) as exc:
                 self._send_json(400, {"ok": False, "error": str(exc)})
                 return
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - contain action failures at the HTTP boundary
                 self._send_json(500, {"ok": False, "error": str(exc)})
                 return
             if self._should_redirect_after_action(result):
@@ -327,6 +328,10 @@ def make_local_viewer_server(
     return server
 
 
+def _max_action_bytes(path: str) -> int:
+    return _MAX_IMPORT_BYTES if path == "/api/import" else _MAX_ACTION_BYTES
+
+
 def _normalize_form_action_payload(payload: dict[str, object]) -> dict[str, object]:
     provider_payload = _form_provider_payload(payload)
     viewer_context = _json_mapping(payload.get(_VIEWER_CONTEXT_FIELD))
@@ -433,11 +438,11 @@ def _origin_allowed(origin: str, host: str, allowed_origins: tuple[str, ...]) ->
 
 
 __all__ = [
+    "ActionHandler",
     "LocalViewerHttpServer",
     "LocalViewerServerResult",
-    "ActionHandler",
-    "RequestAuthorizer",
     "RenderPath",
+    "RequestAuthorizer",
     "make_local_viewer_server",
     "serve_local_viewer",
 ]

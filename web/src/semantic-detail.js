@@ -1,8 +1,8 @@
 const detailBudgets = {
-  overview: 2,
-  balanced: 8,
-  detail: 16,
-  precision: 32,
+  overview: 1,
+  balanced: 4,
+  detail: 9,
+  precision: 16,
 };
 
 const clamp = (value, minimum, maximum) => Math.max(minimum, Math.min(maximum, value));
@@ -28,13 +28,20 @@ export function detailLevelForCamera({ nodeCount, referenceDistance, cameraDista
 export function labelBudgetForDetail(level, density = 1, nodeCount = Infinity) {
   const base = detailBudgets[level] || detailBudgets.overview;
   const scale = 0.35 + clamp(Number(density) || 0, 0, 1) * 0.65;
-  return Math.min(Math.max(0, Number(nodeCount) || 0), Math.max(2, Math.round(base * scale)));
+  return Math.min(Math.max(0, Number(nodeCount) || 0), Math.max(1, Math.round(base * scale)));
 }
 
 export function nodeScaleForCount(nodeCount) {
   const count = Math.max(0, Number(nodeCount) || 0);
-  if (count <= 16) return 32;
-  if (count <= 48) return 10;
-  if (count <= 110) return 3;
-  return 1;
+  if (count <= 16) return 18;
+  if (count <= 48) return 6;
+  if (count <= 110) return 1.8;
+  if (count <= 260) return 0.48;
+  return 0.34;
+}
+
+export function zoomStableNodeScale(zoom) {
+  const value = Number(zoom);
+  if (!Number.isFinite(value) || value <= 0) return 1;
+  return clamp(1 / Math.sqrt(value), 0.4, 1.65);
 }

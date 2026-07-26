@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from dataclasses import replace
 from html import escape
 from math import sqrt
 
@@ -15,6 +14,8 @@ from graphfakos.models import (
     GraphFakosProvenance,
     GraphFakosRequest,
 )
+from graphfakos.provider import explain_connection
+from graphfakos.ui.viewer import surface_controls
 from graphfakos.ui.viewer.filtering import _facet_values
 from graphfakos.ui.viewer.graph_ops import (
     _node_cluster_id,
@@ -22,60 +23,30 @@ from graphfakos.ui.viewer.graph_ops import (
     _node_degree_map,
     _ranked_nodes,
 )
-from graphfakos.ui.viewer.html import (
-    badges as _badges,
-    empty as _empty,
-    json_attribute as _json_attribute,
-    json_script as _json_script,
-    key_values as _key_values,
-    panel as _panel,
-    panel_body as _panel_body,
-    summary_note as _summary_note,
-    text_list as _list,
-)
-from graphfakos.ui.viewer import surface_controls
+from graphfakos.ui.viewer.html import badges as _badges
+from graphfakos.ui.viewer.html import empty as _empty
+from graphfakos.ui.viewer.html import json_attribute as _json_attribute
+from graphfakos.ui.viewer.html import json_script as _json_script
+from graphfakos.ui.viewer.html import key_values as _key_values
+from graphfakos.ui.viewer.html import panel as _panel
+from graphfakos.ui.viewer.html import panel_body as _panel_body
+from graphfakos.ui.viewer.html import summary_note as _summary_note
+from graphfakos.ui.viewer.html import text_list as _list
 from graphfakos.ui.viewer.layout import _clamped, _layout_positions
 from graphfakos.ui.viewer.routing import _local_node_route, _route_href
 from graphfakos.ui.viewer.routing import state_hidden_inputs as _state_hidden_inputs
+from graphfakos.ui.viewer.workbench_tools import (
+    canvas_workbench,
+    density_tuned_request,
+    focus_locator,
+    graph_operating_dock,
+    performance_hud,
+    provider_inspector_fields,
+)
 
 _MINIMAP_WIDTH = 180
 _MINIMAP_HEIGHT = 90
 _MINIMAP_NODE_RADIUS = 4
-
-
-def _density_tuned_request(
-    graph: GraphFakosGraph,
-    request: GraphFakosRequest,
-) -> GraphFakosRequest:
-    total_nodes = int(
-        graph.stats.get("raw_node_count", len(graph.nodes)) or len(graph.nodes)
-    )
-    visible_nodes = len(graph.nodes)
-    node_scale = request.node_scale
-    label_density = request.label_density
-    edge_opacity = request.edge_opacity
-    if request.node_scale == 1.0 and total_nodes >= 100_000:
-        node_scale = 0.42
-    elif request.node_scale == 1.0 and visible_nodes >= 160:
-        node_scale = 0.58
-    if request.label_density == 1.0 and total_nodes >= 100_000:
-        label_density = 0.3
-    elif request.label_density == 1.0 and visible_nodes >= 160:
-        label_density = 0.48
-    if request.edge_opacity == 1.0 and (total_nodes >= 100_000 or visible_nodes >= 160):
-        edge_opacity = 0.62
-    if (
-        node_scale == request.node_scale
-        and label_density == request.label_density
-        and edge_opacity == request.edge_opacity
-    ):
-        return request
-    return replace(
-        request,
-        node_scale=node_scale,
-        label_density=label_density,
-        edge_opacity=edge_opacity,
-    )
 
 
 def _graph_canvas(
@@ -83,10 +54,11 @@ def _graph_canvas(
     request: GraphFakosRequest,
     selected_id: str | None,
     selected_edge_id: str | None,
+    context_graph: GraphFakosGraph | None = None,
 ) -> str:
     if not graph.nodes:
         return _panel("Graph Canvas", _empty("No graph nodes."))
-    request = _density_tuned_request(graph, request)
+    request = density_tuned_request(graph, request)
     width = 1280
     height = 720
     positions = _layout_positions(graph, request, width, height, selected_id)
@@ -219,7 +191,8 @@ def _graph_canvas(
             f"data-style-color='{escape(_style_value(node, request.style_color_by, component_ids))}' "
             f"data-style-size='{escape(_style_value(node, request.style_size_by, component_ids, degree=degree))}' "
             f"data-pinned='{pinned}' data-provider-pinned='{str(node.visual.pinned).lower()}' "
-            f"data-degree='{degree}' data-x='{x:.1f}' data-y='{y:.1f}' data-z='{z:.1f}' "
+            f"data-degree='{degree}' data-score='{node.score if node.score is not None else ''}' "
+            f"data-x='{x:.1f}' data-y='{y:.1f}' data-z='{z:.1f}' "
             f"data-layout-x='{x:.1f}' data-layout-y='{y:.1f}' data-layout-z='{z:.1f}' "
             f"transform='translate({x:.1f} {y:.1f})'>"
             f"{_node_shape(node, request, degree)}"
@@ -263,6 +236,7 @@ def _graph_canvas(
             "<div class='gf-webgl-surface' data-gf-webgl-surface='true' "
             "role='application' aria-label='Interactive 3D graph scene'></div>"
             f"{surface_controls.touch_guide(request)}{surface_controls.compass_hud()}"
+            f"{focus_locator()}{performance_hud()}"
             if request.render_engine == "3d"
             else ""
         )
@@ -283,6 +257,8 @@ def _graph_canvas(
         "<button type='button' class='gf-compact-button' data-gf-live-resync='true' "
         "hidden>Resync live graph</button>"
         f"{_group_controls(graph, request)}"
+        f"{graph_operating_dock(graph, request, context_graph)}"
+        f"{canvas_workbench(graph, request)}"
         f"{_render_budget_panel(request, hidden_nodes, hidden_edges)}"
         f"{_graph_canvas_legend(graph, request)}</section>"
     )
@@ -447,16 +423,16 @@ def _should_show_label(
     if visible_count <= 12:
         return density >= 0.2
     if visible_count >= 160:
-        cadence = max(18, int(round(72 / max(density, 0.16))))
+        cadence = max(18, round(72 / max(density, 0.16)))
         return degree >= 7 or index % cadence == 0
     if visible_count >= 60:
-        cadence = max(8, int(round(28 / max(density, 0.16))))
+        cadence = max(8, round(28 / max(density, 0.16)))
         return degree >= 5 or index % cadence == 0
     if density >= 0.95:
         return degree >= 2 or index % 4 == 0
     if degree >= 3:
         return density >= 0.35
-    cadence = max(1, int(round(1 / max(density, 0.12))))
+    cadence = max(1, round(1 / max(density, 0.12)))
     return index % cadence == 0
 
 
@@ -770,7 +746,12 @@ def _inspector(
     selected_edge: GraphFakosEdge | None,
 ) -> str:
     if node is None:
-        return _panel("Inspector", _empty("Select a node."))
+        if selected_edge is None:
+            return _panel("Inspector", _empty("Select a node or edge."))
+        return _panel(
+            "Inspector",
+            "<h3>Selected Edge</h3>" + _edge_detail(graph, selected_edge),
+        )
     incident = tuple(
         edge
         for edge in graph.edges
@@ -786,6 +767,7 @@ def _inspector(
         f"{_badges(_node_badges(node, graph))}"
         f"<p>{escape(node.summary or node.source or node.id)}</p>"
         f"{_key_values(_node_metadata(node))}"
+        f"{provider_inspector_fields(graph, node)}"
         "<h3>Connections</h3>"
         f"{_edge_list(incident)}"
         "<h3>Selected Edge</h3>"
@@ -804,6 +786,7 @@ def _edge_detail(
 ) -> str:
     if edge is None:
         return _empty("Click an edge to inspect its relationship metadata.")
+    explanation = explain_connection(graph, edge.id)
     node_map = graph.node_map()
     source = node_map.get(edge.source_id)
     target = node_map.get(edge.target_id)
@@ -820,9 +803,13 @@ def _edge_detail(
         "target": target.label if target else edge.target_id,
         "weight": edge.weight,
         "confidence": edge.confidence,
+        "provenance refs": len(explanation.provenance_ids) if explanation else 0,
+        "citation refs": len(explanation.citation_ids) if explanation else 0,
     }
     return (
         f"{_badges([(edge.kind, 'accent'), (edge.direction, 'blue')])}"
+        "<h4>Why connected?</h4>"
+        f"{_summary_note(explanation.summary if explanation else 'Connection metadata is unavailable.')}"
         f"{_key_values(metadata)}"
         f"{''.join(_provenance_card(item) for item in provenance)}"
         f"{''.join(_citation_card(item) for item in citations)}"
@@ -859,12 +846,22 @@ def _node_provider_content(
 
 def _node_content_title(graph: GraphFakosGraph, node: GraphFakosNode) -> str:
     content = _node_provider_content(graph, node)
-    return str(content.get("title") or node.label or node.id)
+    payload = node.provider_payload
+    return str(content.get("title") or payload.get("title") or node.label or node.id)
 
 
 def _node_content_preview(graph: GraphFakosGraph, node: GraphFakosNode) -> str:
     content = _node_provider_content(graph, node)
-    text = str(content.get("text") or content.get("preview") or "")
+    payload = node.provider_payload
+    text = str(
+        content.get("text")
+        or content.get("preview")
+        or payload.get("content")
+        or payload.get("text")
+        or payload.get("preview")
+        or payload.get("summary")
+        or ""
+    )
     if text.strip():
         return text.strip()
     return node.summary or node.source or node.id

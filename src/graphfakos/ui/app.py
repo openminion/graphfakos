@@ -26,79 +26,67 @@ from graphfakos.ui.viewer import (
     render_graph_workspace,
     render_navigation,
 )
-from graphfakos.ui.viewer.controls import (
-    _filter_toolbar,
-    _workspace_controls,
-    _local_graph_controls,
-    _physics_display_controls,
-    _active_lens_bar,
-    _interaction_guide_panel,
-)
-from graphfakos.ui.viewer.discovery import (
-    _command_palette,
-    _search_results_panel,
-    _expansion_planner_panel,
-    _graph_data_table_panel,
-    _relationship_data_table_panel,
-    _evidence_coverage_map_panel,
-    _facet_explorer_panel,
-)
 from graphfakos.ui.viewer.analysis import (
+    _advanced_filter_panel,
     _analytics_panel,
-    _readability_coach_panel,
+    _component_explorer_panel,
+    _context_menu_panel,
     _display_recipes_panel,
     _export_replay_panel,
+    _investigation_pivot_panel,
     _neighborhood_toolbar,
     _path_toolbar,
-    _advanced_filter_panel,
-    _component_explorer_panel,
+    _readability_coach_panel,
     _selection_workbench_panel,
     _style_rules_panel,
     _timeline_animation_panel,
-    _investigation_pivot_panel,
-    _context_menu_panel,
-)
-from graphfakos.ui.viewer.navigation import (
-    _query_summary,
-    _query_syntax_panel,
-    _preset_entry,
-    _preset_request,
-    _preset_rail,
-    _selected_node,
-    _selected_edge,
-    _graph_navigator,
-    _navigation_map_panel,
-    _relationship_trail_panel,
 )
 from graphfakos.ui.viewer.authoring import (
-    _knowledge_capture_panel,
-    _graph_action_panel,
     _focus_workflow,
-)
-from graphfakos.ui.viewer.evidence import (
-    _path_summary,
-    _evidence_summary,
-)
-from graphfakos.ui.viewer.diffing import (
-    build_graph_diff,
-    _diff_section,
-    _overlay_summary,
+    _graph_action_panel,
+    _knowledge_capture_panel,
 )
 from graphfakos.ui.viewer.canvas import (
-    _graph_canvas,
+    _citation_card,
+    _context_cards,
     _explore_href,
-    _selection_summary,
+    _graph_canvas,
     _inspector,
     _node_cards,
-    _context_cards,
     _provenance_card,
-    _citation_card,
+    _selection_summary,
+)
+from graphfakos.ui.viewer.controls import (
+    _active_lens_bar,
+    _filter_toolbar,
+    _interaction_guide_panel,
+    _local_graph_controls,
+    _physics_display_controls,
+    _workspace_controls,
+)
+from graphfakos.ui.viewer.diffing import (
+    _diff_section,
+    _overlay_summary,
+    build_graph_diff,
+)
+from graphfakos.ui.viewer.discovery import (
+    _command_palette,
+    _evidence_coverage_map_panel,
+    _expansion_planner_panel,
+    _facet_explorer_panel,
+    _graph_data_table_panel,
+    _relationship_data_table_panel,
+    _search_results_panel,
+)
+from graphfakos.ui.viewer.evidence import (
+    _evidence_summary,
+    _path_summary,
 )
 from graphfakos.ui.viewer.filtering import (
-    _graph_facets,
-    _filtered_graph,
-    _filter_edges_by_request,
     _active_query_terms,
+    _filter_edges_by_request,
+    _filtered_graph,
+    _graph_facets,
 )
 from graphfakos.ui.viewer.graph_ops import (
     _graph_with_items,
@@ -110,16 +98,48 @@ from graphfakos.ui.viewer.graph_ops import (
 )
 from graphfakos.ui.viewer.html import (
     badge as _badge,
+)
+from graphfakos.ui.viewer.html import (
     badges as _badges,
+)
+from graphfakos.ui.viewer.html import (
     empty as _empty,
+)
+from graphfakos.ui.viewer.html import (
     json_attribute as _json_attribute,
+)
+from graphfakos.ui.viewer.html import (
     json_script as _json_script,
+)
+from graphfakos.ui.viewer.html import (
     key_values as _key_values,
+)
+from graphfakos.ui.viewer.html import (
     panel as _panel,
+)
+from graphfakos.ui.viewer.html import (
     panel_body as _panel_body,
+)
+from graphfakos.ui.viewer.html import (
     split as _split,
+)
+from graphfakos.ui.viewer.html import (
     summary_note as _summary_note,
+)
+from graphfakos.ui.viewer.html import (
     text_list as _list,
+)
+from graphfakos.ui.viewer.navigation import (
+    _graph_navigator,
+    _navigation_map_panel,
+    _preset_entry,
+    _preset_rail,
+    _preset_request,
+    _query_summary,
+    _query_syntax_panel,
+    _relationship_trail_panel,
+    _selected_edge,
+    _selected_node,
 )
 from graphfakos.ui.viewer.routing import (
     _SCREEN_NAV,
@@ -548,7 +568,7 @@ def _render_explore(graph: GraphFakosGraph, request: GraphFakosRequest) -> str:
     selected_edge = _selected_edge(graph, request)
     active_query = _active_query_terms(request)
     primary = (
-        f"{_graph_canvas(filtered_graph, request, focus.id if focus else None, selected_edge.id if selected_edge else None)}"
+        f"{_graph_canvas(filtered_graph, request, focus.id if focus else None, selected_edge.id if selected_edge else None, graph)}"
         f"{_selection_summary(filtered_graph, focus, selected_edge)}"
         f"{_query_summary(active_query)}"
     )
@@ -620,7 +640,7 @@ def _render_neighborhood(graph: GraphFakosGraph, request: GraphFakosRequest) -> 
         f"<p class='gf-empty'>Depth {max(request.max_depth, 1)} neighborhood.</p>{_node_cards(neighbors, request) if neighbors else _empty('No neighboring nodes match this view yet.')}",
     )
     edge_id = request.selected_edge_id
-    primary = _graph_canvas(neighborhood_graph, request, focus.id, edge_id)
+    primary = _graph_canvas(neighborhood_graph, request, focus.id, edge_id, graph)
     context = panel_stack(
         (
             _neighborhood_toolbar(graph, request, focus.id),
@@ -655,7 +675,7 @@ def _render_path(graph: GraphFakosGraph, request: GraphFakosRequest) -> str:
     path_graph = _graph_with_items(graph, path_nodes, tuple(path_edges))
     primary = (
         f"{_path_toolbar(graph, request, source.id, target.id)}"
-        f"{_graph_canvas(path_graph, request, source.id, request.selected_edge_id)}"
+        f"{_graph_canvas(path_graph, request, source.id, request.selected_edge_id, graph)}"
     )
     primary += _panel(
         f"{source.label} to {target.label}",

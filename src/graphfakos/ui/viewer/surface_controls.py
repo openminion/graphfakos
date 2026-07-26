@@ -59,7 +59,7 @@ def canvas_toolbar(request: GraphFakosRequest) -> str:
     )
     clear_pins_route = _route_href(request, overrides={"pinned_positions": None})
     next_theme = "default" if request.theme == "space" else "space"
-    theme_label = "Light" if request.theme == "space" else "Space"
+    theme_label = "Light" if request.theme == "space" else "Dark"
     theme_route = _route_href(request, overrides={"theme": next_theme})
     return (
         "<div class='gf-canvas-tools' aria-label='Graph camera controls'>"

@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 import shutil
 import subprocess
+from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from graphfakos.browser import viewer_runtime_script
@@ -174,6 +174,8 @@ def test_packaged_viewer_runtime_reducer_runs_in_node() -> None:
     assert "captureTemplatePayload" in viewer_runtime_script()
     assert "Template selected:" in viewer_runtime_script()
     assert "workbookSlotPayload" in viewer_runtime_script()
+    assert "workbookExportPayload" in viewer_runtime_script()
+    assert "workbookSlotsFromPayload" in viewer_runtime_script()
     assert "workbook-saved" in viewer_runtime_script()
     assert "graphfakos:viewer-workbook:v1" in viewer_runtime_script()
     assert "graphfakos:viewer-theme:v1" in viewer_runtime_script()
@@ -225,6 +227,7 @@ const sceneState = runtime.reduce(
   runtime.reduce(state, { name: "scene-setting", payload: { key: "node_scale", value: 0.65 } }),
   { name: "scene-level", payload: { value: "cluster" } }
 );
+const edgeModeState = runtime.reduce(state, { name: "edge-mode", value: "focus" });
 state = runtime.reduce(state, { name: "camera", payload: { x: 8, y: -2, zoom: 1.25, yaw: 16, pitch: -12 } });
 state = runtime.reduce(state, { name: "group-toggle", target_id: "provider" });
 state = runtime.reduce(state, { name: "filter", target_id: "node_kind", payload: { value: "memory" } });
@@ -361,6 +364,8 @@ const storage = {
   getItem: () => storage.value
 };
 const workbookSlots = runtime.workbookSlotsFromStorage(storage);
+const workbookExport = runtime.workbookExportPayload(workbookSlots);
+const workbookImport = runtime.workbookSlotsFromPayload(workbookExport);
 const commandActions = [
   { id: "local", label: "Local neighborhood", summary: "Inspect focus node", group: "navigate", route: "/neighborhood" },
   { id: "capture", label: "Capture knowledge", summary: "Jump to authoring form", group: "author", route: "/explore#capture-knowledge" },
@@ -404,6 +409,7 @@ process.stdout.write(JSON.stringify({
   clusterPinnedState,
   restoredGroupsState,
   sceneState,
+  edgeModeState,
   bounded,
   emptyStatus,
   selectedStatus,
@@ -418,6 +424,8 @@ process.stdout.write(JSON.stringify({
   savedRoute,
   workbookSlot,
   workbookSlots,
+  workbookExport,
+  workbookImport,
   commandSummary,
   projectedPoint,
   overviewDetailMode,
@@ -458,6 +466,7 @@ process.stdout.write(JSON.stringify({
     assert payload["restoredGroupsState"]["hidden_groups"] == []
     assert payload["sceneState"]["node_scale"] == 0.65
     assert payload["sceneState"]["scene_level"] == "cluster"
+    assert payload["edgeModeState"]["edge_clutter"] == "focus"
     assert payload["bounded"] == ["inside:a", "inside:b"]
     assert payload["emptyStatus"] == (
         "No selected graph items. Shift-click nodes or Shift-drag canvas to select several."
@@ -545,6 +554,11 @@ process.stdout.write(JSON.stringify({
     assert "camera_pose=" in payload["workbookSlot"]["route"]
     assert payload["workbookSlot"]["route"].startswith("/explore?")
     assert payload["workbookSlots"][0]["label"] == "Ops Review"
+    assert payload["workbookExport"]["kind"] == "graphfakos.saved-workspace"
+    assert (
+        payload["workbookExport"]["schema_version"] == "graphfakos.saved-workspace.v1"
+    )
+    assert payload["workbookImport"][0]["label"] == "Ops Review"
     assert payload["commandSummary"] == {
         "query": "author capture",
         "total_count": 3,

@@ -1,11 +1,13 @@
 import { expect, test } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
-import { shapeLinks } from "../src/link-shape.js";
+import { linkVisibleForDetail, shapeLinks } from "../src/link-shape.js";
+import { nodeColorForKind } from "../src/visual-contrast.js";
 import {
   detailLevelForCamera,
   labelBudgetForDetail,
   nodeScaleForCount,
   semanticZoom,
+  zoomStableNodeScale,
 } from "../src/semantic-detail.js";
 import { directionalNodeId } from "../src/spatial-navigation.js";
 
@@ -20,10 +22,32 @@ test("maps camera distance to semantic graph detail", () => {
     .toBe("detail");
   expect(detailLevelForCamera({ nodeCount: 240, referenceDistance: 900, cameraDistance: 360 }))
     .toBe("precision");
-  expect(labelBudgetForDetail("overview", 1, 240)).toBe(2);
-  expect(labelBudgetForDetail("detail", 1, 240)).toBe(16);
+  expect(labelBudgetForDetail("overview", 1, 240)).toBe(1);
+  expect(labelBudgetForDetail("detail", 1, 240)).toBe(9);
   expect(nodeScaleForCount(12)).toBeGreaterThan(nodeScaleForCount(48));
   expect(nodeScaleForCount(48)).toBeGreaterThan(nodeScaleForCount(240));
+  expect(nodeScaleForCount(240)).toBeLessThan(0.5);
+});
+
+test("keeps node marks readable while camera zoom changes", () => {
+  expect(zoomStableNodeScale(4)).toBeLessThan(zoomStableNodeScale(1));
+  expect(zoomStableNodeScale(0.25)).toBeGreaterThan(zoomStableNodeScale(1));
+  expect(zoomStableNodeScale(100)).toBeGreaterThanOrEqual(0.4);
+});
+
+test("progressive edge detail preserves aggregates and active context", () => {
+  const aggregate = { id: "bundle", kind: "edge_bundle", source: "a", target: "b" };
+  const selected = { id: "selected", selected: true, source: "a", target: "c" };
+  const focused = { id: "focus", source: "focus-node", target: "d" };
+  expect(linkVisibleForDetail(aggregate, "overview")).toBe(true);
+  expect(linkVisibleForDetail(selected, "overview")).toBe(true);
+  expect(linkVisibleForDetail(focused, "overview", "focus-node")).toBe(true);
+  expect(linkVisibleForDetail({ id: "any", source: "a", target: "b" }, "precision")).toBe(true);
+});
+
+test("keeps dense cluster summaries brighter than generic graph items", () => {
+  expect(nodeColorForKind("cluster")).toBe("#8fdaff");
+  expect(nodeColorForKind("unknown")).toBe("#a8c5f2");
 });
 
 test("chooses the nearest visible node in a screen direction", () => {
@@ -54,6 +78,7 @@ test("shapes natural curves and separates parallel links", () => {
     { id: "parallel:a", sourceId: "a", targetId: "b" },
     { id: "parallel:b", sourceId: "a", targetId: "b" },
     { id: "cross", sourceId: "a", targetId: "c" },
+    { id: "bundle", kind: "edge_bundle", sourceId: "b", targetId: "c" },
     { id: "loop", sourceId: "a", targetId: "a" },
   ];
 
@@ -62,7 +87,8 @@ test("shapes natural curves and separates parallel links", () => {
   expect(byId.get("parallel:a").curvature).toBeLessThan(0);
   expect(byId.get("parallel:b").curvature).toBeGreaterThan(0);
   expect(byId.get("parallel:a").curveRotation).toBe(byId.get("parallel:b").curveRotation);
-  expect(Math.abs(byId.get("cross").curvature)).toBeLessThan(Math.abs(byId.get("parallel:a").curvature));
+  expect(Math.abs(byId.get("cross").curvature)).toBeGreaterThan(0.3);
+  expect(Math.abs(byId.get("bundle").curvature)).toBeGreaterThan(Math.abs(byId.get("cross").curvature));
   expect(Math.abs(byId.get("loop").curvature)).toBeGreaterThan(0.5);
   expect(shapeLinks(nodes, links)).toEqual(shaped);
 });
@@ -84,6 +110,7 @@ test("mounts and navigates the packaged 3D graph", async ({ page }, testInfo) =>
   await page.getByRole("button", { name: "Fit selected or visible graph" }).click();
   await page.getByRole("link", { name: "Light" }).click();
   await expect(page.locator("body")).toHaveAttribute("data-theme", "default");
+  await expect(page.getByRole("link", { name: "Dark" })).toBeVisible();
   await page.screenshot({ path: "test-results/graphfakos-3d-1280x720.png", fullPage: false });
   await testInfo.attach("performance", {
     body: JSON.stringify({
@@ -205,7 +232,7 @@ test("supports touch-first inspection and pinch navigation", async ({ browser })
   await expect(shell).toHaveAttribute("data-touch-engaged", "true");
   await expect(guide).toHaveCSS("opacity", "0");
 
-  const label = page.locator(".gf-webgl-label[data-collided='false']").first();
+  const label = page.locator(".gf-webgl-label").first();
   await expect(label).toBeVisible();
   const nodeId = await label.getAttribute("data-node-id");
   expect(nodeId).toBeTruthy();
@@ -542,6 +569,117 @@ test("keeps Obsidian-style display controls on the graph surface", async ({ page
   expect(state.node_scale).toBeLessThan(1);
   expect(state.scene_level).toBe("cluster");
   await expect(display.locator("[data-gf-scene-level='cluster']")).toHaveAttribute("data-active", "true");
+});
+
+test("runs graph operating dock controls without leaving the canvas", async ({ page }) => {
+  await page.goto("/explore?theme=space&render_engine=3d&layout=grouped");
+  await expect(page.locator(".gf-canvas-shell")).toHaveAttribute("data-webgl-ready", "true");
+  await expect(page.locator("[data-gf-operating-dock]")).toBeVisible();
+
+  const viewer = page.locator("graphfakos-viewer");
+  await page.locator("[data-gf-edge-mode='focus']").click();
+  await expect.poll(() => viewer.evaluate((element) => element.getState().edge_clutter))
+    .toBe("focus");
+  await expect(page.locator("[data-gf-edge-mode='focus']")).toHaveAttribute("data-active", "true");
+
+  await page.locator("[data-gf-workbook-name]").first().fill("Focus pass");
+  await page.locator("[data-gf-workbook-action='save']").first().click();
+  await expect(page.locator("[data-gf-workbook-status]").first()).toContainText("Saved local slot");
+  await expect(page.locator("[data-gf-workbook-list]").first()).toContainText("Focus pass");
+  const downloadPromise = page.waitForEvent("download");
+  await page.locator("[data-gf-workbook-action='export']").first().click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toMatch(/^graphfakos-workspace-\d{4}-\d{2}-\d{2}\.json$/);
+  await expect(page.locator("[data-gf-workbook-status]").first()).toContainText("Exported 1 saved slot");
+  await page.locator("[data-gf-workbook-import]").first().setInputFiles({
+    name: "graphfakos-workspace.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify({
+      kind: "graphfakos.saved-workspace",
+      schema_version: "graphfakos.saved-workspace.v1",
+      slots: [{
+        id: "imported-focus",
+        label: "Imported Focus",
+        route: "/explore?theme=space&render_engine=3d",
+        state: { screen: "explore", theme: "space", render_engine: "3d" },
+      }],
+    })),
+  });
+  await expect(page.locator("[data-gf-workbook-status]").first()).toContainText("Imported 1 saved slot");
+  await expect(page.locator("[data-gf-workbook-list]").first()).toContainText("Imported Focus");
+
+  const localRoute = await page.locator("[data-gf-expand-neighborhood]").first().getAttribute("href");
+  expect(localRoute).toContain("/neighborhood?");
+  expect(localRoute).toContain("max_depth=1");
+  expect(await page.locator("[data-gf-search-jump]").count()).toBeGreaterThan(0);
+});
+
+test("runs selection, distribution, perspective, and import workflows", async ({ page }) => {
+  await page.goto("/explore");
+  await expect(page.locator(".gf-canvas-shell")).toHaveAttribute("data-webgl-ready", "true");
+  await page.evaluate(() => localStorage.removeItem("graphfakos:viewer-perspectives:v1"));
+  const viewer = page.locator("graphfakos-viewer");
+  await viewer.evaluate((element) => element.dispatch({
+    name: "select-node",
+    target_id: "provider:cluster-1",
+  }));
+
+  await page.locator("[data-gf-selection-action='outgoing']").click();
+  await expect.poll(() => viewer.evaluate(
+    (element) => element.getState().selected_node_ids.length,
+  )).toBeGreaterThan(1);
+
+  await page.locator(".gf-workbench-tool").filter({ hasText: "Distributions" }).locator("summary").click();
+  await page.locator("[data-gf-histogram='degree'] button:not([title^='0 '])").first().click();
+  await expect.poll(() => viewer.evaluate(
+    (element) => element.getState().selected_node_ids.length,
+  )).toBeGreaterThan(0);
+  await page.locator("[data-gf-selection-action='only']").click();
+  await expect.poll(() => viewer.evaluate((element) => (
+    element.graph.nodes.filter((node) => node.provider_payload?.viewer_hidden).length
+  ))).toBeGreaterThan(0);
+
+  await page.locator(".gf-workbench-tool").filter({ hasText: "Perspectives" }).locator("summary").click();
+  await page.locator("[data-gf-perspective-save]").click();
+  await expect(page.locator("[data-gf-local-perspectives] button")).toHaveText("View 1");
+  await page.reload();
+  await page.locator(".gf-workbench-tool").filter({ hasText: "Perspectives" }).locator("summary").click();
+  await expect(page.locator("[data-gf-local-perspectives] button")).toHaveText("View 1");
+
+  await page.locator(".gf-workbench-tool").filter({ hasText: "Open data" }).locator("summary").click();
+  const importResponse = page.waitForResponse((response) => response.url().endsWith("/api/import"));
+  await page.locator("[data-gf-import-form] input[type='file']").setInputFiles(
+    "fixtures/viewer-scale-1000.json",
+  );
+  await page.locator("[data-gf-import-form] button[type='submit']").click();
+  const response = await importResponse;
+  expect(response.ok()).toBe(true);
+  expect((await response.json()).ok).toBe(true);
+  await expect(page).toHaveURL(/\/explore/);
+});
+
+test("loads provider-backed details and reports live rendering performance", async ({ page }) => {
+  await page.goto("/explore");
+  const viewer = page.locator("graphfakos-viewer");
+  await expect(viewer.locator(".gf-canvas-shell")).toHaveAttribute("data-webgl-ready", "true");
+  await viewer.evaluate((element) => element.dispatch({
+    name: "select-node",
+    target_id: "provider:cluster-1",
+  }));
+
+  const expansionResponse = page.waitForResponse((response) => response.url().endsWith("/api/expand"));
+  await page.locator("[data-gf-selection-action='expand']").click();
+  const response = await expansionResponse;
+  expect(response.ok()).toBe(true);
+  expect((await response.json()).ok).toBe(true);
+
+  const performance = page.locator("[data-gf-performance-hud]");
+  await performance.locator("summary").click();
+  await expect.poll(async () => performance.locator("[data-gf-perf-fps]").textContent())
+    .not.toBe("--");
+  await expect(performance.locator("[data-gf-perf-detail]")).toHaveText(
+    /overview|balanced|detail|precision/,
+  );
 });
 
 test("preserves theme and group visibility across viewer routes", async ({ page }) => {
@@ -1069,6 +1207,18 @@ for (const fixture of [
     expect(firstSceneMs).toBeLessThan(fixture.maxFirstSceneMs);
     const labels = await page.locator(".gf-webgl-label").count();
     expect(labels).toBeLessThanOrEqual(8);
+    if (fixture.label === "1M") {
+      await expect.poll(async () => Number(await graph.getAttribute("data-reference-distance")))
+        .toBeGreaterThan(0);
+      const referenceDistance = Number(await graph.getAttribute("data-reference-distance"));
+      const zoomIn = page.getByRole("button", { name: "Zoom in" });
+      await zoomIn.click();
+      await zoomIn.click();
+      await expect(graph).toHaveAttribute("data-detail-mode", "detail");
+      expect(Number(await graph.getAttribute("data-reference-distance")))
+        .toBeCloseTo(referenceDistance, 1);
+      expect(await page.locator(".gf-webgl-label").count()).toBeGreaterThan(labels);
+    }
     await testInfo.attach("performance", {
       body: JSON.stringify({
         fixture: fixture.label,

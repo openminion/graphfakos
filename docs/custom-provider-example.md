@@ -9,6 +9,7 @@ provider-neutral DTOs and implement `GraphFakosProvider`.
 ```python
 from graphfakos import (
     GraphFakosEdge,
+    GraphFakosExpansionRequest,
     GraphFakosGraph,
     GraphFakosNode,
     GraphFakosProvider,
@@ -26,6 +27,7 @@ class PackageGraphProvider(GraphFakosProvider):
         "path",
         "provider_status",
         "static_export",
+        "lazy_expansion",
     )
 
     def load_graph(self, request: GraphFakosRequest) -> GraphFakosGraph:
@@ -73,8 +75,37 @@ class PackageGraphProvider(GraphFakosProvider):
                 "integration_commands": (
                     "python -m package_graph preview --screen explore --serve",
                 ),
+                "perspectives": (
+                    {
+                        "perspective_id": "docs",
+                        "label": "Documentation",
+                        "summary": "Review document nodes",
+                        "node_kinds": ("document",),
+                    },
+                ),
+                "inspector_schemas": (
+                    {
+                        "schema_id": "service-fields",
+                        "node_kind": "service",
+                        "fields": (
+                            {"key": "source", "label": "Source"},
+                            {"key": "id", "label": "Stable id"},
+                        ),
+                    },
+                ),
             },
         )
+
+    def expand_graph(
+        self,
+        request: GraphFakosRequest,
+        expansion: GraphFakosExpansionRequest,
+    ) -> GraphFakosGraph | None:
+        """Optional provider-owned lazy expansion hook."""
+        graph = self.load_graph(request)
+        if expansion.source_id not in {node.id for node in graph.nodes}:
+            return None
+        return graph
 ```
 
 ## Provider-neutral rules
@@ -86,10 +117,48 @@ class PackageGraphProvider(GraphFakosProvider):
 - Keep package-local preview commands thin: provider construction, defaults,
   and package labels belong there; shared viewer behavior belongs in
   GraphFakos.
+- Implement optional expansion only when the provider owns the source graph.
+  GraphFakos validates and renders the returned slice, but it does not invent
+  neighbors, ingest files, or persist expanded graph truth.
+- Use typed perspectives and inspector schemas only for portable presentation.
+  Provider-specific mutation, authorization, and semantic query behavior still
+  requires an explicit provider-owned protocol or host integration.
 
 ## Validation loop
 
-Use the same local proof shape as the fixture provider:
+Use the reusable conformance helper in the provider package's own tests:
+
+```python
+from graphfakos import GraphFakosRequest
+from graphfakos.testing import (
+    GraphFakosProviderConformanceCase,
+    assert_provider_conformance,
+)
+
+
+def test_package_provider_satisfies_graphfakos_contract(tmp_path):
+    assert_provider_conformance(
+        GraphFakosProviderConformanceCase(
+            provider=PackageGraphProvider(),
+            request=GraphFakosRequest(screen="explore"),
+            expected_role="third_party",
+            expected_provider="Package Graph",
+            expected_node="Integration Guide",
+            expected_edge="documents",
+            required_capabilities=(
+                "search",
+                "neighborhood",
+                "path",
+                "provider_status",
+                "static_export",
+                "lazy_expansion",
+            ),
+            artifact_path=tmp_path / "package-graph.json",
+        )
+    )
+```
+
+Then use the same local proof shape as the fixture provider:
 
 ```bash
 PYTHONDONTWRITEBYTECODE=1 .venv/bin/python3.11 -m ruff check src tests scripts

@@ -276,6 +276,10 @@
     if (action === "scene-level" && ["overview", "islands", "cluster", "local", "precision"].includes(payload.value)) {
       next.scene_level = payload.value;
     }
+    if (action === "edge-mode") {
+      const mode = command.value || payload.value || payload.mode;
+      if (["normal", "reduced", "bundles", "local", "focus"].includes(mode)) next.edge_clutter = mode;
+    }
     if (action === "filter") {
       const key = payload.key || command.target_id;
       if (key) {
@@ -439,31 +443,64 @@
     return true;
   };
 
+  const workbookExportPayload = (slots) => ({
+    kind: "graphfakos.saved-workspace",
+    schema_version: "graphfakos.saved-workspace.v1",
+    generated_at: new Date().toISOString(),
+    slots: slots.filter((item) => item?.route && item?.state),
+  });
+
+  const workbookSlotsFromPayload = (payload) => {
+    const slots = Array.isArray(payload?.slots) ? payload.slots : payload;
+    if (!Array.isArray(slots)) throw new Error("workspace JSON must contain a slots array");
+    const cleanSlots = slots.filter((slot) => {
+      return slot
+        && typeof slot.route === "string"
+        && slot.route.startsWith("/")
+        && slot.state
+        && typeof slot.state === "object";
+    });
+    if (!cleanSlots.length) throw new Error("workspace JSON does not contain saved view slots");
+    return cleanSlots.slice(0, 8);
+  };
+
+  const downloadTextFile = (filename, text, type = "application/json") => {
+    const blob = new Blob([text], { type });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  };
+
   const renderWorkbookSlots = (root, slots, navigate) => {
-    const list = root.querySelector("[data-gf-workbook-list]");
-    if (!list) return;
-    list.replaceChildren();
-    if (!slots.length) {
-      const empty = document.createElement("p");
-      empty.className = "gf-note";
-      empty.textContent = "No local saved slots yet. Save one to keep this camera, filters, selection, and pins in this browser.";
-      list.appendChild(empty);
-      return;
-    }
-    slots.forEach((slot) => {
-      const row = document.createElement("div");
-      row.className = "gf-workbook-slot";
-      const summary = document.createElement("span");
-      summary.textContent = `${slot.label || "Local saved view"} · ${slot.state?.screen || "explore"}`;
-      const link = document.createElement("a");
-      link.href = slot.route || "/";
-      link.textContent = "Load";
-      link.addEventListener("click", (event) => {
-        event.preventDefault();
-        navigate(slot.route || "/");
+    root.querySelectorAll("[data-gf-workbook-list]").forEach((list) => {
+      list.replaceChildren();
+      if (!slots.length) {
+        const empty = document.createElement("p");
+        empty.className = "gf-note";
+        empty.textContent = "No local saved slots yet. Save one to keep this camera, filters, selection, and pins in this browser.";
+        list.appendChild(empty);
+        return;
+      }
+      slots.forEach((slot) => {
+        const row = document.createElement("div");
+        row.className = "gf-workbook-slot";
+        const summary = document.createElement("span");
+        summary.textContent = `${slot.label || "Local saved view"} · ${slot.state?.screen || "explore"}`;
+        const link = document.createElement("a");
+        link.href = slot.route || "/";
+        link.textContent = "Load";
+        link.addEventListener("click", (event) => {
+          event.preventDefault();
+          navigate(slot.route || "/");
+        });
+        row.append(summary, link);
+        list.appendChild(row);
       });
-      row.append(summary, link);
-      list.appendChild(row);
     });
   };
 
@@ -617,6 +654,50 @@
   const connectedEdges = (shell, nodeId) => [
     ...shell.querySelectorAll(`[data-source-id="${CSS.escape(nodeId)}"], [data-target-id="${CSS.escape(nodeId)}"]`),
   ];
+
+  const edgeVisibleForMode = (edge, state, source, target) => {
+    if (source?.dataset.hidden === "true" || target?.dataset.hidden === "true") return false;
+    const selectedNodes = new Set(state.selected_node_ids || []);
+    const selected = edge.dataset.edgeId === state.selected_edge_id;
+    const incident = selectedNodes.has(edge.dataset.sourceId || "")
+      || selectedNodes.has(edge.dataset.targetId || "");
+    const aggregate = edge.dataset.kind === "edge_bundle" || edge.dataset.aggregate === "true";
+    const sameCluster = source?.dataset.clusterId
+      && source.dataset.clusterId === target?.dataset.clusterId;
+    const mode = state.edge_clutter || "normal";
+    if (mode === "focus") return selected || incident;
+    if (mode === "bundles" || mode === "reduced") return selected || incident || aggregate;
+    if (mode === "local") return selected || incident || sameCluster || aggregate;
+    return true;
+  };
+
+  const queryTokens = (query) => String(query || "")
+    .toLowerCase()
+    .split(/[^\w:.-]+/)
+    .map((token) => token.trim())
+    .filter(Boolean);
+
+  const applyQueryMarks = (root, state) => {
+    const tokens = queryTokens(state.query);
+    root.querySelectorAll(".gf-node").forEach((node) => {
+      if (!tokens.length) {
+        node.dataset.queryMatch = "true";
+        return;
+      }
+      const haystack = [
+        node.dataset.nodeId,
+        node.dataset.label,
+        node.dataset.kind,
+        node.dataset.clusterId,
+        node.dataset.source,
+        node.dataset.summary,
+        node.dataset.contentPreview,
+      ].filter(Boolean).join(" ").toLowerCase();
+      node.dataset.queryMatch = tokens.every((token) => haystack.includes(token))
+        ? "true"
+        : "false";
+    });
+  };
 
   const curvedEdgeControl = (x1, y1, x2, y2, edgeId = "") => {
     const dx = x2 - x1;
@@ -1365,6 +1446,7 @@
     nodeScale: state.node_scale,
     edgeOpacity: state.edge_opacity,
     labelDensity: state.label_density,
+    edgeMode: state.edge_clutter,
   });
 
   const webglSceneFromShell = (shell, state) => ({
@@ -1375,6 +1457,7 @@
       kind: node.dataset.kind || "node",
       clusterId: node.dataset.clusterId || node.dataset.kind || "",
       degree: number(node.dataset.degree, 0),
+      score: number(node.dataset.score, 0),
       summary: node.dataset.summary || "",
       contentPreview: node.dataset.contentPreview || node.dataset.summary || "",
       priority: node.dataset.labelPriority || "ambient",
@@ -1387,6 +1470,7 @@
       sourceId: edge.dataset.sourceId || "",
       targetId: edge.dataset.targetId || "",
       kind: edge.dataset.kind || "edge",
+      aggregate: edge.dataset.kind === "edge_bundle",
       selected: edge.dataset.edgeId === state.selected_edge_id,
       hidden: edge.dataset.hidden === "true",
     })),
@@ -1400,20 +1484,32 @@
       kind: node.kind || "node",
       clusterId: node.provider_payload?.cluster_id || node.visual?.group || node.kind || "",
       degree: 0,
+      score: number(node.score, 0),
       summary: node.summary || node.source || node.id,
-      contentPreview: node.content_preview || node.provider_payload?.content_preview || node.summary || "",
+      contentPreview: node.content_preview
+        || node.provider_payload?.content_preview
+        || node.provider_payload?.content
+        || node.provider_payload?.text
+        || node.provider_payload?.preview
+        || node.provider_payload?.summary
+        || node.summary
+        || "",
+      provider_payload: clone(node.provider_payload),
       priority: state.selected_node_ids.includes(node.id) ? "focus" : "ambient",
       selected: state.selected_node_ids.includes(node.id),
       hidden: state.hidden_groups.includes(node.kind || "")
-        || state.hidden_groups.includes(node.provider_payload?.cluster_id || node.visual?.group || ""),
+        || state.hidden_groups.includes(node.provider_payload?.cluster_id || node.visual?.group || "")
+        || node.provider_payload?.viewer_hidden === true,
     })),
     links: (graph.edges || []).map((edge) => ({
       id: edge.id,
       sourceId: edge.source_id,
       targetId: edge.target_id,
       kind: edge.kind || "edge",
+      aggregate: edge.kind === "edge_bundle",
+      weight: number(edge.weight || edge.provider_payload?.edge_count, 1),
       selected: edge.id === state.selected_edge_id,
-      hidden: false,
+      hidden: edge.provider_payload?.viewer_hidden === true,
     })),
   });
 
@@ -2411,10 +2507,10 @@
     }
 
     #setWorkbookStatus(message, state = "") {
-      const status = this.querySelector("[data-gf-workbook-status]");
-      if (!status) return;
-      status.textContent = message;
-      status.dataset.state = state;
+      this.querySelectorAll("[data-gf-workbook-status]").forEach((status) => {
+        status.textContent = message;
+        status.dataset.state = state;
+      });
     }
 
     #renderWorkbook() {
@@ -2450,6 +2546,41 @@
       this.#renderWorkbook();
       this.#setWorkbookStatus("Cleared local saved slots.", "");
       emit(this, "workbook-cleared", { state: this.getState() });
+    }
+
+    #exportWorkbookSlots() {
+      const slots = workbookSlotsFromStorage(this.#workbookStorage());
+      if (!slots.length) {
+        this.#setWorkbookStatus("Save at least one local slot before exporting.", "error");
+        return;
+      }
+      const payload = workbookExportPayload(slots);
+      downloadTextFile(
+        `graphfakos-workspace-${new Date().toISOString().slice(0, 10)}.json`,
+        `${JSON.stringify(payload, null, 2)}\n`,
+      );
+      this.#setWorkbookStatus(`Exported ${payload.slots.length} saved slot(s).`, "saved");
+      emit(this, "workbook-exported", { payload, state: this.getState() });
+    }
+
+    async #importWorkbookSlots(file) {
+      const storage = this.#workbookStorage();
+      if (!storage) {
+        this.#setWorkbookStatus("Local saved slots are unavailable in this browser context.", "error");
+        return;
+      }
+      if (!file) return;
+      try {
+        const payload = JSON.parse(await file.text());
+        const slots = workbookSlotsFromPayload(payload);
+        writeWorkbookSlots(storage, slots);
+        this.#renderWorkbook();
+        this.#setWorkbookStatus(`Imported ${slots.length} saved slot(s).`, "saved");
+        emit(this, "workbook-imported", { slots, state: this.getState() });
+      } catch (error) {
+        this.#setWorkbookStatus(error?.message || String(error), "error");
+        emit(this, "error", { message: error?.message || String(error), action: "workbook-import" });
+      }
     }
 
     #wireCommandPalette() {
@@ -2493,6 +2624,7 @@
       writeStoredTheme(this.state.theme);
       this.querySelectorAll(".gf-canvas-shell").forEach((shell) => applyCamera(shell, this.state));
       this.querySelectorAll(".gf-canvas-shell").forEach((shell) => applyPinnedPositions(shell, this.state));
+      applyQueryMarks(this, this.state);
       this.querySelectorAll(".gf-node").forEach((node) => {
         node.dataset.selected = this.state.selected_node_ids.includes(node.dataset.nodeId) ? "true" : "false";
         node.dataset.pinned = this.state.pinned_positions[node.dataset.nodeId] ? "true" : node.dataset.pinned || "false";
@@ -2506,7 +2638,7 @@
         const source = this.querySelector(`.gf-node[data-node-id="${CSS.escape(edge.dataset.sourceId || "")}"]`);
         const target = this.querySelector(`.gf-node[data-node-id="${CSS.escape(edge.dataset.targetId || "")}"]`);
         edge.dataset.selected = selected ? "true" : "false";
-        edge.dataset.hidden = source?.dataset.hidden === "true" || target?.dataset.hidden === "true" ? "true" : "false";
+        edge.dataset.hidden = edgeVisibleForMode(edge, this.state, source, target) ? "false" : "true";
         edge.dataset.stretched = "false";
       });
       this.querySelectorAll(".gf-canvas-shell").forEach((shell) => {
@@ -2540,6 +2672,9 @@
       });
       this.querySelectorAll("[data-gf-scene-level]").forEach((button) => {
         button.dataset.active = button.dataset.gfSceneLevel === this.state.scene_level ? "true" : "false";
+      });
+      this.querySelectorAll("[data-gf-edge-mode]").forEach((button) => {
+        button.dataset.active = button.dataset.gfEdgeMode === this.state.edge_clutter ? "true" : "false";
       });
       emit(this, action, { previous, state: this.getState() });
     }
@@ -3084,6 +3219,12 @@
           payload: { value: button.dataset.gfSceneLevel || "overview" },
         }));
       });
+      this.querySelectorAll("[data-gf-edge-mode]").forEach((button) => {
+        button.addEventListener("click", () => this.dispatch({
+          name: "edge-mode",
+          value: button.dataset.gfEdgeMode || "normal",
+        }));
+      });
       this.querySelectorAll("[data-gf-pin='reset']").forEach((button) => {
         button.addEventListener("click", () => this.dispatch({ name: "reset-pins" }));
       });
@@ -3101,6 +3242,13 @@
         button.addEventListener("click", () => {
           if (button.dataset.gfWorkbookAction === "save") this.#saveWorkbookSlot();
           if (button.dataset.gfWorkbookAction === "clear") this.#clearWorkbookSlots();
+          if (button.dataset.gfWorkbookAction === "export") this.#exportWorkbookSlots();
+        });
+      });
+      this.querySelectorAll("[data-gf-workbook-import]").forEach((input) => {
+        input.addEventListener("change", () => {
+          this.#importWorkbookSlots(input.files?.[0]);
+          input.value = "";
         });
       });
       this.#wireCommandPalette();
@@ -3201,6 +3349,8 @@
     commandPaletteFilterSummary,
     savedViewRoute,
     workbookSlotPayload,
+    workbookExportPayload,
+    workbookSlotsFromPayload,
     workbookSlotsFromStorage,
     openInspectOverlay,
     applyGraphPatch,

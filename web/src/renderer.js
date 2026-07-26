@@ -6,22 +6,16 @@ import {
   rectanglesOverlap,
   translatedCameraForReservation,
 } from "./focus-readability.js";
-import { shapeLinks, stableHash } from "./link-shape.js";
+import { linkVisibleForDetail, shapeLinks, stableHash } from "./link-shape.js";
 import {
   detailLevelForCamera,
   labelBudgetForDetail,
   nodeScaleForCount,
   semanticZoom,
+  zoomStableNodeScale,
 } from "./semantic-detail.js";
 import { directionalNodeId } from "./spatial-navigation.js";
-
-const colorByKind = {
-  artifact: "#ff936b",
-  document: "#f4d06f",
-  memory: "#9ce070",
-  provider: "#5de1e6",
-  warning: "#ff6b7a",
-};
+import { nodeColorForKind } from "./visual-contrast.js";
 
 const nodeHitGeometry = new SphereGeometry(4.5, 8, 6);
 const nodeHitMaterial = new MeshBasicMaterial({
@@ -34,16 +28,17 @@ const nodeHitMaterial = new MeshBasicMaterial({
 function clusterCenters(nodes) {
   const clusterIds = [...new Set(nodes.map((node) => node.clusterId || node.kind || "unclustered"))].sort();
   if (clusterIds.length === 1) return new Map([[clusterIds[0], { x: 0, y: 0, z: 0 }]]);
-  const spread = Math.min(1460, 310 + Math.sqrt(clusterIds.length) * 138);
+  const spread = Math.min(7800, 760 + Math.sqrt(clusterIds.length) * 360);
   const goldenAngle = Math.PI * (3 - Math.sqrt(5));
   return new Map(clusterIds.map((clusterId, index) => {
-    const ring = Math.sqrt((index + 0.9) / clusterIds.length);
-    const radius = spread * ring;
-    const angle = index * goldenAngle;
+    const ring = Math.sqrt((index + 1.4) / clusterIds.length);
+    const wobble = ((stableHash(`${clusterId}:wobble`) % 100) - 50) / 100;
+    const radius = spread * ring * (0.98 + Math.abs(wobble) * 0.34);
+    const angle = index * goldenAngle + wobble * 0.44;
     return [clusterId, {
       x: Math.cos(angle) * radius,
       y: Math.sin(angle) * radius,
-      z: ((index % 7) - 3) * 92,
+      z: ((index % 11) - 5) * 104 + wobble * 64,
     }];
   }));
 }
@@ -52,11 +47,11 @@ function seededPosition(id, clusterId, centers) {
   const nodeHash = stableHash(id);
   const center = centers.get(clusterId || "unclustered") || { x: 0, y: 0, z: 0 };
   const localAngle = (nodeHash % 360) * (Math.PI / 180);
-  const localRadius = 12 + (nodeHash % 46);
+  const localRadius = 10 + (nodeHash % 44);
   return {
     x: center.x + Math.cos(localAngle) * localRadius,
     y: center.y + Math.sin(localAngle) * localRadius,
-    z: center.z + ((nodeHash % 47) - 23) * 1.7,
+    z: center.z + ((nodeHash % 47) - 23) * 1.45,
   };
 }
 
@@ -78,10 +73,36 @@ function clusterForce(nodes, centers) {
   return force;
 }
 
+function forceProfile(visibleCount) {
+  if (visibleCount > 160) {
+    return { charge: -620, linkDistance: 260, linkStrength: 0.065, clusterStrength: 0.055 };
+  }
+  if (visibleCount > 80) {
+    return { charge: -380, linkDistance: 180, linkStrength: 0.11, clusterStrength: 0.09 };
+  }
+  return { charge: -240, linkDistance: 118, linkStrength: 0.2, clusterStrength: 0.15 };
+}
+
+function applyForces(graph, nodes, centers, visibleCount) {
+  const profile = forceProfile(visibleCount);
+  graph.d3Force("charge")?.strength(profile.charge);
+  graph.d3Force("link")?.distance(profile.linkDistance).strength(profile.linkStrength);
+  graph.d3Force("cluster", clusterForce(nodes, centers).strength(profile.clusterStrength));
+}
+
 function labelContext(node) {
   const kind = node.kind || "node";
   const links = `${node.degree || 0} link${node.degree === 1 ? "" : "s"}`;
-  const summary = String(node.summary || node.contentPreview || "").trim();
+  const payload = node.providerPayload || node.provider_payload || {};
+  const summary = String(
+    node.summary
+    || node.contentPreview
+    || payload.content
+    || payload.text
+    || payload.preview
+    || payload.summary
+    || "",
+  ).trim();
   const preview = summary.length > 92 ? `${summary.slice(0, 89).trimEnd()}...` : summary;
   return [kind, links, preview].filter(Boolean).join(" | ");
 }
@@ -148,12 +169,12 @@ const hash = (value) => {
 const position = (id, clusterId, center) => {
   const nodeHash = hash(id);
   const localAngle = (nodeHash % 360) * Math.PI / 180;
-  const localRadius = 12 + (nodeHash % 46);
+  const localRadius = 18 + (nodeHash % 78);
   return {
     id,
     x: center.x + Math.cos(localAngle) * localRadius,
     y: center.y + Math.sin(localAngle) * localRadius,
-    z: center.z + ((nodeHash % 47) - 23) * 1.7,
+    z: center.z + ((nodeHash % 47) - 23) * 2.3,
   };
 };
 self.onmessage = ({ data }) => {
@@ -230,6 +251,7 @@ function mount(element, scene, callbacks = {}) {
   let previewedNodeId = "";
   let semanticReferenceDistance = 0;
   let semanticDetail = detailLevelForCamera({ nodeCount: nodes.length });
+  let semanticNodeScale = 1;
   let visibleLabelIds = labelIds(nodes, activeScene, semanticDetail);
   const nodeObjects = new Map();
   let initialFit = true;
@@ -291,9 +313,9 @@ function mount(element, scene, callbacks = {}) {
     if (selectedNodeIds.has(node.id)) return "#ffffff";
     if (node.id === hoveredNodeId || node.id === previewedNodeId) return "#f8fbff";
     if (activeFocusId && !focusedNodeIds.has(node.id)) {
-      return activeScene.theme === "space" ? "#435171" : "#aebbb7";
+      return activeScene.theme === "space" ? "#53617e" : "#aebbb7";
     }
-    return colorByKind[node.kind] || "#8aa4c8";
+    return nodeColorForKind(node.kind);
   };
   const linkEndpoints = (link) => ({
     source: typeof link.source === "object" ? link.source.id : link.source,
@@ -303,21 +325,50 @@ function mount(element, scene, callbacks = {}) {
     const { source, target } = linkEndpoints(link);
     return Boolean(activeFocusId && (source === activeFocusId || target === activeFocusId));
   };
+  const isAggregateLink = (link) => link.kind === "edge_bundle" || link.aggregate === true;
+  const nodeCluster = (nodeId) => (
+    nodes.find((node) => node.id === nodeId)?.clusterId || ""
+  );
+  const edgeMode = () => activeScene.edgeMode || activeScene.edge_mode || "normal";
+  const linkVisibleForMode = (link) => {
+    if (link.hidden) return false;
+    const mode = edgeMode();
+    const { source, target } = linkEndpoints(link);
+    const incident = Boolean(activeFocusId && (source === activeFocusId || target === activeFocusId));
+    const selected = link.selected === true;
+    const aggregate = isAggregateLink(link);
+    if (mode === "focus") return selected || incident;
+    if (mode === "bundles" || mode === "reduced") return selected || incident || aggregate;
+    if (mode === "local") return selected || incident || aggregate || (
+      nodeCluster(source) && nodeCluster(source) === nodeCluster(target)
+    );
+    return linkVisibleForDetail(link, semanticDetail, activeFocusId);
+  };
   const linkColor = (link) => {
     if (link.selected) return "#72ddff";
     if (linkTouchesFocus(link)) return activeScene.theme === "space" ? "#c2f3ff" : "#17677c";
     if (activeFocusId) return activeScene.theme === "space" ? "#3e4a68" : "#a4afac";
-    return activeScene.theme === "space" ? "#7890b8" : "#7f908c";
+    if (isAggregateLink(link)) return activeScene.theme === "space" ? "#7aa4d8" : "#6b837c";
+    return activeScene.theme === "space" ? "#829bc3" : "#7f908c";
   };
-  const linkWidth = (link) => (link.selected ? 2.1 : linkTouchesFocus(link) ? 1.35 : 0.28);
+  const linkWeight = (link) => (
+    Math.max(1, Number(link.weight || link.edgeCount || link.edge_count || 1))
+  );
+  const linkWidth = (link) => {
+    if (link.selected) return 2.1;
+    if (linkTouchesFocus(link)) return 1.35;
+    if (isAggregateLink(link)) return Math.min(0.9, 0.22 + Math.log10(linkWeight(link)) * 0.18);
+    return 0.22;
+  };
+  const linkVisible = (link) => linkVisibleForMode(link);
   const visibleNodeCount = () => activeScene.nodes.filter((node) => !node.hidden).length;
   const sceneLinkOpacity = () => {
     const visibleCount = visibleNodeCount();
     let base = {
-      overview: 0.13,
-      balanced: 0.22,
-      detail: 0.32,
-      precision: 0.42,
+      overview: 0.1,
+      balanced: 0.2,
+      detail: 0.3,
+      precision: 0.4,
     }[semanticDetail] || 0.13;
     if (visibleCount <= 48) base = Math.max(base, 0.42);
     else if (visibleCount <= 110) base = Math.max(base, 0.3);
@@ -340,12 +391,73 @@ function mount(element, scene, callbacks = {}) {
     );
   };
   const nodeSize = (node) => {
-    const baseSize = 0.42 + Math.sqrt(Math.max(0, node.degree || 0)) * 0.09;
+    const baseSize = 0.18 + Math.sqrt(Math.max(0, node.degree || 0)) * 0.042;
     const focusBoost = selectedNodeIds.has(node.id) || node.id === hoveredNodeId || node.id === previewedNodeId
-      ? 1.8
-      : focusedNodeIds.has(node.id) && activeFocusId ? 1.4 : 1;
+      ? 1.58
+      : focusedNodeIds.has(node.id) && activeFocusId ? 1.2 : 1;
     const sparseScale = nodeScaleForCount(visibleNodeCount());
-    return Math.max(0.3, Math.min(16, baseSize * focusBoost * sparseScale * (activeScene.nodeScale || 1)));
+    return Math.max(0.1, Math.min(7.5, baseSize * focusBoost * sparseScale * semanticNodeScale * (activeScene.nodeScale || 1)));
+  };
+  const shell = element.closest(".gf-canvas-shell");
+  const focusLocator = shell?.querySelector("[data-gf-focus-locator]");
+  const updateFocusLocator = () => {
+    if (!focusLocator) return;
+    const focusId = [...selectedNodeIds][0] || "";
+    const node = nodes.find((item) => item.id === focusId && !item.hidden);
+    if (!node) {
+      focusLocator.hidden = true;
+      return;
+    }
+    const point = graph.graph2ScreenCoords(node.x || 0, node.y || 0, node.z || 0);
+    const width = element.clientWidth;
+    const height = element.clientHeight;
+    const margin = 36;
+    const onScreen = point.x >= margin && point.x <= width - margin
+      && point.y >= margin && point.y <= height - margin;
+    focusLocator.hidden = onScreen;
+    if (onScreen) return;
+    const x = Math.max(margin, Math.min(width - margin, point.x));
+    const y = Math.max(margin, Math.min(height - margin, point.y));
+    focusLocator.style.left = `${x}px`;
+    focusLocator.style.top = `${y}px`;
+    focusLocator.style.setProperty("--bearing", `${Math.atan2(point.y - y, point.x - x)}rad`);
+    focusLocator.dataset.nodeId = node.id;
+    const label = focusLocator.querySelector("[data-gf-focus-locator-label]");
+    if (label) label.textContent = node.label || node.id;
+  };
+  focusLocator?.addEventListener("click", () => {
+    const nodeId = focusLocator.dataset.nodeId || "";
+    if (nodeId) focusNeighborhood(nodeId);
+  });
+  const performanceHud = shell?.querySelector("[data-gf-performance-hud]");
+  let performanceFrame = 0;
+  let frameCount = 0;
+  let frameDurationTotal = 0;
+  let frameStartedAt = performance.now();
+  let lastFrameAt = frameStartedAt;
+  const updatePerformanceHud = () => {
+    if (!performanceHud) return;
+    const now = performance.now();
+    frameDurationTotal += now - lastFrameAt;
+    lastFrameAt = now;
+    frameCount += 1;
+    if (now - frameStartedAt < 500) return;
+    const elapsed = now - frameStartedAt;
+    const fps = Math.round(frameCount * 1000 / elapsed);
+    const frame = frameDurationTotal / Math.max(1, frameCount);
+    const visibleLinks = links.filter(linkVisible).length;
+    performanceHud.querySelector("[data-gf-perf-fps]").textContent = String(fps);
+    performanceHud.querySelector("[data-gf-perf-frame]").textContent = frame.toFixed(1);
+    performanceHud.querySelector("[data-gf-perf-visible]").textContent = `${visibleNodeCount()} / ${nodes.length}`;
+    performanceHud.querySelector("[data-gf-perf-links]").textContent = `${visibleLinks} / ${links.length}`;
+    performanceHud.querySelector("[data-gf-perf-detail]").textContent = semanticDetail;
+    frameCount = 0;
+    frameDurationTotal = 0;
+    frameStartedAt = now;
+  };
+  const samplePerformance = () => {
+    updatePerformanceHud();
+    performanceFrame = window.requestAnimationFrame(samplePerformance);
   };
   const scheduleLabelLayout = () => {
     window.cancelAnimationFrame(labelLayoutFrame);
@@ -411,6 +523,7 @@ function mount(element, scene, callbacks = {}) {
     });
   };
   const pointerDown = (event) => {
+    markCameraInteraction();
     if (event.pointerType === "touch") markTouchEngaged();
     if (event.button !== 0) return;
     const labelNodeId = event.target.closest?.(".gf-webgl-label")?.dataset.nodeId || "";
@@ -449,6 +562,7 @@ function mount(element, scene, callbacks = {}) {
   const pointerCancel = () => {
     pointerGesture = null;
   };
+  const wheel = () => markCameraInteraction();
   const doubleClick = (event) => {
     const labelNodeId = event.target.closest?.(".gf-webgl-label")?.dataset.nodeId || "";
     const node = nodes.find((item) => item.id === (labelNodeId || hoveredNodeId));
@@ -560,6 +674,9 @@ function mount(element, scene, callbacks = {}) {
     });
     const changed = next !== semanticDetail;
     semanticDetail = next;
+    semanticNodeScale = zoomStableNodeScale(camera.semanticZoom);
+    graph.nodeVal(nodeSize);
+    graph.linkVisibility(linkVisible);
     if (changed) {
       visibleLabelIds = labelIds(nodes, activeScene, semanticDetail);
       graph.linkOpacity(sceneLinkOpacity());
@@ -688,6 +805,7 @@ function mount(element, scene, callbacks = {}) {
       refreshSemanticDetail(camera);
       callbacks.onCameraChange?.({ ...camera, detailLevel: semanticDetail });
       callbacks.onOverview?.(overviewState());
+      updateFocusLocator();
       scheduleLabelLayout();
     });
   };
@@ -698,12 +816,12 @@ function mount(element, scene, callbacks = {}) {
     .nodeId("id")
     .nodeColor(nodeColor)
     .nodeVal(nodeSize)
-    .nodeOpacity(0.92)
+    .nodeOpacity(0.98)
     .nodeVisibility((node) => !activeScene.nodes.find((item) => item.id === node.id)?.hidden)
     .nodeResolution(8)
     .linkColor(linkColor)
     .linkOpacity(sceneLinkOpacity())
-    .linkVisibility((link) => !activeScene.links.find((item) => item.id === link.id)?.hidden)
+    .linkVisibility(linkVisible)
     .linkWidth(linkWidth)
     .linkCurvature("curvature")
     .linkCurveRotation("curveRotation")
@@ -745,6 +863,8 @@ function mount(element, scene, callbacks = {}) {
       frameGraph(0);
     });
 
+  performanceFrame = window.requestAnimationFrame(samplePerformance);
+
   const frameGraph = (duration = 0, { preserve = false, resetReference = false } = {}) => {
     const establishReference = resetReference || !semanticReferenceDistance || !preserve;
     const generation = cameraInteractionGeneration;
@@ -777,9 +897,7 @@ function mount(element, scene, callbacks = {}) {
     }, reducedMotion ? 0 : duration + 20);
   };
 
-  graph.d3Force("charge")?.strength(-210);
-  graph.d3Force("link")?.distance(112).strength(0.2);
-  graph.d3Force("cluster", clusterForce(nodes, centers));
+  applyForces(graph, nodes, centers, visibleNodeCount());
   graph.nodeThreeObject(nodeObject);
   graph.nodeThreeObjectExtend(true);
   const controls = graph.controls?.();
@@ -788,7 +906,6 @@ function mount(element, scene, callbacks = {}) {
     controls.zoomSpeed = 0.9;
     controls.panSpeed = 0.72;
   }
-  controls?.addEventListener?.("start", markCameraInteraction);
   controls?.addEventListener?.("change", reportCamera);
   reportCamera();
 
@@ -802,6 +919,7 @@ function mount(element, scene, callbacks = {}) {
   element.addEventListener("pointermove", pointerMove);
   element.addEventListener("pointerup", pointerUp);
   element.addEventListener("pointercancel", pointerCancel);
+  element.addEventListener("wheel", wheel, { passive: true });
   element.addEventListener("dblclick", doubleClick);
   resize();
   frameGraph();
@@ -870,7 +988,7 @@ function mount(element, scene, callbacks = {}) {
         links = shapeLinks(nodes, nextScene.links);
         if (!nodes.some((node) => node.id === previewedNodeId && !node.hidden)) previewedNodeId = "";
         graph.graphData({ nodes, links });
-        graph.d3Force("cluster", clusterForce(nodes, centers));
+        applyForces(graph, nodes, centers, visibleNodeCount());
         if (!reducedMotion) graph.d3ReheatSimulation();
       }
       refreshInteractionContext();
@@ -879,7 +997,7 @@ function mount(element, scene, callbacks = {}) {
       graph.nodeVal(nodeSize);
       graph.linkOpacity(sceneLinkOpacity());
       graph.nodeVisibility(graph.nodeVisibility());
-      graph.linkVisibility(graph.linkVisibility());
+      graph.linkVisibility(linkVisible);
       refreshVisuals();
       reportCamera();
     },
@@ -890,12 +1008,13 @@ function mount(element, scene, callbacks = {}) {
       window.cancelAnimationFrame(cameraFrame);
       window.cancelAnimationFrame(labelFrame);
       window.cancelAnimationFrame(labelLayoutFrame);
-      controls?.removeEventListener?.("start", markCameraInteraction);
+      window.cancelAnimationFrame(performanceFrame);
       controls?.removeEventListener?.("change", reportCamera);
       element.removeEventListener("pointerdown", pointerDown);
       element.removeEventListener("pointermove", pointerMove);
       element.removeEventListener("pointerup", pointerUp);
       element.removeEventListener("pointercancel", pointerCancel);
+      element.removeEventListener("wheel", wheel);
       element.removeEventListener("dblclick", doubleClick);
       nodeObjects.clear();
       window.removeEventListener("keydown", setClusterDrag);

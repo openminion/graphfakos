@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from graphfakos.ui.viewer.operating_styles import OPERATING_STYLE
 from graphfakos.ui.viewer.surface_styles import SURFACE_STYLE
 
 _STYLE = """
@@ -1756,7 +1757,7 @@ a {
 
 def viewer_styles() -> str:
     """Return the complete self-contained viewer stylesheet."""
-    return _STYLE.replace("</style>", f"{SURFACE_STYLE}</style>")
+    return _STYLE.replace("</style>", f"{SURFACE_STYLE}{OPERATING_STYLE}</style>")
 
 
 __all__ = ["viewer_styles"]

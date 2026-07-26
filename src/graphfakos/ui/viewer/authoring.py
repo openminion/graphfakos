@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from html import escape
 import json
+from html import escape
 
 from graphfakos.models import (
     GraphFakosActionStatus,
@@ -15,11 +15,23 @@ from graphfakos.models import (
 from graphfakos.ui.viewer.graph_ops import _preferred_focus_node
 from graphfakos.ui.viewer.html import (
     badge as _badge,
+)
+from graphfakos.ui.viewer.html import (
     html_list as _html_list,
+)
+from graphfakos.ui.viewer.html import (
     json_script as _json_script,
+)
+from graphfakos.ui.viewer.html import (
     panel as _panel,
+)
+from graphfakos.ui.viewer.html import (
     select as _select,
+)
+from graphfakos.ui.viewer.html import (
     select_pairs as _select_pairs,
+)
+from graphfakos.ui.viewer.html import (
     summary_note as _summary_note,
 )
 from graphfakos.ui.viewer.routing import _route_href
@@ -341,9 +353,11 @@ def _action_readiness_panel(graph: GraphFakosGraph, supported: bool) -> str:
         "supported": supported,
         "lifecycle": (
             "draft",
-            "preview_or_submit",
-            "provider_decides",
-            "refresh_or_replay",
+            "queued",
+            "previewed",
+            "applied",
+            "rejected",
+            "unsupported",
         ),
         "host_boundary": (
             "GraphFakos shapes provider-neutral action payloads; the provider "
@@ -358,14 +372,17 @@ def _action_readiness_panel(graph: GraphFakosGraph, supported: bool) -> str:
     )
     steps = (
         ("Draft", "GraphFakos prepares node, edge, merge, or alias payloads."),
-        ("Preview or submit", "The host can preview, queue, or execute the action."),
         (
-            "Provider decides",
-            "The provider returns applied, blocked, conflict, recovery, or unsupported.",
+            "Queued / previewed",
+            "The host has received the action but may not persist it.",
         ),
         (
-            "Refresh/replay",
-            "The viewer refreshes graph state without owning durable truth.",
+            "Applied / rejected",
+            "The provider accepts, rejects, or asks for a safer retry.",
+        ),
+        (
+            "Unsupported",
+            "Providers that do not implement this action return a visible unsupported status.",
         ),
     )
     rows = "".join(

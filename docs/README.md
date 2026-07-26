@@ -11,6 +11,10 @@ Start with:
 - [Artifact interchange](artifact-interchange.md)
 - [Source tree owner map](source-tree-owner-map.md)
 - [UI contracts](ui-contracts.md)
+- [Dense graph usability next pass spec](specs/dense-graph-usability-next-pass.md)
+- [Dense graph usability next pass tracker](trackers/dense-graph-usability-next-pass-tracker.md)
+- [Provider workflow gap closure spec](specs/provider-workflow-gap-closure.md)
+- [Provider workflow gap closure tracker](trackers/provider-workflow-gap-closure-tracker.md)
 - [Viewer accessibility matrix](accessibility.md)
 - [Provider envelope](provider-envelope.md)
 - [Live graph sessions](live-sessions.md)
@@ -55,8 +59,9 @@ It supports:
 - public deep-link helpers for building or parsing stable viewer routes,
 - camera-aware deep links through `camera_x`, `camera_y`, and `camera_zoom`,
 - serializable viewer state plus provider-neutral viewer command, event,
-  expansion-request, knowledge-capture, saved-view, saved-query, graph-action,
-  action-status, graph-analytics, replay-bundle, and theme DTOs,
+  expansion-request, knowledge-capture, saved-view, saved-query,
+  investigation-session, connection-explanation, graph-action, action-status,
+  graph-analytics, replay-bundle, and theme DTOs,
 - package-owned browser runtime helpers through `viewer_runtime_script()`,
 - true WebGL 3D, canvas, and SVG fallback contracts with route-preserved
   renderer/theme state for host workbenches,
@@ -65,6 +70,12 @@ It supports:
   `time>=` tokens,
 - clickable nodes and edges with inspector details, selected-path emphasis,
   provider-neutral shapes, edge arrows, and side-panel cross-highlighting,
+- compact surface workflows for bounded provider drill-down, local JSON import,
+  incoming/outgoing selection, linked distributions, reusable perspectives,
+  provider-declared inspector fields, off-screen focus location, semantic edge
+  detail, zoom-stable node marks, and renderer performance diagnostics,
+- selected-edge "why connected" summaries with source, target, relationship,
+  confidence, provenance references, and citation references,
 - pan, zoom, fit, reset, fullscreen, and drag controls layered over the static
   SVG canvas,
 - minimap orientation, group toggles, and render-budget fallback links for
@@ -74,7 +85,7 @@ It supports:
   graph-authoring panels,
 - hub-aware navigator panels for global, local-depth, evidence, path, status,
   and context graph lenses,
-- depth-aware neighborhoods,
+- depth-aware neighborhoods and optional provider-owned lazy expansion slices,
 - path source/target controls,
 - preview-server knowledge capture and graph-action forms for provider-owned
   notes, code observations, questions, memory hints, draft nodes, links, and
@@ -88,8 +99,9 @@ GraphFakos also exposes:
 - persisted graph artifact helpers plus a file-backed provider adapter,
 - embeddable HTML fragments for package-local UI shells,
 - JSON graph reports, and
-- Markdown, DOT, and replay-bundle graph reports for issue attachments, review
-  notes, exact-state replay, and external graph tooling.
+- Markdown, DOT, replay-bundle, and investigation-session graph reports for
+  issue attachments, review notes, exact-state replay, and external graph
+  tooling.
 
 GraphFakos does not interpret provider-specific semantics. Adapters should put
 provider-only fields in `provider_payload` unless the field belongs in a stable
@@ -154,7 +166,7 @@ Provider-envelope scale preview:
 
 ```bash
 graphfakos-ui \
-  --provider-envelope ../workspace-tmp/pragmagraph-viewer-support/viewer-scale-200k.json \
+  --provider-envelope .graphfakos-preview/viewer-scale-200k.json \
   --render-engine 3d \
   --theme space \
   --layout grouped \
@@ -290,8 +302,7 @@ class MyGraphProvider(GraphFakosProvider):
     graph_role = "third_party"
     capabilities = ("search", "neighborhood", "static_export")
 
-    def load_graph(self, request: GraphFakosRequest) -> GraphFakosGraph:
-        ...
+    def load_graph(self, request: GraphFakosRequest) -> GraphFakosGraph: ...
 ```
 
 For a fuller third-party example, see

@@ -16,8 +16,8 @@ __all__ = [
     "GraphFakosProviderConformanceCase",
     "GraphFakosProviderConformanceResult",
     "assert_graph_dot_contract",
-    "assert_review_preset_contract",
     "assert_graph_viewer_contract",
     "assert_live_provider_contract",
     "assert_provider_conformance",
+    "assert_review_preset_contract",
 ]

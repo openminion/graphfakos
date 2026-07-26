@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import ipaddress
 import json
-from threading import Lock
-from typing import Callable, Mapping
-from urllib.parse import parse_qs, urlparse
 import webbrowser
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, replace
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from threading import Lock
+from urllib.parse import parse_qs, urlparse
 
 from .live import (
     GraphFakosGraphPatch,
@@ -185,7 +185,7 @@ def make_local_viewer_server(
             except (TypeError, ValueError) as exc:
                 self._send_json(400, {"ok": False, "error": str(exc)})
                 return
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - contain action failures at the HTTP boundary
                 self._send_json(500, {"ok": False, "error": str(exc)})
                 return
             if self._should_redirect_after_action(result):
@@ -438,11 +438,11 @@ def _origin_allowed(origin: str, host: str, allowed_origins: tuple[str, ...]) ->
 
 
 __all__ = [
+    "ActionHandler",
     "LocalViewerHttpServer",
     "LocalViewerServerResult",
-    "ActionHandler",
-    "RequestAuthorizer",
     "RenderPath",
+    "RequestAuthorizer",
     "make_local_viewer_server",
     "serve_local_viewer",
 ]

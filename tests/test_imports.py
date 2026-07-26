@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-from pathlib import Path
-from importlib.resources import files
 import tomllib
+from importlib.resources import files
+from pathlib import Path
 
 
 def test_graphfakos_package_imports() -> None:
     import graphfakos
-    import graphfakos.artifacts
     import graphfakos.adapters
+    import graphfakos.artifacts
     import graphfakos.browser
     import graphfakos.camera
     import graphfakos.contracts

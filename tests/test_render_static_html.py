@@ -8,8 +8,8 @@ from graphfakos import (
     FixtureGraphProvider,
     GraphFakosCameraPose,
     GraphFakosRequest,
-    render_graph_dot,
     render_embeddable_html,
+    render_graph_dot,
     render_graph_markdown_report,
     render_static_html,
 )

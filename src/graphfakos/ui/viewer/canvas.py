@@ -15,6 +15,7 @@ from graphfakos.models import (
     GraphFakosRequest,
 )
 from graphfakos.provider import explain_connection
+from graphfakos.ui.viewer import surface_controls
 from graphfakos.ui.viewer.filtering import _facet_values
 from graphfakos.ui.viewer.graph_ops import (
     _node_cluster_id,
@@ -24,16 +25,31 @@ from graphfakos.ui.viewer.graph_ops import (
 )
 from graphfakos.ui.viewer.html import (
     badges as _badges,
+)
+from graphfakos.ui.viewer.html import (
     empty as _empty,
+)
+from graphfakos.ui.viewer.html import (
     json_attribute as _json_attribute,
+)
+from graphfakos.ui.viewer.html import (
     json_script as _json_script,
+)
+from graphfakos.ui.viewer.html import (
     key_values as _key_values,
+)
+from graphfakos.ui.viewer.html import (
     panel as _panel,
+)
+from graphfakos.ui.viewer.html import (
     panel_body as _panel_body,
+)
+from graphfakos.ui.viewer.html import (
     summary_note as _summary_note,
+)
+from graphfakos.ui.viewer.html import (
     text_list as _list,
 )
-from graphfakos.ui.viewer import surface_controls
 from graphfakos.ui.viewer.layout import _clamped, _layout_positions
 from graphfakos.ui.viewer.routing import _local_node_route, _route_href
 from graphfakos.ui.viewer.routing import state_hidden_inputs as _state_hidden_inputs
@@ -425,16 +441,16 @@ def _should_show_label(
     if visible_count <= 12:
         return density >= 0.2
     if visible_count >= 160:
-        cadence = max(18, int(round(72 / max(density, 0.16))))
+        cadence = max(18, round(72 / max(density, 0.16)))
         return degree >= 7 or index % cadence == 0
     if visible_count >= 60:
-        cadence = max(8, int(round(28 / max(density, 0.16))))
+        cadence = max(8, round(28 / max(density, 0.16)))
         return degree >= 5 or index % cadence == 0
     if density >= 0.95:
         return degree >= 2 or index % 4 == 0
     if degree >= 3:
         return density >= 0.35
-    cadence = max(1, int(round(1 / max(density, 0.12))))
+    cadence = max(1, round(1 / max(density, 0.12)))
     return index % cadence == 0
 
 

@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from html import escape
 import json
+from html import escape
 
 from graphfakos.models import (
     GraphFakosActionStatus,
@@ -15,11 +15,23 @@ from graphfakos.models import (
 from graphfakos.ui.viewer.graph_ops import _preferred_focus_node
 from graphfakos.ui.viewer.html import (
     badge as _badge,
+)
+from graphfakos.ui.viewer.html import (
     html_list as _html_list,
+)
+from graphfakos.ui.viewer.html import (
     json_script as _json_script,
+)
+from graphfakos.ui.viewer.html import (
     panel as _panel,
+)
+from graphfakos.ui.viewer.html import (
     select as _select,
+)
+from graphfakos.ui.viewer.html import (
     select_pairs as _select_pairs,
+)
+from graphfakos.ui.viewer.html import (
     summary_note as _summary_note,
 )
 from graphfakos.ui.viewer.routing import _route_href

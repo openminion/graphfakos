@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import deque
 from typing import Protocol, runtime_checkable
 
+from .live import GraphFakosLiveProvider
 from .models import (
     GraphFakosActionStatus,
     GraphFakosConnectionExplanation,
@@ -16,7 +17,6 @@ from .models import (
     GraphFakosKnowledgeCapture,
     GraphFakosRequest,
 )
-from .live import GraphFakosLiveProvider
 
 
 @runtime_checkable
@@ -329,9 +329,6 @@ def load_expanded_graph(
 
 
 __all__ = [
-    "analyze_graph",
-    "diagnose_graph",
-    "explain_connection",
     "GraphFakosComparisonProvider",
     "GraphFakosExpansionProvider",
     "GraphFakosGraphActionProvider",
@@ -339,6 +336,9 @@ __all__ = [
     "GraphFakosLiveProvider",
     "GraphFakosOverlayProvider",
     "GraphFakosProvider",
+    "analyze_graph",
+    "diagnose_graph",
+    "explain_connection",
     "load_comparison_graph",
     "load_expanded_graph",
     "load_overlay_graphs",

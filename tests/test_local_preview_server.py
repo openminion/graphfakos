@@ -2,9 +2,8 @@ from __future__ import annotations
 
 import json
 from threading import Thread
-from urllib.request import Request
-from urllib.request import urlopen
 from urllib.parse import urlencode
+from urllib.request import Request, urlopen
 
 import pytest
 

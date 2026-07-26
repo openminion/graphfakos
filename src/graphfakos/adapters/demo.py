@@ -4,17 +4,6 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from graphfakos.models import (
-    GraphFakosActionStatus,
-    GraphFakosEdge,
-    GraphFakosExpansionRequest,
-    GraphFakosGraph,
-    GraphFakosGraphAction,
-    GraphFakosKnowledgeCapture,
-    GraphFakosNode,
-    GraphFakosRequest,
-    GraphFakosSnapshot,
-)
 from graphfakos.adapters.demo_scenarios import (
     _agent_memory_graph,
     _budget_graph,
@@ -32,6 +21,17 @@ from graphfakos.adapters.demo_scenarios import (
     _visual_for,
     _warnings_graph,
     _workbench_mixed_graph,
+)
+from graphfakos.models import (
+    GraphFakosActionStatus,
+    GraphFakosEdge,
+    GraphFakosExpansionRequest,
+    GraphFakosGraph,
+    GraphFakosGraphAction,
+    GraphFakosKnowledgeCapture,
+    GraphFakosNode,
+    GraphFakosRequest,
+    GraphFakosSnapshot,
 )
 
 DEMO_SCENARIOS = (

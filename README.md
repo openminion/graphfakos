@@ -23,7 +23,7 @@
   <img alt="Status" src="https://img.shields.io/badge/status-alpha-6B7280">
 </p>
 
-GraphFakos `v0.0.7` is a semantic-alpha graph viewer package. It gives graph
+GraphFakos `v0.0.7` is a public alpha graph viewer package. It gives graph
 providers one shared set of DTOs, adapter contracts, static rendering, local
 preview tools, and interaction payloads without taking ownership of the graph
 itself.
@@ -54,7 +54,7 @@ should be treated as a scam.
 | | |
 | --- | --- |
 | Package | `graphfakos` |
-| Current line | `v0.0.7` semantic alpha |
+| Current line | `v0.0.7` public alpha |
 | Python | 3.11+ |
 | Best fit | Shared local graph viewing across independent providers |
 | Core contract | `GraphFakosProvider` |

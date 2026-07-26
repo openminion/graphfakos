@@ -186,8 +186,7 @@ class MyProvider(GraphFakosProvider):
     graph_role = "third-party"
     capabilities = ("search", "neighborhood", "path")
 
-    def load_graph(self, request: GraphFakosRequest) -> GraphFakosGraph:
-        ...
+    def load_graph(self, request: GraphFakosRequest) -> GraphFakosGraph: ...
 ```
 
 Optional protocols add bounded expansion, knowledge capture, graph actions,

@@ -302,8 +302,7 @@ class MyGraphProvider(GraphFakosProvider):
     graph_role = "third_party"
     capabilities = ("search", "neighborhood", "static_export")
 
-    def load_graph(self, request: GraphFakosRequest) -> GraphFakosGraph:
-        ...
+    def load_graph(self, request: GraphFakosRequest) -> GraphFakosGraph: ...
 ```
 
 For a fuller third-party example, see

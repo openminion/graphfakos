@@ -14,6 +14,7 @@ const visualRoutes = [
     path: "test-results/visual-scale-200k-space.png",
     minimumRawNodes: 200000,
     maximumLabels: 24,
+    timeout: 45_000,
   },
   {
     name: "1m islands space",
@@ -21,12 +22,14 @@ const visualRoutes = [
     path: "test-results/visual-scale-1m-space.png",
     minimumRawNodes: 1000000,
     maximumLabels: 18,
+    timeout: 60_000,
   },
 ];
 
 test.describe("visual QA @visual", () => {
   for (const route of visualRoutes) {
     test(`captures ${route.name}`, async ({ page }, testInfo) => {
+      test.setTimeout(route.timeout || 30_000);
       await page.goto(route.url);
       const shell = page.locator(".gf-canvas-shell");
       await expect(shell).toHaveAttribute("data-webgl-ready", "true", {

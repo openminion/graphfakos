@@ -9,6 +9,7 @@ import {
 import { linkVisibleForDetail, shapeLinks, stableHash } from "./link-shape.js";
 import {
   detailLevelForCamera,
+  detailLevelForSceneLevel,
   labelBudgetForDetail,
   nodeScaleForCount,
   semanticZoom,
@@ -667,11 +668,16 @@ function mount(element, scene, callbacks = {}) {
     };
   };
   const refreshSemanticDetail = (camera = cameraState()) => {
-    const next = detailLevelForCamera({
+    const autoLevel = detailLevelForCamera({
       nodeCount: visibleNodeCount(),
       referenceDistance: semanticReferenceDistance || camera.distance,
       cameraDistance: camera.distance,
     });
+    const requestedLevel =
+      activeScene.sceneLevel && activeScene.sceneLevel !== "overview"
+        ? activeScene.sceneLevel
+        : "";
+    const next = detailLevelForSceneLevel(requestedLevel, autoLevel);
     const changed = next !== semanticDetail;
     semanticDetail = next;
     semanticNodeScale = zoomStableNodeScale(camera.semanticZoom);

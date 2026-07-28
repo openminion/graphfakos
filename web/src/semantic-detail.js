@@ -5,6 +5,12 @@ const detailBudgets = {
   precision: 16,
 };
 
+const sceneLevelDetails = {
+  cluster: "balanced",
+  local: "detail",
+  precision: "precision",
+};
+
 const clamp = (value, minimum, maximum) => Math.max(minimum, Math.min(maximum, value));
 
 export function semanticZoom(referenceDistance, cameraDistance) {
@@ -25,10 +31,30 @@ export function detailLevelForCamera({ nodeCount, referenceDistance, cameraDista
   return "overview";
 }
 
+export function detailLevelForSceneLevel(sceneLevel, autoLevel = "overview") {
+  if (sceneLevel === "islands") return "overview";
+  const requestedLevel = sceneLevelDetails[sceneLevel];
+  if (!requestedLevel) return autoLevel;
+  const levels = ["overview", "balanced", "detail", "precision"];
+  return levels.indexOf(requestedLevel) > levels.indexOf(autoLevel)
+    ? requestedLevel
+    : autoLevel;
+}
+
 export function labelBudgetForDetail(level, density = 1, nodeCount = Infinity) {
   const base = detailBudgets[level] || detailBudgets.overview;
   const scale = 0.35 + clamp(Number(density) || 0, 0, 1) * 0.65;
   return Math.min(Math.max(0, Number(nodeCount) || 0), Math.max(1, Math.round(base * scale)));
+}
+
+export function modeSummaryForSceneLevel(sceneLevel) {
+  return {
+    overview: "tiny points, only the highest-signal labels",
+    islands: "cluster islands first, sparse labels, large spatial gaps",
+    cluster: "cluster and bridge labels with balanced link detail",
+    local: "focused neighborhood labels and selected context",
+    precision: "maximum local labels for close inspection",
+  }[sceneLevel] || "automatic dense graph detail";
 }
 
 export function nodeScaleForCount(nodeCount) {

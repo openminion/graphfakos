@@ -19,7 +19,8 @@ make visual-qa
 
 The command regenerates benchmark fixtures, starts the same local preview
 servers used by browser E2E, verifies that each route reaches WebGL-ready
-state, and writes current screenshots under `web/test-results/`.
+state, checks graph-surface size, theme, performance HUD, and label-pressure
+thresholds, and writes current screenshots under `web/test-results/`.
 
 Current visual routes:
 

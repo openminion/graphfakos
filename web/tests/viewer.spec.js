@@ -4,7 +4,9 @@ import { linkVisibleForDetail, shapeLinks } from "../src/link-shape.js";
 import { nodeColorForKind } from "../src/visual-contrast.js";
 import {
   detailLevelForCamera,
+  detailLevelForSceneLevel,
   labelBudgetForDetail,
+  modeSummaryForSceneLevel,
   nodeScaleForCount,
   semanticZoom,
   zoomStableNodeScale,
@@ -24,6 +26,10 @@ test("maps camera distance to semantic graph detail", () => {
     .toBe("precision");
   expect(labelBudgetForDetail("overview", 1, 240)).toBe(1);
   expect(labelBudgetForDetail("detail", 1, 240)).toBe(9);
+  expect(detailLevelForSceneLevel("islands", "precision")).toBe("overview");
+  expect(detailLevelForSceneLevel("cluster", "overview")).toBe("balanced");
+  expect(detailLevelForSceneLevel("local", "overview")).toBe("detail");
+  expect(modeSummaryForSceneLevel("precision")).toContain("inspection");
   expect(nodeScaleForCount(12)).toBeGreaterThan(nodeScaleForCount(48));
   expect(nodeScaleForCount(48)).toBeGreaterThan(nodeScaleForCount(240));
   expect(nodeScaleForCount(240)).toBeLessThan(0.5);

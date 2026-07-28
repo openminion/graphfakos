@@ -8,7 +8,7 @@ PRE_COMMIT := $(PYTHON) -m pre_commit
 PYTEST := $(PYTHON) -m pytest
 RUFF := $(PYTHON) -m ruff
 
-.PHONY: help venv dev-install hooks-install hooks-run web-install web-build benchmark-fixtures preview preview-demo preview-dense preview-timeline preview-warnings preview-path preview-provenance preview-workbench preview-budget preview-islands preview-html clean-preview fix format format-check lint validate-patterns loc-check method-loc-check helper-duplicates-check path-structure-check filename-underscore-check broad-exception-check type-ignore-check public-surface-check test browser-test browser-e2e check release-check
+.PHONY: help venv dev-install hooks-install hooks-run web-install web-build benchmark-fixtures preview preview-demo preview-dense preview-timeline preview-warnings preview-path preview-provenance preview-workbench preview-budget preview-islands preview-html clean-preview visual-qa fix format format-check lint validate-patterns loc-check method-loc-check helper-duplicates-check path-structure-check filename-underscore-check broad-exception-check type-ignore-check public-surface-check test browser-test browser-e2e check release-check
 
 help:
 	@printf '%s\n' \
@@ -28,6 +28,7 @@ help:
 		'  make preview-islands Serve generated disconnected-islands data' \
 		'  make preview-html  Write/open a repo-local static export under .graphfakos-preview/' \
 		'  make clean-preview Remove repo-local generated preview files' \
+		'  make visual-qa     Capture dense 3D visual review screenshots' \
 		'  make fix           Apply Ruff formatting and autofixes' \
 		'  make format        Run Ruff formatter' \
 		'  make format-check  Check formatting without changing files' \
@@ -154,6 +155,9 @@ benchmark-fixtures: $(DEV_STAMP)
 
 browser-e2e: $(DEV_STAMP)
 	cd "$(REPO_ROOT)/web" && npm test
+
+visual-qa: $(DEV_STAMP)
+	cd "$(REPO_ROOT)/web" && npm run visual
 
 check: format-check lint validate-patterns test
 

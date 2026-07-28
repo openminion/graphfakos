@@ -16,6 +16,7 @@ Start with:
 - [Provider workflow gap closure spec](specs/provider-workflow-gap-closure.md)
 - [Provider workflow gap closure tracker](trackers/provider-workflow-gap-closure-tracker.md)
 - [Viewer accessibility matrix](accessibility.md)
+- [Visual QA](visual-qa.md)
 - [Provider envelope](provider-envelope.md)
 - [Live graph sessions](live-sessions.md)
 - [Custom provider example](custom-provider-example.md)
@@ -190,6 +191,16 @@ make browser-e2e
 The 1M fixture models 1,000 clusters of 1,000 nodes each. The browser receives
 aggregate cluster records, omitted counts, edge bundles, and expansion cursors;
 it does not allocate or claim to draw one million raw WebGL objects.
+
+Capture dense visual review screenshots:
+
+```bash
+make visual-qa
+```
+
+This writes current dense-demo, 200K, and 1M route screenshots under
+`web/test-results/` after proving each route reaches WebGL-ready state. Use it
+when graph layout, labels, edge styling, minimap, or theme contrast changes.
 
 To test the capture loop, run `make preview-demo`, enter a note in
 `Capture Knowledge`, and submit it. `DemoGraphProvider` stores captures in

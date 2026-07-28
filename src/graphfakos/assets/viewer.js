@@ -1450,7 +1450,10 @@
   });
 
   const webglSceneFromShell = (shell, state) => ({
-    ...webglDisplayState(state, shell.dataset.detailMode || state.scene_level || "overview"),
+    ...webglDisplayState(
+      state,
+      state.scene_level || shell.dataset.sceneLevel || shell.dataset.detailMode || "overview",
+    ),
     nodes: [...shell.querySelectorAll(".gf-node")].map((node) => ({
       id: node.dataset.nodeId || "",
       label: node.dataset.label || node.dataset.nodeId || "Node",

@@ -628,6 +628,45 @@ def test_demo_provider_expands_bounded_neighborhood() -> None:
     assert 1 <= len(expanded.nodes) < len(provider.load_graph(request).nodes)
 
 
+def test_demo_provider_satisfies_workflow_conformance(tmp_path) -> None:
+    result = assert_provider_conformance(
+        GraphFakosProviderConformanceCase(
+            provider=DemoGraphProvider("workbench-mixed"),
+            request=GraphFakosRequest(
+                screen="explore",
+                focus_node_id="agent:reviewer",
+            ),
+            required_capabilities=(
+                "knowledge_capture",
+                "graph_action",
+                "lazy_expansion",
+            ),
+            artifact_path=tmp_path / "demo-workflow.json",
+            expansion_request=GraphFakosExpansionRequest(
+                source_id="agent:reviewer",
+                depth=1,
+            ),
+            capture=GraphFakosKnowledgeCapture(
+                text="Capture a provider-neutral workflow note.",
+                kind="note",
+                tags=("workflow", "provider"),
+                source="test",
+                link_node_id="agent:reviewer",
+            ),
+            action=GraphFakosGraphAction(
+                action_id="draft:workflow",
+                action_type="draft_edge",
+                source_id="agent:reviewer",
+                target_node_id="doc:architecture",
+                label="Workflow proof",
+            ),
+            expected_action_status="previewed",
+        )
+    )
+
+    assert result.replay_graph is not None
+
+
 def test_build_graph_replay_bundle_uses_provider_neutral_state() -> None:
     bundle = build_graph_replay_bundle(
         FixtureGraphProvider(),

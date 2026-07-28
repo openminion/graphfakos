@@ -8,13 +8,22 @@ from typing import Any
 
 from ..adapters import FileGraphProvider
 from ..artifacts import write_graph_artifact
-from ..models import GraphFakosGraph, GraphFakosRequest
+from ..models import (
+    GraphFakosActionStatus,
+    GraphFakosExpansionRequest,
+    GraphFakosGraph,
+    GraphFakosGraphAction,
+    GraphFakosKnowledgeCapture,
+    GraphFakosRequest,
+)
 from ..provider import (
+    GraphFakosExpansionProvider,
     GraphFakosGraphActionProvider,
     GraphFakosKnowledgeCaptureProvider,
     GraphFakosProvider,
     diagnose_graph,
     load_provider_graph,
+    validate_graph,
 )
 from ..static import build_graph_report, render_static_html
 from .assertions import assert_graph_viewer_contract
@@ -30,6 +39,10 @@ class GraphFakosProviderConformanceCase:
     expected_edge: str = ""
     required_capabilities: tuple[str, ...] = ()
     artifact_path: str | Path | None = None
+    expansion_request: GraphFakosExpansionRequest | None = None
+    capture: GraphFakosKnowledgeCapture | None = None
+    action: GraphFakosGraphAction | None = None
+    expected_action_status: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,6 +60,9 @@ def assert_provider_conformance(
     _assert_metadata(case, graph)
     _assert_capabilities(case, graph)
     _assert_optional_protocols(case.provider, graph)
+    _assert_optional_workflows(case)
+    graph = load_provider_graph(case.provider, case.request)
+    _assert_metadata(case, graph)
 
     html = render_static_html(case.provider, case.request)
     if (
@@ -107,10 +123,47 @@ def _assert_optional_protocols(
     graph: GraphFakosGraph,
 ) -> None:
     capabilities = set(graph.capabilities)
-    if "graph_actions" in capabilities:
+    if "graph_action" in capabilities or "graph_actions" in capabilities:
         assert isinstance(provider, GraphFakosGraphActionProvider)
     if "knowledge_capture" in capabilities:
         assert isinstance(provider, GraphFakosKnowledgeCaptureProvider)
+    if "lazy_expansion" in capabilities:
+        assert isinstance(provider, GraphFakosExpansionProvider)
+
+
+def _assert_optional_workflows(case: GraphFakosProviderConformanceCase) -> None:
+    provider = case.provider
+    if case.expansion_request is not None:
+        assert isinstance(provider, GraphFakosExpansionProvider)
+        expanded = provider.expand_graph(case.request, case.expansion_request)
+        assert expanded is not None
+        validate_graph(expanded)
+
+    if case.capture is not None:
+        assert isinstance(provider, GraphFakosKnowledgeCaptureProvider)
+        captured = provider.capture_knowledge(case.capture)
+        assert captured is not None
+        if isinstance(captured, GraphFakosGraph):
+            validate_graph(captured)
+        else:
+            assert captured.get("ok") is not False
+
+    if case.action is not None:
+        assert isinstance(provider, GraphFakosGraphActionProvider)
+        action_status = _action_status(provider.submit_graph_action(case.action))
+        assert action_status is not None
+        if case.expected_action_status:
+            assert action_status.status == case.expected_action_status
+
+
+def _action_status(value: object) -> GraphFakosActionStatus | None:
+    if isinstance(value, GraphFakosActionStatus):
+        return value
+    if isinstance(value, dict):
+        payload = value.get("status", value)
+        if isinstance(payload, dict):
+            return GraphFakosActionStatus.from_dict(payload)
+    return None
 
 
 def _assert_report_contract(

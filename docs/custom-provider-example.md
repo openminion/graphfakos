@@ -158,6 +158,58 @@ def test_package_provider_satisfies_graphfakos_contract(tmp_path):
     )
 ```
 
+Providers that implement optional workflow protocols can ask the same helper to
+exercise them:
+
+```python
+from graphfakos import (
+    GraphFakosExpansionRequest,
+    GraphFakosGraphAction,
+    GraphFakosKnowledgeCapture,
+    GraphFakosRequest,
+)
+from graphfakos.testing import (
+    GraphFakosProviderConformanceCase,
+    assert_provider_conformance,
+)
+
+assert_provider_conformance(
+    GraphFakosProviderConformanceCase(
+        provider=WorkflowProvider(),
+        request=GraphFakosRequest(screen="explore"),
+        required_capabilities=(
+            "knowledge_capture",
+            "graph_action",
+            "lazy_expansion",
+        ),
+        expansion_request=GraphFakosExpansionRequest(
+            source_id="node:guide",
+            depth=1,
+        ),
+        capture=GraphFakosKnowledgeCapture(
+            text="Host-owned note payload.",
+            kind="note",
+            tags=("host",),
+            source="provider-test",
+            link_node_id="node:guide",
+        ),
+        action=GraphFakosGraphAction(
+            action_id="draft:package-graph",
+            action_type="draft_edge",
+            source_id="node:service",
+            target_node_id="node:guide",
+            label="Provider conformance action",
+        ),
+        expected_action_status="previewed",
+    )
+)
+```
+
+Only pass `capture`, `action`, or `expansion_request` when the provider
+implements the matching optional protocol. The conformance helper validates the
+returned provider-neutral graph/status shape, but the provider remains the only
+owner of truth, persistence, authorization, and rebuild behavior.
+
 Then use the same local proof shape as the fixture provider:
 
 ```bash

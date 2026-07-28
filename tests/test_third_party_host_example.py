@@ -7,6 +7,10 @@ import sys
 from types import ModuleType
 
 from graphfakos import GraphFakosGraphAction, GraphFakosKnowledgeCapture
+from graphfakos.testing import (
+    GraphFakosProviderConformanceCase,
+    assert_provider_conformance,
+)
 
 
 def _example_module() -> ModuleType:
@@ -57,6 +61,38 @@ def test_third_party_host_example_renders_and_accepts_actions() -> None:
         "Host accepted the provider-neutral capture payload."
         in capture_payload["status"]["message"]
     )
+
+
+def test_third_party_host_example_satisfies_workflow_conformance(tmp_path) -> None:
+    module = _example_module()
+    result = assert_provider_conformance(
+        GraphFakosProviderConformanceCase(
+            provider=module.ThirdPartyHostProvider(),
+            request=module.GraphFakosRequest(screen="explore"),
+            required_capabilities=(
+                "knowledge_capture",
+                "graph_action",
+            ),
+            artifact_path=tmp_path / "third-party-host.json",
+            capture=GraphFakosKnowledgeCapture(
+                text="A host-owned capture should refresh provider graph state.",
+                kind="note",
+                tags=("host", "capture"),
+                source="conformance",
+                link_node_id="host:package",
+            ),
+            action=GraphFakosGraphAction(
+                action_id="draft:host-conformance",
+                action_type="draft_edge",
+                source_id="host:package",
+                target_node_id="doc:integration",
+                label="Host conformance action",
+            ),
+            expected_action_status="previewed",
+        )
+    )
+
+    assert result.replay_graph is not None
 
 
 def test_third_party_host_example_uses_graphfakos_public_imports_only() -> None:

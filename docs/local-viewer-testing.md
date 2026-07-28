@@ -81,4 +81,3 @@ make check
 ```
 
 Screenshots from visual QA are written under `web/test-results/`.
-

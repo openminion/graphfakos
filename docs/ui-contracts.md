@@ -30,7 +30,10 @@ GraphFakos owns the reusable viewer layer:
     artifacts,
 17. provider-declared perspectives and inspector field schemas,
 18. local visual import, linked distributions, direct selection workflows,
-    focus location, progressive edge detail, and renderer diagnostics.
+    focus location, progressive edge detail, and renderer diagnostics,
+19. portable workspace manifests for progressive clusters, raw-versus-rendered
+    budgets, saved views, expansion requests, edit/capture affordances, and
+    desktop backend routes.
 
 Provider packages own their data semantics and adapter mapping. They should not
 fork GraphFakos viewer HTML, duplicate local-server behavior, or create a
@@ -174,6 +177,34 @@ the generated renderer asset locally without a CDN. `canvas` remains a
 progressive 2D backend behind the same provider-neutral state contract.
 Unsupported render engines fail through the public renderer validation helper
 rather than silently changing DTO behavior.
+
+## Workspace Manifest Contract
+
+`workspace_manifest_for_graph(graph, request)` builds the portable viewer
+workspace handoff from the same provider-neutral DTOs already used by the
+static and dynamic viewers. It is the recommended integration seam for hosts,
+desktop wrappers, and provider packages that need to reopen a graph surface
+without scraping rendered HTML.
+
+The manifest includes:
+
+1. current `GraphFakosViewerState` route, camera, renderer, theme, filters, and
+   selected ids,
+2. progressive cluster summaries with ids, labels, visible node samples,
+   omitted counts, edge counts, expansion cursors, and provider payload,
+3. `GraphFakosPerformanceBudget` values for rendered counts, raw counts,
+   omitted counts, target FPS, and level-of-detail mode,
+4. a saved-view snapshot for exact-route replay,
+5. default provider-owned expansion requests for the current focus node or
+   first visible node,
+6. declared provider-neutral graph action and knowledge-capture affordances,
+   and
+7. the local desktop/backend route that should open the same viewer screen.
+
+The manifest does not persist provider truth, infer semantic meaning, fetch
+neighbors, mutate storage, or replace provider authorization. It only describes
+the current viewer workspace in a stable shape so a host can decide what to do
+next.
 
 Semantic LOD extends `GraphFakosViewerState.scene_level` with `overview`,
 `cluster`, and `local` values. Expansion pagination extends the existing

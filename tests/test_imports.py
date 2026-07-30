@@ -41,6 +41,9 @@ def test_graphfakos_package_imports() -> None:
     assert "GraphFakosInspectorField" in graphfakos.__all__
     assert "GraphFakosInspectorSchema" in graphfakos.__all__
     assert "GraphFakosPerspective" in graphfakos.__all__
+    assert "GraphFakosProgressiveCluster" in graphfakos.__all__
+    assert "GraphFakosPerformanceBudget" in graphfakos.__all__
+    assert "GraphFakosWorkspaceManifest" in graphfakos.__all__
     assert "GraphFakosExpansionProvider" in graphfakos.__all__
     assert "GraphFakosCameraPose" in graphfakos.__all__
     assert "GraphFakosGraphPatch" in graphfakos.__all__
@@ -60,6 +63,9 @@ def test_graphfakos_package_imports() -> None:
     assert "graph_artifact_schema" in graphfakos.__all__
     assert "build_viewer_route" in graphfakos.__all__
     assert "diagnose_graph" in graphfakos.__all__
+    assert "workspace_manifest_for_graph" in graphfakos.__all__
+    assert "progressive_clusters_for_graph" in graphfakos.__all__
+    assert "performance_budget_for_graph" in graphfakos.__all__
     assert "write_provider_preview_outputs" in graphfakos.__all__
     assert "FileGraphProvider" in graphfakos.adapters.__all__
     assert "FixtureGraphProvider" in graphfakos.adapters.__all__
@@ -72,6 +78,8 @@ def test_graphfakos_package_imports() -> None:
     assert "GraphFakosKnowledgeCapture" in graphfakos.contracts.__all__
     assert "GraphFakosInvestigationSession" in graphfakos.contracts.__all__
     assert "GraphFakosPerspective" in graphfakos.contracts.__all__
+    assert "GraphFakosWorkspaceManifest" in graphfakos.contracts.__all__
+    assert "workspace_manifest_for_graph" in graphfakos.contracts.__all__
     assert "screen_manifest" in graphfakos.render.__all__
     assert "render_graph_dot" in graphfakos.render.__all__
     assert "GraphPreviewOutputPaths" in graphfakos.render.__all__

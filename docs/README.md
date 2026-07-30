@@ -66,6 +66,9 @@ It supports:
   expansion-request, knowledge-capture, saved-view, saved-query,
   investigation-session, connection-explanation, graph-action, action-status,
   graph-analytics, replay-bundle, and theme DTOs,
+- workspace manifests that bundle viewer state, progressive clusters,
+  raw-versus-rendered performance budgets, saved views, expansion requests,
+  edit/capture affordances, and desktop backend routes,
 - package-owned browser runtime helpers through `viewer_runtime_script()`,
 - true WebGL 3D, canvas, and SVG fallback contracts with route-preserved
   renderer/theme state for host workbenches,

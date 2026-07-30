@@ -32,8 +32,14 @@ release note says otherwise:
 - optional expansion provider protocol and `load_expanded_graph()` helper name
 - typed `GraphFakosPerspective`, `GraphFakosInspectorField`, and
   `GraphFakosInspectorSchema` declaration names
+- typed `GraphFakosProgressiveCluster`, `GraphFakosPerformanceBudget`, and
+  `GraphFakosWorkspaceManifest` contract names
 - provider declaration reader names `graph_perspectives()`,
   `inspector_schema_for()`, and `inspector_values()`
+- viewer workspace helper names `workspace_manifest_for_graph()`,
+  `progressive_clusters_for_graph()`, `performance_budget_for_graph()`,
+  `default_expansion_requests()`, `supported_graph_actions()`, and
+  `supported_capture_kinds()`
 - deterministic demo scenario names and `DemoGraphProvider` for viewer
   iteration
 - `viewer_runtime_script()` helper name and packaged `assets/viewer.js`

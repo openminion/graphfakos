@@ -1,8 +1,8 @@
 # Provider Workflow Gap Closure
 
-Status: in execution
+Status: completed
 Owner: GraphFakos
-Last updated: 2026-07-25
+Last updated: 2026-07-28
 
 ## Purpose
 
@@ -30,6 +30,11 @@ coherent product loop:
 6. search and selection overlays that keep context on-canvas,
 7. minimap, performance, and render-budget proof for large envelopes, and
 8. a desktop wrapper boundary that reuses the same local server.
+
+The follow-up contract is now a portable `GraphFakosWorkspaceManifest`, which
+packages viewer state, progressive clusters, raw-versus-rendered budgets,
+saved-view replay state, expansion requests, edit/capture affordances, and the
+local backend route without moving provider truth into GraphFakos.
 
 ## Non-Goals
 

@@ -1,8 +1,8 @@
 # Dense Graph Usability Next Pass
 
-Status: reviewed, ready for execution
+Status: completed
 Owner: GraphFakos
-Last updated: 2026-07-21
+Last updated: 2026-07-28
 
 ## Purpose
 
@@ -41,6 +41,11 @@ The remaining gap is product feel: dense views still need stronger level of
 detail, better relationship legibility, tighter interaction affordances, and
 more useful content/edit overlays before the viewer feels competitive with
 graph-first tools.
+
+The durable output of this pass is the dense-viewer contract plus a portable
+workspace manifest. Follow-up visual lanes should improve renderer quality and
+scale behavior through that contract rather than adding one-off workbench
+panels or provider-specific state.
 
 ## Non-Goals
 

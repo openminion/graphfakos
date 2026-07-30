@@ -90,11 +90,20 @@ The local workbench can also open a provider envelope or graph artifact through
 the `Open data` control. Browser import is intentionally process-local and is
 available only while the local preview server is running.
 
+GraphFakos also derives a portable `GraphFakosWorkspaceManifest` from a loaded
+provider envelope. Hosts can use that manifest to hand off current viewer
+state, progressive cluster summaries, raw-versus-rendered budgets, saved-view
+state, expansion requests, and edit/capture affordances to a web shell or
+desktop wrapper without parsing rendered HTML. Provider cluster declarations
+may use either `id` or `cluster_id`; expansion cursors stay provider-owned.
+
 ## Boundary
 
 - Provider envelopes are JSON data contracts, not package-private imports.
 - GraphFakos converts clusters, visible nodes, edge bundles, content,
   provenance, and citation payloads into `GraphFakosGraph`.
+- GraphFakos can summarize those DTOs into a workspace manifest for viewer
+  replay and integration handoff.
 - GraphFakos does not generate canonical 200k or 1m provider fixtures.
 - GraphFakos does not mutate provider truth. Edit/manage actions must be
   explicit provider-neutral commands accepted by the provider or host.

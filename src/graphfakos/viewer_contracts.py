@@ -413,16 +413,16 @@ def workspace_manifest_for_graph(
         graph_id=graph.graph_id,
         provider_id=graph.provider_id,
         viewer_state=GraphFakosViewerState.from_request(request),
-        clusters=progressive_clusters_for_graph(graph),
+        clusters=_progressive_clusters_for_graph(graph),
         saved_view=GraphFakosSavedView.from_request(
             request,
             view_id=request.saved_view_id or "route",
             label="Current route view",
         ),
-        default_expansion_requests=default_expansion_requests(graph, request),
-        supported_actions=supported_graph_actions(graph),
-        supported_captures=supported_capture_kinds(graph),
-        performance_budget=performance_budget_for_graph(graph),
+        default_expansion_requests=_default_expansion_requests(graph, request),
+        supported_actions=_supported_graph_actions(graph),
+        supported_captures=_supported_capture_kinds(graph),
+        performance_budget=_performance_budget_for_graph(graph),
         desktop_backend_path=_desktop_backend_path(request),
         provider_payload={
             "provider_label": graph.provider_label,
@@ -431,7 +431,7 @@ def workspace_manifest_for_graph(
     )
 
 
-def progressive_clusters_for_graph(
+def _progressive_clusters_for_graph(
     graph: GraphFakosGraph,
 ) -> tuple[GraphFakosProgressiveCluster, ...]:
     buckets: dict[str, list[GraphFakosNode]] = defaultdict(list)
@@ -480,7 +480,9 @@ def progressive_clusters_for_graph(
     return tuple(clusters)
 
 
-def performance_budget_for_graph(graph: GraphFakosGraph) -> GraphFakosPerformanceBudget:
+def _performance_budget_for_graph(
+    graph: GraphFakosGraph,
+) -> GraphFakosPerformanceBudget:
     raw_node_count = _stats_count(graph, "raw_node_count", len(graph.nodes))
     raw_edge_count = _stats_count(graph, "raw_edge_count", len(graph.edges))
     omitted_node_count = _stats_count(
@@ -505,7 +507,7 @@ def performance_budget_for_graph(graph: GraphFakosGraph) -> GraphFakosPerformanc
     )
 
 
-def default_expansion_requests(
+def _default_expansion_requests(
     graph: GraphFakosGraph,
     request: GraphFakosRequest,
 ) -> tuple[GraphFakosExpansionRequest, ...]:
@@ -524,16 +526,43 @@ def default_expansion_requests(
     )
 
 
-def supported_graph_actions(graph: GraphFakosGraph) -> tuple[str, ...]:
+def _supported_graph_actions(graph: GraphFakosGraph) -> tuple[str, ...]:
     if "graph_action" not in graph.capabilities:
         return ()
-    return ("draft_node", "draft_edge", "retag_group", "merge_alias")
+    return _declared_strings(
+        graph.provider_payload,
+        "supported_actions",
+        ("draft_node", "draft_edge", "retag_group", "merge_alias"),
+    )
 
 
-def supported_capture_kinds(graph: GraphFakosGraph) -> tuple[str, ...]:
+def _supported_capture_kinds(graph: GraphFakosGraph) -> tuple[str, ...]:
     if "knowledge_capture" not in graph.capabilities:
         return ()
-    return ("note", "question", "observation", "task")
+    return _declared_strings(
+        graph.provider_payload,
+        "supported_captures",
+        ("note", "question", "observation", "task"),
+    )
+
+
+def _declared_strings(
+    provider_payload: Mapping[str, object],
+    key: str,
+    fallback: tuple[str, ...],
+) -> tuple[str, ...]:
+    value = provider_payload.get(key, ())
+    if not value:
+        envelope = provider_payload.get("viewer_envelope", {})
+        if isinstance(envelope, Mapping):
+            value = envelope.get(key, ())
+    if not value:
+        return fallback
+    if not isinstance(value, (list, tuple)) or not all(
+        isinstance(item, str) for item in value
+    ):
+        return fallback
+    return tuple(value)
 
 
 def _cluster_id(node: GraphFakosNode) -> str:
@@ -593,13 +622,8 @@ __all__ = [
     "GraphFakosPerspective",
     "GraphFakosProgressiveCluster",
     "GraphFakosWorkspaceManifest",
-    "default_expansion_requests",
     "graph_perspectives",
     "inspector_schema_for",
     "inspector_values",
-    "performance_budget_for_graph",
-    "progressive_clusters_for_graph",
-    "supported_capture_kinds",
-    "supported_graph_actions",
     "workspace_manifest_for_graph",
 ]

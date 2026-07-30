@@ -43,8 +43,6 @@ from graphfakos import (
     load_overlay_graphs,
     load_provider_graph,
     parse_viewer_request,
-    performance_budget_for_graph,
-    progressive_clusters_for_graph,
     query_syntax_reference,
     render_graph_dot,
     render_static_html,
@@ -258,9 +256,14 @@ def test_workspace_manifest_captures_progressive_viewer_contract() -> None:
 
 
 def test_progressive_cluster_and_budget_contracts_round_trip() -> None:
-    graph = load_provider_graph(DemoGraphProvider(), GraphFakosRequest(render_limit=12))
-    cluster = progressive_clusters_for_graph(graph)[0]
-    budget = performance_budget_for_graph(graph)
+    request = GraphFakosRequest(render_limit=12)
+    graph = load_provider_graph(DemoGraphProvider(), request)
+    manifest = workspace_manifest_for_graph(graph, request)
+    assert manifest.clusters
+    assert manifest.performance_budget is not None
+
+    cluster = manifest.clusters[0]
+    budget = manifest.performance_budget
 
     restored_cluster = GraphFakosProgressiveCluster.from_dict(cluster.to_dict())
     restored_budget = GraphFakosPerformanceBudget.from_dict(budget.to_dict())
@@ -270,6 +273,27 @@ def test_progressive_cluster_and_budget_contracts_round_trip() -> None:
     assert restored_cluster.omitted_node_count >= 0
     assert restored_budget.raw_node_count >= restored_budget.rendered_node_count
     assert restored_budget.raw_edge_count >= restored_budget.rendered_edge_count
+
+
+def test_workspace_manifest_respects_provider_declared_affordances() -> None:
+    graph = GraphFakosGraph(
+        graph_id="narrow-provider",
+        label="Narrow Provider",
+        provider_id="narrow",
+        provider_label="Narrow Provider",
+        graph_role="third_party",
+        capabilities=("graph_action", "knowledge_capture"),
+        nodes=(GraphFakosNode(id="node:one", label="One", kind="note"),),
+        edges=(),
+        provider_payload={
+            "supported_actions": ("draft_node",),
+            "supported_captures": ("note",),
+        },
+    )
+    manifest = workspace_manifest_for_graph(graph, GraphFakosRequest())
+
+    assert manifest.supported_actions == ("draft_node",)
+    assert manifest.supported_captures == ("note",)
 
 
 def test_fixture_provider_exposes_comparison_and_overlay_graphs() -> None:

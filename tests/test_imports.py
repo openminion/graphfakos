@@ -64,8 +64,6 @@ def test_graphfakos_package_imports() -> None:
     assert "build_viewer_route" in graphfakos.__all__
     assert "diagnose_graph" in graphfakos.__all__
     assert "workspace_manifest_for_graph" in graphfakos.__all__
-    assert "progressive_clusters_for_graph" in graphfakos.__all__
-    assert "performance_budget_for_graph" in graphfakos.__all__
     assert "write_provider_preview_outputs" in graphfakos.__all__
     assert "FileGraphProvider" in graphfakos.adapters.__all__
     assert "FixtureGraphProvider" in graphfakos.adapters.__all__

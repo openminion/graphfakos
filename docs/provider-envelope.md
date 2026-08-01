@@ -93,9 +93,21 @@ available only while the local preview server is running.
 GraphFakos also derives a portable `GraphFakosWorkspaceManifest` from a loaded
 provider envelope. Hosts can use that manifest to hand off current viewer
 state, progressive cluster summaries, raw-versus-rendered budgets, saved-view
-state, expansion requests, and edit/capture affordances to a web shell or
-desktop wrapper without parsing rendered HTML. Provider cluster declarations
-may use either `id` or `cluster_id`; expansion cursors stay provider-owned.
+state, expansion requests, viewer-local actions, provider status, empty-state
+hints, and edit/capture affordances to a web shell or desktop wrapper without
+parsing rendered HTML. Provider cluster declarations may use either `id` or
+`cluster_id`; expansion cursors stay provider-owned.
+
+Viewer-local actions such as search, filtering, node inspection, neighborhood
+focus, path highlighting, static export, provenance review, and citation copy
+describe what the GraphFakos shell can do with the current DTOs. They are not
+provider mutations. Provider-owned mutations remain limited to explicit
+`supported_actions` and `supported_captures` declarations backed by host code.
+
+When a provider returns no visible nodes, the manifest carries an `empty_state`
+object. Providers may supply `provider_payload.empty_state`; otherwise
+GraphFakos derives a provider-neutral code and message from graph stats and
+warnings.
 
 ## Boundary
 

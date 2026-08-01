@@ -248,6 +248,11 @@ def test_workspace_manifest_captures_progressive_viewer_contract() -> None:
         "observation",
         "task",
     )
+    assert "inspect_node" in restored.viewer_actions
+    assert "show_provenance" in restored.viewer_actions
+    assert restored.provider_status["provider_id"] == "demo"
+    assert restored.provider_status["provider_label"] == "Demo Data Provider"
+    assert restored.provider_status["available_facets"]
     assert restored.default_expansion_requests[0].source_id == "provider:cluster-1"
     assert restored.performance_budget is not None
     assert restored.performance_budget.rendered_node_count == len(graph.nodes)
@@ -294,6 +299,46 @@ def test_workspace_manifest_respects_provider_declared_affordances() -> None:
 
     assert manifest.supported_actions == ("draft_node",)
     assert manifest.supported_captures == ("note",)
+
+
+def test_workspace_manifest_respects_provider_declared_viewer_actions() -> None:
+    graph = GraphFakosGraph(
+        graph_id="viewer-actions",
+        label="Viewer Actions",
+        provider_id="actions",
+        provider_label="Actions Provider",
+        graph_role="third_party",
+        capabilities=("provider_status",),
+        nodes=(GraphFakosNode(id="node:one", label="One", kind="note"),),
+        edges=(),
+        provider_payload={"viewer_actions": ("search", "inspect_node")},
+    )
+    manifest = workspace_manifest_for_graph(graph, GraphFakosRequest())
+
+    assert manifest.viewer_actions == ("search", "inspect_node")
+    assert manifest.provider_status["capabilities"] == ["provider_status"]
+
+
+def test_workspace_manifest_carries_empty_state_hint() -> None:
+    graph = GraphFakosGraph(
+        graph_id="empty",
+        label="Empty Graph",
+        provider_id="empty-provider",
+        provider_label="Empty Provider",
+        graph_role="third_party",
+        capabilities=("provider_status",),
+        nodes=(),
+        edges=(),
+        warnings=("Nothing matched the current filters.",),
+        stats={"empty_code": "filtered_empty"},
+    )
+    manifest = workspace_manifest_for_graph(graph, GraphFakosRequest())
+    restored = GraphFakosWorkspaceManifest.from_dict(manifest.to_dict())
+
+    assert restored.empty_state == {
+        "code": "filtered_empty",
+        "message": "Nothing matched the current filters.",
+    }
 
 
 def test_fixture_provider_exposes_comparison_and_overlay_graphs() -> None:

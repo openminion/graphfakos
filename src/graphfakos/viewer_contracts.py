@@ -287,9 +287,12 @@ class GraphFakosWorkspaceManifest:
     clusters: tuple[GraphFakosProgressiveCluster, ...] = ()
     saved_view: GraphFakosSavedView | None = None
     default_expansion_requests: tuple[GraphFakosExpansionRequest, ...] = ()
+    viewer_actions: tuple[str, ...] = ()
     supported_actions: tuple[str, ...] = ()
     supported_captures: tuple[str, ...] = ()
     performance_budget: GraphFakosPerformanceBudget | None = None
+    provider_status: dict[str, object] = field(default_factory=dict)
+    empty_state: dict[str, object] = field(default_factory=dict)
     desktop_backend_path: str = "/explore"
     schema_version: str = "graphfakos.workspace.v1"
     provider_payload: dict[str, object] = field(default_factory=dict)
@@ -305,6 +308,7 @@ class GraphFakosWorkspaceManifest:
             "default_expansion_requests": [
                 request.to_dict() for request in self.default_expansion_requests
             ],
+            "viewer_actions": list(self.viewer_actions),
             "supported_actions": list(self.supported_actions),
             "supported_captures": list(self.supported_captures),
             "performance_budget": (
@@ -312,6 +316,8 @@ class GraphFakosWorkspaceManifest:
                 if self.performance_budget is not None
                 else None
             ),
+            "provider_status": dict(self.provider_status),
+            "empty_state": dict(self.empty_state),
             "desktop_backend_path": self.desktop_backend_path,
             "provider_payload": dict(self.provider_payload),
         }
@@ -344,6 +350,7 @@ class GraphFakosWorkspaceManifest:
                 GraphFakosExpansionRequest.from_dict(item)
                 for item in _mapping_items(payload, "default_expansion_requests")
             ),
+            viewer_actions=_strings(payload, "viewer_actions"),
             supported_actions=_strings(payload, "supported_actions"),
             supported_captures=_strings(payload, "supported_captures"),
             performance_budget=(
@@ -353,6 +360,8 @@ class GraphFakosWorkspaceManifest:
                     _object_map(payload, "performance_budget")
                 )
             ),
+            provider_status=_object_map(payload, "provider_status"),
+            empty_state=_object_map(payload, "empty_state"),
             desktop_backend_path=_text(payload, "desktop_backend_path", "/explore"),
             provider_payload=_object_map(payload, "provider_payload"),
         )
@@ -420,9 +429,12 @@ def workspace_manifest_for_graph(
             label="Current route view",
         ),
         default_expansion_requests=_default_expansion_requests(graph, request),
+        viewer_actions=_viewer_actions_for_graph(graph),
         supported_actions=_supported_graph_actions(graph),
         supported_captures=_supported_capture_kinds(graph),
         performance_budget=_performance_budget_for_graph(graph),
+        provider_status=_provider_status_for_graph(graph),
+        empty_state=_empty_state_for_graph(graph),
         desktop_backend_path=_desktop_backend_path(request),
         provider_payload={
             "provider_label": graph.provider_label,
@@ -563,6 +575,62 @@ def _declared_strings(
     ):
         return fallback
     return tuple(value)
+
+
+def _viewer_actions_for_graph(graph: GraphFakosGraph) -> tuple[str, ...]:
+    actions = [
+        "search",
+        "filter",
+        "inspect_node",
+        "focus_neighborhood",
+        "highlight_path",
+        "export_visible_graph",
+    ]
+    if graph.provenance:
+        actions.append("show_provenance")
+    if graph.citations:
+        actions.append("copy_citation")
+    if "provider_status" in graph.capabilities:
+        actions.append("open_provider_status")
+    return _declared_strings(
+        graph.provider_payload,
+        "viewer_actions",
+        tuple(actions),
+    )
+
+
+def _provider_status_for_graph(graph: GraphFakosGraph) -> dict[str, object]:
+    return {
+        "provider_id": graph.provider_id,
+        "provider_label": graph.provider_label,
+        "graph_role": graph.graph_role,
+        "capabilities": list(graph.capabilities),
+        "stats": dict(graph.stats),
+        "provider_details": dict(graph.provider_details),
+        "available_facets": {
+            key: list(values) for key, values in graph.available_facets.items()
+        },
+        "warnings": list(graph.warnings),
+    }
+
+
+def _empty_state_for_graph(graph: GraphFakosGraph) -> dict[str, object]:
+    if graph.nodes:
+        return {}
+    raw = graph.provider_payload.get("empty_state", {})
+    if isinstance(raw, Mapping):
+        empty_state = dict(raw)
+    else:
+        empty_state = {}
+    if not empty_state.get("code"):
+        empty_state["code"] = str(graph.stats.get("empty_code") or "graph_empty")
+    if not empty_state.get("message"):
+        empty_state["message"] = (
+            graph.warnings[0]
+            if graph.warnings
+            else "The selected graph source returned no visible nodes."
+        )
+    return empty_state
 
 
 def _cluster_id(node: GraphFakosNode) -> str:

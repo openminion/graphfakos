@@ -406,13 +406,12 @@ body.gf-page[data-theme="paper"] {
 .gf-command-bar button,
 .gf-canvas-tools button {
   border: 1px solid var(--gf-line);
-  border-radius: 8px;
+  border-radius: 10px;
   background: var(--gf-panel);
   color: var(--gf-ink);
-  font: inherit;
-  font-weight: 700;
-  min-height: 30px;
-  padding: 4px 9px;
+  font: 800 12px/1.2 var(--gf-font-body);
+  min-height: 28px;
+  padding: 3px 8px;
 }
 .gf-command-bar button {
   border-color: var(--gf-accent);
@@ -433,13 +432,13 @@ body.gf-page[data-theme="paper"] {
 .gf-route-chip {
   display: inline-flex;
   align-items: center;
-  min-height: 30px;
+  min-height: 28px;
   border: 1px solid var(--gf-line);
-  border-radius: 8px;
-  padding: 5px 9px;
+  border-radius: 10px;
+  padding: 4px 8px;
   background: var(--gf-panel);
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 800;
 }
 .gf-lens-grid {
   display: flex;
@@ -1390,12 +1389,12 @@ body.gf-page[data-theme="space"] .gf-inspect-command textarea {
 }
 .gf-node text {
   fill: var(--gf-ink);
-  font-size: 10px;
-  font-weight: 700;
-  opacity: .88;
+  font-size: 8.5px;
+  font-weight: 750;
+  opacity: .76;
   paint-order: stroke;
   stroke: #fbfcfa;
-  stroke-width: 5px;
+  stroke-width: 4px;
   stroke-linejoin: round;
   transition: font-size .16s ease, opacity .16s ease;
   pointer-events: none;
@@ -1412,19 +1411,19 @@ body.gf-page[data-theme="space"] .gf-inspect-command textarea {
 }
 .gf-canvas-shell[data-detail-mode="balanced"] .gf-node[data-label-priority="ambient"] .gf-node-label,
 .gf-canvas-shell[data-detail-mode="balanced"] .gf-node[data-label-priority="landmark"] .gf-node-label {
-  opacity: .28;
+  opacity: .18;
 }
 .gf-canvas-shell[data-detail-mode="detail"] .gf-node[data-label-priority="ambient"] .gf-node-label {
-  opacity: .52;
+  opacity: .42;
 }
 .gf-canvas-shell[data-detail-mode="precision"] .gf-node-label {
-  font-size: 9px;
+  font-size: 8px;
   opacity: .94;
 }
 body.gf-page[data-theme="space"] .gf-node text {
-  fill: #f4f8ff;
+  fill: #eaf6ff;
   stroke: #050817;
-  stroke-width: 4px;
+  stroke-width: 3px;
 }
 .gf-canvas-legend {
   background: color-mix(in srgb, var(--gf-soft) 74%, white);

@@ -545,7 +545,15 @@
   const preserveNavigationState = (url, state) => {
     const restoreCamera = url.searchParams.get("camera_scope") !== "fresh";
     url.searchParams.delete("camera_scope");
-    for (const key of ["hidden_groups", "expanded_groups", "node_scale", "edge_opacity", "label_density"]) {
+    for (const key of [
+      "hidden_groups",
+      "expanded_groups",
+      "node_scale",
+      "edge_opacity",
+      "label_density",
+      "scene_level",
+      "edge_clutter",
+    ]) {
       if (!url.searchParams.has(key)) setUrlParam(url, key, state[key]);
     }
     if (restoreCamera && !url.searchParams.has("camera_pose")) {
@@ -699,21 +707,35 @@
     });
   };
 
-  const curvedEdgeControl = (x1, y1, x2, y2, edgeId = "") => {
+  const curvedEdgeControls = (x1, y1, x2, y2, edgeId = "") => {
     const dx = x2 - x1;
     const dy = y2 - y1;
     const distance = Math.hypot(dx, dy) || 1;
     const bendSign = [...String(edgeId)].reduce((total, char) => total + char.charCodeAt(0), 0) % 2 ? -1 : 1;
-    const bend = clamp(distance * 0.18, 14, 72) * bendSign;
+    const bend = clamp(distance * 0.24, 18, 108) * bendSign;
+    const drift = clamp(distance * 0.06, 6, 34) * (bendSign * -1);
+    const normalX = -dy / distance;
+    const normalY = dx / distance;
     return {
-      x: (x1 + x2) / 2 - (dy / distance) * bend,
-      y: (y1 + y2) / 2 + (dx / distance) * bend,
+      first: {
+        x: x1 + dx * 0.34 + normalX * bend,
+        y: y1 + dy * 0.34 + normalY * bend,
+      },
+      second: {
+        x: x1 + dx * 0.68 + normalX * drift,
+        y: y1 + dy * 0.68 + normalY * drift,
+      },
     };
   };
 
   const curvedEdgePath = (x1, y1, x2, y2, edgeId = "") => {
-    const control = curvedEdgeControl(x1, y1, x2, y2, edgeId);
-    return `M${x1.toFixed(1)},${y1.toFixed(1)} Q${control.x.toFixed(1)},${control.y.toFixed(1)} ${x2.toFixed(1)},${y2.toFixed(1)}`;
+    const controls = curvedEdgeControls(x1, y1, x2, y2, edgeId);
+    return [
+      `M${x1.toFixed(1)},${y1.toFixed(1)}`,
+      `C${controls.first.x.toFixed(1)},${controls.first.y.toFixed(1)}`,
+      `${controls.second.x.toFixed(1)},${controls.second.y.toFixed(1)}`,
+      `${x2.toFixed(1)},${y2.toFixed(1)}`,
+    ].join(" ");
   };
 
   const shellViewport = (shell) => {
@@ -1254,8 +1276,15 @@
       if (!source || !target) return;
       context.beginPath();
       context.moveTo(source.x, source.y);
-      const control = curvedEdgeControl(source.x, source.y, target.x, target.y, edge.dataset.edgeId || "");
-      context.quadraticCurveTo(control.x, control.y, target.x, target.y);
+      const controls = curvedEdgeControls(source.x, source.y, target.x, target.y, edge.dataset.edgeId || "");
+      context.bezierCurveTo(
+        controls.first.x,
+        controls.first.y,
+        controls.second.x,
+        controls.second.y,
+        target.x,
+        target.y,
+      );
       context.strokeStyle = edge.dataset.selected === "true" ? "#f97316" : "rgba(62,74,92,0.34)";
       context.lineWidth = number(edge.dataset.edgeWidth, 1.4);
       context.globalAlpha = number(edge.dataset.edgeOpacity, 1);

@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/openminion/graphfakos">GitHub</a>
+  <a href="https://github.com/OpenMinion/graphfakos">GitHub</a>
   · <a href="https://pypi.org/project/graphfakos/">PyPI</a>
   · <a href="https://www.openminion.com">Website</a>
   · <a href="docs/README.md">Docs</a>
@@ -41,7 +41,7 @@ itself.
 
 ## Trust and Brand Safety
 
-- Official GitHub: <https://github.com/openminion/graphfakos>
+- Official GitHub: <https://github.com/OpenMinion/graphfakos>
 - Official website: <https://www.openminion.com>
 - Official X account: <https://x.com/OpenMinion>
 

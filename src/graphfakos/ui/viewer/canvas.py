@@ -379,14 +379,14 @@ def _curved_edge_path(x1: float, y1: float, x2: float, y2: float, edge_id: str) 
     distance = sqrt(dx * dx + dy * dy) or 1.0
     seed = sum(ord(char) for char in edge_id)
     bend_sign = -1 if seed % 2 else 1
-    bend = min(118.0, max(20.0, distance * (0.16 + (seed % 7) * 0.018)))
+    bend = min(146.0, max(24.0, distance * (0.22 + (seed % 7) * 0.022)))
     bend *= bend_sign
     normal_x = -dy / distance
     normal_y = dx / distance
-    control_1_x = x1 + dx * 0.34 + normal_x * bend
-    control_1_y = y1 + dy * 0.34 + normal_y * bend
-    control_2_x = x1 + dx * 0.66 - normal_x * bend * 0.45
-    control_2_y = y1 + dy * 0.66 - normal_y * bend * 0.45
+    control_1_x = x1 + dx * 0.32 + normal_x * bend
+    control_1_y = y1 + dy * 0.32 + normal_y * bend
+    control_2_x = x1 + dx * 0.69 - normal_x * bend * 0.32
+    control_2_y = y1 + dy * 0.69 - normal_y * bend * 0.32
     return (
         f"M{x1:.1f},{y1:.1f} "
         f"C{control_1_x:.1f},{control_1_y:.1f} "
@@ -400,14 +400,14 @@ def _node_depth_z(node: GraphFakosNode, index: int) -> float:
 
 
 def _edge_width(edge: GraphFakosEdge, request: GraphFakosRequest) -> float:
-    base = 1.4
+    base = 1.05
     if request.style_edge_width_by == "weight" and edge.weight is not None:
-        base = 1.0 + edge.weight * 2.0
+        base = 0.75 + edge.weight * 1.55
     elif request.style_edge_width_by == "confidence" and edge.confidence is not None:
-        base = 1.0 + edge.confidence * 2.0
+        base = 0.75 + edge.confidence * 1.55
     elif request.style_edge_width_by == "kind":
-        base = 1.2 + (abs(hash(edge.kind)) % 4) * 0.35
-    return _clamped(base * request.edge_scale, 0.5, 7.0)
+        base = 0.95 + (abs(hash(edge.kind)) % 4) * 0.28
+    return _clamped(base * request.edge_scale, 0.35, 5.2)
 
 
 def _should_show_label(
@@ -692,16 +692,16 @@ def _node_radius(
     degree: int = 0,
 ) -> int:
     scale = request.node_scale if request is not None else 1.0
-    base = 5.0 if node.score is None else max(3.8, min(10.5, 3.8 + node.score * 5.8))
+    base = 3.6 if node.score is None else max(2.6, min(7.4, 2.6 + node.score * 4.2))
     if request is not None and request.style_size_by == "degree":
-        base = max(base, 4.2 + min(degree, 6) * 0.72)
+        base = max(base, 3.0 + min(degree, 6) * 0.48)
     if (
         request is not None
         and request.style_size_by == "confidence"
         and node.confidence
     ):
-        base = max(base, 4.2 + node.confidence * 5.8)
-    return max(2, min(18, int(base * _clamped(scale, 0.35, 2.2))))
+        base = max(base, 3.0 + node.confidence * 4.0)
+    return max(1, min(12, int(base * _clamped(scale, 0.35, 2.2))))
 
 
 def _node_label(node: GraphFakosNode) -> str:

@@ -54,9 +54,13 @@ from .renderers import SUPPORTED_RENDER_ENGINES, validate_render_engine
 from .viewer_contracts import (
     GraphFakosInspectorField,
     GraphFakosInspectorSchema,
+    GraphFakosPerformanceBudget,
     GraphFakosPerspective,
+    GraphFakosProgressiveCluster,
+    GraphFakosWorkspaceManifest,
     graph_perspectives,
     inspector_schema_for,
+    workspace_manifest_for_graph,
 )
 
 __all__ = [
@@ -81,7 +85,9 @@ __all__ = [
     "GraphFakosKnowledgeCaptureProvider",
     "GraphFakosNode",
     "GraphFakosOverlayProvider",
+    "GraphFakosPerformanceBudget",
     "GraphFakosPerspective",
+    "GraphFakosProgressiveCluster",
     "GraphFakosProvenance",
     "GraphFakosProvider",
     "GraphFakosReplayBundle",
@@ -95,6 +101,7 @@ __all__ = [
     "GraphFakosViewerEvent",
     "GraphFakosViewerState",
     "GraphFakosVisual",
+    "GraphFakosWorkspaceManifest",
     "analyze_graph",
     "diagnose_graph",
     "explain_connection",
@@ -110,5 +117,6 @@ __all__ = [
     "validate_graph",
     "validate_graph_artifact_payload",
     "validate_render_engine",
+    "workspace_manifest_for_graph",
     "write_graph_artifact",
 ]

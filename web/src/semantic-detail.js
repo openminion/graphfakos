@@ -1,8 +1,8 @@
 const detailBudgets = {
   overview: 1,
-  balanced: 4,
-  detail: 9,
-  precision: 16,
+  balanced: 3,
+  detail: 8,
+  precision: 13,
 };
 
 const sceneLevelDetails = {
@@ -43,7 +43,7 @@ export function detailLevelForSceneLevel(sceneLevel, autoLevel = "overview") {
 
 export function labelBudgetForDetail(level, density = 1, nodeCount = Infinity) {
   const base = detailBudgets[level] || detailBudgets.overview;
-  const scale = 0.35 + clamp(Number(density) || 0, 0, 1) * 0.65;
+  const scale = 0.28 + clamp(Number(density) || 0, 0, 1) * 0.72;
   return Math.min(Math.max(0, Number(nodeCount) || 0), Math.max(1, Math.round(base * scale)));
 }
 
@@ -59,15 +59,15 @@ export function modeSummaryForSceneLevel(sceneLevel) {
 
 export function nodeScaleForCount(nodeCount) {
   const count = Math.max(0, Number(nodeCount) || 0);
-  if (count <= 16) return 18;
-  if (count <= 48) return 6;
-  if (count <= 110) return 1.8;
-  if (count <= 260) return 0.48;
-  return 0.34;
+  if (count <= 16) return 13;
+  if (count <= 48) return 4.7;
+  if (count <= 110) return 1.28;
+  if (count <= 260) return 0.31;
+  return 0.22;
 }
 
 export function zoomStableNodeScale(zoom) {
   const value = Number(zoom);
   if (!Number.isFinite(value) || value <= 0) return 1;
-  return clamp(1 / Math.sqrt(value), 0.4, 1.65);
+  return clamp(1 / Math.sqrt(value), 0.32, 1.45);
 }

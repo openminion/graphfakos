@@ -25,7 +25,7 @@ test("maps camera distance to semantic graph detail", () => {
   expect(detailLevelForCamera({ nodeCount: 240, referenceDistance: 900, cameraDistance: 360 }))
     .toBe("precision");
   expect(labelBudgetForDetail("overview", 1, 240)).toBe(1);
-  expect(labelBudgetForDetail("detail", 1, 240)).toBe(9);
+  expect(labelBudgetForDetail("detail", 1, 240)).toBe(8);
   expect(detailLevelForSceneLevel("islands", "precision")).toBe("overview");
   expect(detailLevelForSceneLevel("cluster", "overview")).toBe("balanced");
   expect(detailLevelForSceneLevel("local", "overview")).toBe("detail");
@@ -38,7 +38,7 @@ test("maps camera distance to semantic graph detail", () => {
 test("keeps node marks readable while camera zoom changes", () => {
   expect(zoomStableNodeScale(4)).toBeLessThan(zoomStableNodeScale(1));
   expect(zoomStableNodeScale(0.25)).toBeGreaterThan(zoomStableNodeScale(1));
-  expect(zoomStableNodeScale(100)).toBeGreaterThanOrEqual(0.4);
+  expect(zoomStableNodeScale(100)).toBeGreaterThanOrEqual(0.32);
 });
 
 test("progressive edge detail preserves aggregates and active context", () => {
@@ -172,10 +172,9 @@ test("keeps small 3D nodes targetable and focused content visible", async ({ pag
     return labelBox.x + labelBox.width <= inspectorBox.x - 12;
   }).toBe(true);
 
-  const surface = page.locator(".gf-webgl-surface");
-  const surfaceBox = await surface.boundingBox();
-  await page.mouse.click(surfaceBox.x + 18, surfaceBox.y + surfaceBox.height - 18);
+  await page.keyboard.press("Escape");
   await expect(inspector).toHaveAttribute("data-open", "false");
+  await page.keyboard.press("Escape");
   await expect.poll(() => page.locator("graphfakos-viewer").evaluate(
     (viewer) => viewer.getState().selected_node_id,
   )).toBeNull();

@@ -19,7 +19,9 @@ from graphfakos import (
     GraphFakosInvestigationSession,
     GraphFakosKnowledgeCapture,
     GraphFakosNode,
+    GraphFakosPerformanceBudget,
     GraphFakosPerspective,
+    GraphFakosProgressiveCluster,
     GraphFakosReplayBundle,
     GraphFakosRequest,
     GraphFakosSavedQuery,
@@ -28,6 +30,7 @@ from graphfakos import (
     GraphFakosViewerCommand,
     GraphFakosViewerEvent,
     GraphFakosViewerState,
+    GraphFakosWorkspaceManifest,
     analyze_graph,
     build_fixture_graph,
     build_graph_replay_bundle,
@@ -46,6 +49,7 @@ from graphfakos import (
     review_preset_manifest,
     validate_graph,
     validate_render_engine,
+    workspace_manifest_for_graph,
 )
 from graphfakos.testing import (
     GraphFakosProviderConformanceCase,
@@ -208,6 +212,133 @@ def test_graph_to_dict_is_provider_neutral() -> None:
         "memory",
         "provider",
     ]
+
+
+def test_workspace_manifest_captures_progressive_viewer_contract() -> None:
+    request = GraphFakosRequest(
+        screen="explore",
+        focus_node_id="provider:cluster-1",
+        render_engine="3d",
+        theme="space",
+        layout="islands",
+        render_limit=40,
+        saved_view_id="ops-review",
+    )
+    graph = load_provider_graph(DemoGraphProvider(), request)
+    manifest = workspace_manifest_for_graph(graph, request)
+    payload = manifest.to_dict()
+    restored = GraphFakosWorkspaceManifest.from_dict(payload)
+
+    assert restored.schema_version == "graphfakos.workspace.v1"
+    assert restored.graph_id == graph.graph_id
+    assert restored.provider_id == "demo"
+    assert restored.viewer_state.theme == "space"
+    assert restored.saved_view is not None
+    assert restored.saved_view.state.render_engine == "3d"
+    assert restored.desktop_backend_path == "/explore"
+    assert restored.supported_actions == (
+        "draft_node",
+        "draft_edge",
+        "retag_group",
+        "merge_alias",
+    )
+    assert restored.supported_captures == (
+        "note",
+        "question",
+        "observation",
+        "task",
+    )
+    assert "inspect_node" in restored.viewer_actions
+    assert "show_provenance" in restored.viewer_actions
+    assert restored.provider_status["provider_id"] == "demo"
+    assert restored.provider_status["provider_label"] == "Demo Data Provider"
+    assert restored.provider_status["available_facets"]
+    assert restored.default_expansion_requests[0].source_id == "provider:cluster-1"
+    assert restored.performance_budget is not None
+    assert restored.performance_budget.rendered_node_count == len(graph.nodes)
+    assert restored.clusters
+    assert restored.clusters[0].visible_node_ids
+
+
+def test_progressive_cluster_and_budget_contracts_round_trip() -> None:
+    request = GraphFakosRequest(render_limit=12)
+    graph = load_provider_graph(DemoGraphProvider(), request)
+    manifest = workspace_manifest_for_graph(graph, request)
+    assert manifest.clusters
+    assert manifest.performance_budget is not None
+
+    cluster = manifest.clusters[0]
+    budget = manifest.performance_budget
+
+    restored_cluster = GraphFakosProgressiveCluster.from_dict(cluster.to_dict())
+    restored_budget = GraphFakosPerformanceBudget.from_dict(budget.to_dict())
+
+    assert restored_cluster.cluster_id == cluster.cluster_id
+    assert restored_cluster.node_count >= len(restored_cluster.visible_node_ids)
+    assert restored_cluster.omitted_node_count >= 0
+    assert restored_budget.raw_node_count >= restored_budget.rendered_node_count
+    assert restored_budget.raw_edge_count >= restored_budget.rendered_edge_count
+
+
+def test_workspace_manifest_respects_provider_declared_affordances() -> None:
+    graph = GraphFakosGraph(
+        graph_id="narrow-provider",
+        label="Narrow Provider",
+        provider_id="narrow",
+        provider_label="Narrow Provider",
+        graph_role="third_party",
+        capabilities=("graph_action", "knowledge_capture"),
+        nodes=(GraphFakosNode(id="node:one", label="One", kind="note"),),
+        edges=(),
+        provider_payload={
+            "supported_actions": ("draft_node",),
+            "supported_captures": ("note",),
+        },
+    )
+    manifest = workspace_manifest_for_graph(graph, GraphFakosRequest())
+
+    assert manifest.supported_actions == ("draft_node",)
+    assert manifest.supported_captures == ("note",)
+
+
+def test_workspace_manifest_respects_provider_declared_viewer_actions() -> None:
+    graph = GraphFakosGraph(
+        graph_id="viewer-actions",
+        label="Viewer Actions",
+        provider_id="actions",
+        provider_label="Actions Provider",
+        graph_role="third_party",
+        capabilities=("provider_status",),
+        nodes=(GraphFakosNode(id="node:one", label="One", kind="note"),),
+        edges=(),
+        provider_payload={"viewer_actions": ("search", "inspect_node")},
+    )
+    manifest = workspace_manifest_for_graph(graph, GraphFakosRequest())
+
+    assert manifest.viewer_actions == ("search", "inspect_node")
+    assert manifest.provider_status["capabilities"] == ["provider_status"]
+
+
+def test_workspace_manifest_carries_empty_state_hint() -> None:
+    graph = GraphFakosGraph(
+        graph_id="empty",
+        label="Empty Graph",
+        provider_id="empty-provider",
+        provider_label="Empty Provider",
+        graph_role="third_party",
+        capabilities=("provider_status",),
+        nodes=(),
+        edges=(),
+        warnings=("Nothing matched the current filters.",),
+        stats={"empty_code": "filtered_empty"},
+    )
+    manifest = workspace_manifest_for_graph(graph, GraphFakosRequest())
+    restored = GraphFakosWorkspaceManifest.from_dict(manifest.to_dict())
+
+    assert restored.empty_state == {
+        "code": "filtered_empty",
+        "message": "Nothing matched the current filters.",
+    }
 
 
 def test_fixture_provider_exposes_comparison_and_overlay_graphs() -> None:

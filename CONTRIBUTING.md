@@ -60,7 +60,7 @@ Requires Python 3.11+.
 
 ```bash
 # 1. Clone and enter the repo
-git clone https://github.com/openminion/graphfakos.git graphfakos
+git clone https://github.com/OpenMinion/graphfakos.git graphfakos
 cd graphfakos
 
 # 2. Create and activate a virtualenv

@@ -122,9 +122,13 @@ from .ui import (
 from .viewer_contracts import (
     GraphFakosInspectorField,
     GraphFakosInspectorSchema,
+    GraphFakosPerformanceBudget,
     GraphFakosPerspective,
+    GraphFakosProgressiveCluster,
+    GraphFakosWorkspaceManifest,
     graph_perspectives,
     inspector_schema_for,
+    workspace_manifest_for_graph,
 )
 
 __version__ = "0.0.7"
@@ -187,7 +191,9 @@ __all__ = [
     "GraphFakosNode",
     "GraphFakosOverlayProvider",
     "GraphFakosPatchOperation",
+    "GraphFakosPerformanceBudget",
     "GraphFakosPerspective",
+    "GraphFakosProgressiveCluster",
     "GraphFakosProvenance",
     "GraphFakosProvider",
     "GraphFakosReplayBundle",
@@ -201,6 +207,7 @@ __all__ = [
     "GraphFakosViewerEvent",
     "GraphFakosViewerState",
     "GraphFakosVisual",
+    "GraphFakosWorkspaceManifest",
     "GraphPreviewOutputPaths",
     "InMemoryGraphFakosLiveProvider",
     "LocalViewerHttpServer",
@@ -251,6 +258,7 @@ __all__ = [
     "validate_graph_artifact_payload",
     "validate_render_engine",
     "viewer_runtime_script",
+    "workspace_manifest_for_graph",
     "write_embeddable_html",
     "write_graph_artifact",
     "write_graph_dot",

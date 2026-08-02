@@ -25,10 +25,10 @@ function rounded(value) {
   return Math.round(value * 10_000) / 10_000;
 }
 
-const localCurve = 0.22;
-const bridgeCurve = 0.38;
-const bundleCurve = 0.56;
-const parallelSpacing = 0.16;
+const localCurve = 0.28;
+const bridgeCurve = 0.52;
+const bundleCurve = 0.74;
+const parallelSpacing = 0.22;
 
 function curveProfile(source, target, sameCluster, key, index, lane, aggregate) {
   if (source === target) {
@@ -39,16 +39,13 @@ function curveProfile(source, target, sameCluster, key, index, lane, aggregate) 
   }
 
   const rawWeight = aggregate?.edgeCount || aggregate?.weight || aggregate?.edge_count || 1;
-  const weight = Math.min(
-    0.2,
-    Math.log10(Math.max(1, Number(rawWeight))) * 0.04,
-  );
+  const weight = Math.min(0.28, Math.log10(Math.max(1, Number(rawWeight))) * 0.055);
   const base = (
     aggregate ? bundleCurve : sameCluster ? localCurve : bridgeCurve
   ) + weight + (stableHash(key) % 9) * 0.018;
   const sign = lane === 0 ? curveSign(key) : Math.sign(lane);
   return {
-    curvature: rounded(sign * Math.min(0.82, base + Math.abs(lane) * parallelSpacing)),
+    curvature: rounded(sign * Math.min(1.05, base + Math.abs(lane) * parallelSpacing)),
     curveRotation: (stableHash(`${key}:${source}:${target}:rotation`) % 6283) / 1000,
   };
 }
@@ -93,9 +90,9 @@ export function linkVisibleForDetail(link, detailLevel, focusId = "") {
   if (link.selected || (focusId && (source === focusId || target === focusId))) return true;
   if (link.kind === "edge_bundle" || link.aggregate === true) return true;
   const threshold = {
-    overview: 18,
-    balanced: 46,
-    detail: 78,
+    overview: 13,
+    balanced: 34,
+    detail: 66,
     precision: 100,
   }[detailLevel] || 18;
   return stableHash(link.id || `${source}:${target}`) % 100 < threshold;

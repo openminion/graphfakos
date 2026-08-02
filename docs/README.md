@@ -3,28 +3,34 @@
 GraphFakos is the shared graph lens package for visualizing provider-neutral
 knowledge graphs.
 
-Start with:
+It owns viewer contracts and rendering behavior. It does not own provider
+truth, persistence, graph ingestion, SophiaGraph memory semantics, or
+PragmaGraph indexing semantics.
 
-- [Engineering patterns](engineering-patterns.md)
-- [Code quality enforcement](code-quality-enforcement.md)
-- [Cleanup workflow](cleanup-workflow.md)
-- [Artifact interchange](artifact-interchange.md)
-- [Source tree owner map](source-tree-owner-map.md)
-- [UI contracts](ui-contracts.md)
+## Start Here
+
+| If you want to... | Read |
+| --- | --- |
+| Understand the package boundary | [UI contracts](ui-contracts.md) and [Source tree owner map](source-tree-owner-map.md) |
+| Export, replay, or hand off graph artifacts | [Artifact interchange](artifact-interchange.md) |
+| Render a provider-generated envelope | [Provider envelope](provider-envelope.md) |
+| Build a custom provider | [Custom provider example](custom-provider-example.md) |
+| Test local viewer behavior | [Local viewer testing](local-viewer-testing.md), [Visual QA](visual-qa.md), and [Viewer accessibility matrix](accessibility.md) |
+| Understand live update contracts | [Live graph sessions](live-sessions.md) |
+
+## Planning And Hardening References
+
 - [Dense graph usability next pass spec](specs/dense-graph-usability-next-pass.md)
-- [Dense graph usability next pass tracker](trackers/dense-graph-usability-next-pass-tracker.md)
+  and [tracker](trackers/dense-graph-usability-next-pass-tracker.md)
 - [Provider workflow gap closure spec](specs/provider-workflow-gap-closure.md)
-- [Provider workflow gap closure tracker](trackers/provider-workflow-gap-closure-tracker.md)
-- [Viewer product hardening spec](specs/viewer-product-hardening.md)
-- [Viewer product hardening tracker](trackers/viewer-product-hardening-tracker.md)
-- [Viewer accessibility matrix](accessibility.md)
-- [Visual QA](visual-qa.md)
-- [Local viewer testing](local-viewer-testing.md)
-- [Provider envelope](provider-envelope.md)
-- [Live graph sessions](live-sessions.md)
-- [Custom provider example](custom-provider-example.md)
-- [API compatibility](../API_COMPATIBILITY.md)
-- [Release process](../RELEASING.md)
+  and [tracker](trackers/provider-workflow-gap-closure-tracker.md)
+- [Viewer product hardening spec](specs/viewer-product-hardening.md) and
+  [tracker](trackers/viewer-product-hardening-tracker.md)
+- [Engineering patterns](engineering-patterns.md),
+  [code quality enforcement](code-quality-enforcement.md), and
+  [cleanup workflow](cleanup-workflow.md)
+- [API compatibility](../API_COMPATIBILITY.md) and
+  [release process](../RELEASING.md)
 
 ## Integration Model
 

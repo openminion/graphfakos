@@ -29,17 +29,22 @@ const nodeHitMaterial = new MeshBasicMaterial({
 function clusterCenters(nodes) {
   const clusterIds = [...new Set(nodes.map((node) => node.clusterId || node.kind || "unclustered"))].sort();
   if (clusterIds.length === 1) return new Map([[clusterIds[0], { x: 0, y: 0, z: 0 }]]);
-  const spread = Math.min(7800, 760 + Math.sqrt(clusterIds.length) * 360);
+  const count = nodes.filter((node) => !node.hidden).length || nodes.length;
+  const spread = count > 160
+    ? Math.min(11200, 980 + Math.sqrt(clusterIds.length) * 520)
+    : count > 80
+      ? Math.min(6600, 820 + Math.sqrt(clusterIds.length) * 420)
+      : Math.min(2600, 620 + Math.sqrt(clusterIds.length) * 270);
   const goldenAngle = Math.PI * (3 - Math.sqrt(5));
   return new Map(clusterIds.map((clusterId, index) => {
     const ring = Math.sqrt((index + 1.4) / clusterIds.length);
     const wobble = ((stableHash(`${clusterId}:wobble`) % 100) - 50) / 100;
-    const radius = spread * ring * (0.98 + Math.abs(wobble) * 0.34);
-    const angle = index * goldenAngle + wobble * 0.44;
+    const radius = spread * ring * (1.08 + Math.abs(wobble) * 0.46);
+    const angle = index * goldenAngle + wobble * 0.62;
     return [clusterId, {
       x: Math.cos(angle) * radius,
       y: Math.sin(angle) * radius,
-      z: ((index % 11) - 5) * 104 + wobble * 64,
+      z: ((index % 13) - 6) * 150 + wobble * 96,
     }];
   }));
 }
@@ -48,11 +53,11 @@ function seededPosition(id, clusterId, centers) {
   const nodeHash = stableHash(id);
   const center = centers.get(clusterId || "unclustered") || { x: 0, y: 0, z: 0 };
   const localAngle = (nodeHash % 360) * (Math.PI / 180);
-  const localRadius = 10 + (nodeHash % 44);
+  const localRadius = 16 + (nodeHash % 72);
   return {
     x: center.x + Math.cos(localAngle) * localRadius,
     y: center.y + Math.sin(localAngle) * localRadius,
-    z: center.z + ((nodeHash % 47) - 23) * 1.45,
+    z: center.z + ((nodeHash % 47) - 23) * 2.4,
   };
 }
 
@@ -76,12 +81,12 @@ function clusterForce(nodes, centers) {
 
 function forceProfile(visibleCount) {
   if (visibleCount > 160) {
-    return { charge: -620, linkDistance: 260, linkStrength: 0.065, clusterStrength: 0.055 };
+    return { charge: -920, linkDistance: 340, linkStrength: 0.038, clusterStrength: 0.034 };
   }
   if (visibleCount > 80) {
-    return { charge: -380, linkDistance: 180, linkStrength: 0.11, clusterStrength: 0.09 };
+    return { charge: -520, linkDistance: 230, linkStrength: 0.074, clusterStrength: 0.058 };
   }
-  return { charge: -240, linkDistance: 118, linkStrength: 0.2, clusterStrength: 0.15 };
+  return { charge: -280, linkDistance: 136, linkStrength: 0.16, clusterStrength: 0.12 };
 }
 
 function applyForces(graph, nodes, centers, visibleCount) {
@@ -170,12 +175,12 @@ const hash = (value) => {
 const position = (id, clusterId, center) => {
   const nodeHash = hash(id);
   const localAngle = (nodeHash % 360) * Math.PI / 180;
-  const localRadius = 18 + (nodeHash % 78);
+  const localRadius = 16 + (nodeHash % 72);
   return {
     id,
     x: center.x + Math.cos(localAngle) * localRadius,
     y: center.y + Math.sin(localAngle) * localRadius,
-    z: center.z + ((nodeHash % 47) - 23) * 2.3,
+    z: center.z + ((nodeHash % 47) - 23) * 2.4,
   };
 };
 self.onmessage = ({ data }) => {
@@ -306,7 +311,7 @@ function mount(element, scene, callbacks = {}) {
     contextLabelIds = new Set(nodes
       .filter((node) => node.id !== activeFocusId && focusedNodeIds.has(node.id) && !node.hidden)
       .sort((left, right) => (right.degree || 0) - (left.degree || 0) || left.label.localeCompare(right.label))
-      .slice(0, 6)
+      .slice(0, 5)
       .map((node) => node.id));
   };
   refreshInteractionContext();
@@ -330,6 +335,16 @@ function mount(element, scene, callbacks = {}) {
   const nodeCluster = (nodeId) => (
     nodes.find((node) => node.id === nodeId)?.clusterId || ""
   );
+  const isClusterDragNode = (node) => Boolean(
+    node?.clusterId
+    && (
+      clusterDrag
+      || node.kind === "cluster"
+      || node.aggregate === true
+      || node.id === node.clusterId
+      || String(node.id).includes("cluster")
+    ),
+  );
   const edgeMode = () => activeScene.edgeMode || activeScene.edge_mode || "normal";
   const linkVisibleForMode = (link) => {
     if (link.hidden) return false;
@@ -347,32 +362,32 @@ function mount(element, scene, callbacks = {}) {
   };
   const linkColor = (link) => {
     if (link.selected) return "#72ddff";
-    if (linkTouchesFocus(link)) return activeScene.theme === "space" ? "#c2f3ff" : "#17677c";
-    if (activeFocusId) return activeScene.theme === "space" ? "#3e4a68" : "#a4afac";
-    if (isAggregateLink(link)) return activeScene.theme === "space" ? "#7aa4d8" : "#6b837c";
-    return activeScene.theme === "space" ? "#829bc3" : "#7f908c";
+    if (linkTouchesFocus(link)) return activeScene.theme === "space" ? "rgba(224, 250, 255, 0.92)" : "#17677c";
+    if (activeFocusId) return activeScene.theme === "space" ? "rgba(70, 85, 118, 0.42)" : "#a4afac";
+    if (isAggregateLink(link)) return activeScene.theme === "space" ? "rgba(139, 184, 238, 0.7)" : "#6b837c";
+    return activeScene.theme === "space" ? "rgba(132, 158, 202, 0.48)" : "#7f908c";
   };
   const linkWeight = (link) => (
     Math.max(1, Number(link.weight || link.edgeCount || link.edge_count || 1))
   );
   const linkWidth = (link) => {
-    if (link.selected) return 2.1;
-    if (linkTouchesFocus(link)) return 1.35;
-    if (isAggregateLink(link)) return Math.min(0.9, 0.22 + Math.log10(linkWeight(link)) * 0.18);
-    return 0.22;
+    if (link.selected) return 1.75;
+    if (linkTouchesFocus(link)) return 1.08;
+    if (isAggregateLink(link)) return Math.min(0.68, 0.16 + Math.log10(linkWeight(link)) * 0.12);
+    return 0.14;
   };
   const linkVisible = (link) => linkVisibleForMode(link);
   const visibleNodeCount = () => activeScene.nodes.filter((node) => !node.hidden).length;
   const sceneLinkOpacity = () => {
     const visibleCount = visibleNodeCount();
     let base = {
-      overview: 0.1,
-      balanced: 0.2,
-      detail: 0.3,
-      precision: 0.4,
-    }[semanticDetail] || 0.13;
-    if (visibleCount <= 48) base = Math.max(base, 0.42);
-    else if (visibleCount <= 110) base = Math.max(base, 0.3);
+      overview: 0.08,
+      balanced: 0.16,
+      detail: 0.24,
+      precision: 0.34,
+    }[semanticDetail] || 0.1;
+    if (visibleCount <= 48) base = Math.max(base, 0.36);
+    else if (visibleCount <= 110) base = Math.max(base, 0.24);
     return base * (activeScene.edgeOpacity || 1);
   };
   const nodeObject = (node) => {
@@ -380,7 +395,7 @@ function mount(element, scene, callbacks = {}) {
     const hovered = node.id === hoveredNodeId;
     const previewed = node.id === previewedNodeId;
     const selected = selectedNodeIds.has(node.id);
-    const related = contextLabelIds.has(node.id);
+    const related = !hovered && !previewed && !selected && contextLabelIds.has(node.id);
     return updateNodeObject(
       nodeObjects.get(node.id),
       node,
@@ -392,12 +407,12 @@ function mount(element, scene, callbacks = {}) {
     );
   };
   const nodeSize = (node) => {
-    const baseSize = 0.18 + Math.sqrt(Math.max(0, node.degree || 0)) * 0.042;
+    const baseSize = 0.13 + Math.sqrt(Math.max(0, node.degree || 0)) * 0.03;
     const focusBoost = selectedNodeIds.has(node.id) || node.id === hoveredNodeId || node.id === previewedNodeId
-      ? 1.58
-      : focusedNodeIds.has(node.id) && activeFocusId ? 1.2 : 1;
+      ? 1.72
+      : focusedNodeIds.has(node.id) && activeFocusId ? 1.26 : 1;
     const sparseScale = nodeScaleForCount(visibleNodeCount());
-    return Math.max(0.1, Math.min(7.5, baseSize * focusBoost * sparseScale * semanticNodeScale * (activeScene.nodeScale || 1)));
+    return Math.max(0.06, Math.min(4.4, baseSize * focusBoost * sparseScale * semanticNodeScale * (activeScene.nodeScale || 1)));
   };
   const shell = element.closest(".gf-canvas-shell");
   const focusLocator = shell?.querySelector("[data-gf-focus-locator]");
@@ -516,9 +531,27 @@ function mount(element, scene, callbacks = {}) {
       const labelBounds = label.element.getBoundingClientRect();
       const visibleTop = Math.max(0, surfaceBounds.top);
       const visibleBottom = Math.min(window.innerHeight, surfaceBounds.bottom);
-      if (labelBounds.top < visibleTop + 8) label.object.position.y = -42;
-      else if (labelBounds.bottom > visibleBottom - 8) label.object.position.y = 42;
-      else return;
+      const visibleLeft = Math.max(0, surfaceBounds.left);
+      const visibleRight = Math.min(window.innerWidth, surfaceBounds.right);
+      const next = { x: 0, y: 8 };
+      label.element.dataset.edgeY = "center";
+      label.element.dataset.edgeX = "center";
+      if (labelBounds.top < visibleTop + 8) {
+        next.y = 42;
+        label.element.dataset.edgeY = "top";
+      } else if (labelBounds.bottom > visibleBottom - 8) {
+        next.y = -42;
+        label.element.dataset.edgeY = "bottom";
+      }
+      if (labelBounds.left < visibleLeft + 8) {
+        next.x = 52;
+        label.element.dataset.edgeX = "left";
+      } else if (labelBounds.right > visibleRight - 8) {
+        next.x = -52;
+        label.element.dataset.edgeX = "right";
+      }
+      if (label.object.position.x === next.x && label.object.position.y === next.y) return;
+      label.object.position.set(next.x, next.y, 0);
       graph.refresh();
       scheduleLabelLayout();
     });
@@ -844,7 +877,7 @@ function mount(element, scene, callbacks = {}) {
       callbacks.onHover?.(node || null);
     })
     .onNodeDrag((node, translate) => {
-      if (!clusterDrag || !node.clusterId) return;
+      if (!isClusterDragNode(node)) return;
       const positions = {};
       for (const member of nodes) {
         if (member.id === node.id || member.clusterId !== node.clusterId) continue;
@@ -876,12 +909,12 @@ function mount(element, scene, callbacks = {}) {
     const generation = cameraInteractionGeneration;
     cameraPreserved = preserve;
     window.clearTimeout(frameTimer);
-    graph.zoomToFit(duration, 18);
+    graph.zoomToFit(duration, 42);
     frameTimer = window.setTimeout(() => {
       if (generation !== cameraInteractionGeneration) return;
       const camera = graph.cameraPosition();
       const target = graph.controls?.()?.target || { x: 0, y: 0, z: 0 };
-      const scale = activeScene.sceneLevel === "precision" ? 0.78 : activeScene.sceneLevel === "local" ? 0.72 : 0.66;
+      const scale = activeScene.sceneLevel === "precision" ? 0.74 : activeScene.sceneLevel === "local" ? 0.68 : 0.58;
       const position = {
         x: target.x + (camera.x - target.x) * scale,
         y: target.y + (camera.y - target.y) * scale,

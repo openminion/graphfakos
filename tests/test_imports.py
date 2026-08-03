@@ -63,6 +63,7 @@ def test_graphfakos_package_imports() -> None:
     assert "graph_artifact_schema" in graphfakos.__all__
     assert "build_viewer_route" in graphfakos.__all__
     assert "diagnose_graph" in graphfakos.__all__
+    assert "inspector_values" in graphfakos.__all__
     assert "workspace_manifest_for_graph" in graphfakos.__all__
     assert "write_provider_preview_outputs" in graphfakos.__all__
     assert "FileGraphProvider" in graphfakos.adapters.__all__
@@ -77,7 +78,9 @@ def test_graphfakos_package_imports() -> None:
     assert "GraphFakosInvestigationSession" in graphfakos.contracts.__all__
     assert "GraphFakosPerspective" in graphfakos.contracts.__all__
     assert "GraphFakosWorkspaceManifest" in graphfakos.contracts.__all__
+    assert "inspector_values" in graphfakos.contracts.__all__
     assert "workspace_manifest_for_graph" in graphfakos.contracts.__all__
+    assert graphfakos.inspector_values is graphfakos.contracts.inspector_values
     assert "screen_manifest" in graphfakos.render.__all__
     assert "render_graph_dot" in graphfakos.render.__all__
     assert "GraphPreviewOutputPaths" in graphfakos.render.__all__

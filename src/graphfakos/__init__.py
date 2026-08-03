@@ -128,6 +128,7 @@ from .viewer_contracts import (
     GraphFakosWorkspaceManifest,
     graph_perspectives,
     inspector_schema_for,
+    inspector_values,
     workspace_manifest_for_graph,
 )
 
@@ -236,6 +237,7 @@ __all__ = [
     "graph_from_provider_envelope",
     "graph_perspectives",
     "inspector_schema_for",
+    "inspector_values",
     "load_comparison_graph",
     "load_expanded_graph",
     "load_graph_artifact",

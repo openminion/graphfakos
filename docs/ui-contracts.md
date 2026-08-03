@@ -197,9 +197,13 @@ The manifest includes:
 4. a saved-view snapshot for exact-route replay,
 5. default provider-owned expansion requests for the current focus node or
    first visible node,
-6. declared provider-neutral graph action and knowledge-capture affordances,
+6. declared viewer-local actions such as search, filters, inspection, path
+   highlighting, provenance review, and citation copy when those payloads are
+   present,
+7. declared provider-neutral graph action and knowledge-capture affordances,
+8. provider-status details, available facets, warnings, and empty-state hints,
    and
-7. the local desktop/backend route that should open the same viewer screen.
+9. the local desktop/backend route that should open the same viewer screen.
 
 The manifest does not persist provider truth, infer semantic meaning, fetch
 neighbors, mutate storage, or replace provider authorization. It only describes

@@ -14,6 +14,7 @@ PragmaGraph indexing semantics.
 | Understand the package boundary | [UI contracts](ui-contracts.md) and [Source tree owner map](source-tree-owner-map.md) |
 | Export, replay, or hand off graph artifacts | [Artifact interchange](artifact-interchange.md) |
 | Render a provider-generated envelope | [Provider envelope](provider-envelope.md) |
+| Integrate GraphFakos into a package UI | [Integration guide](integration-guide.md) |
 | Build a custom provider | [Custom provider example](custom-provider-example.md) |
 | Test local viewer behavior | [Local viewer testing](local-viewer-testing.md), [Visual QA](visual-qa.md), and [Viewer accessibility matrix](accessibility.md) |
 | Understand live update contracts | [Live graph sessions](live-sessions.md) |
@@ -46,6 +47,9 @@ Package-local `*-ui` commands should be thin wrappers around their adapter plus
 GraphFakos rendering. They may choose defaults, workspace loading, and package
 labels, but shared screens, filters, static export, local preview serving, and
 viewer contract tests belong here.
+
+Use the [Integration guide](integration-guide.md) for the recommended wrapper
+shape, workspace manifest handoff, and provider conformance test.
 
 ## Viewer Surface
 

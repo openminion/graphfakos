@@ -37,6 +37,8 @@ and `graphfakos.ui`.
 - `docs/README.md`: package-local docs index and integration model
 - `docs/artifact-interchange.md`: portable artifact replay and review workflow
 - `docs/custom-provider-example.md`: package-neutral third-party provider example
+- `docs/integration-guide.md`: wrapper integration, workspace manifest handoff,
+  and provider conformance checklist
 - `docs/ui-contracts.md`: shared viewer contract, wrapper responsibilities,
   and provider-adapter expectations
 - `docs/accessibility.md`: WCAG 2.2 AA automated/manual viewer proof matrix

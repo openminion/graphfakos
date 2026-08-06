@@ -20,8 +20,12 @@ def test_release_check_script_covers_viewer_contract() -> None:
     assert "GraphPreviewOutputPaths" in release_check
     assert "build_graph_report" in release_check
     assert "custom-provider-example.md" in release_check
+    assert "integration-guide.md" in release_check
     assert "diagnose_graph" in release_check
     assert "artifact-interchange.md" in release_check
+    assert "GraphFakosProviderConformanceCase" in release_check
+    assert "GraphFakosWorkspaceManifest" in release_check
+    assert "workspace_manifest_for_graph" in release_check
     assert "py.typed" in release_check
     assert "render_graph_fragment" in release_check
     assert "write_provider_preview_outputs" in release_check

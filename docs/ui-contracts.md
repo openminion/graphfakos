@@ -210,6 +210,11 @@ neighbors, mutate storage, or replace provider authorization. It only describes
 the current viewer workspace in a stable shape so a host can decide what to do
 next.
 
+The Explore screen renders the same contract in the `Provider Readiness` panel.
+That panel is for user-facing inspection only; host packages should still call
+`workspace_manifest_for_graph(graph, request)` when they need a structured
+handoff.
+
 Semantic LOD extends `GraphFakosViewerState.scene_level` with `overview`,
 `cluster`, and `local` values. Expansion pagination extends the existing
 `GraphFakosExpansionRequest.cursor`; it is deliberately distinct from provider

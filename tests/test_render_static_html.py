@@ -562,6 +562,10 @@ def test_explore_screen_renders_interaction_guide_steps() -> None:
     steps = {step["id"]: step for step in guide["steps"]}
 
     assert "Explore, select, and edit without losing the static fallback." in html
+    assert "Provider Readiness" in html
+    assert "Viewer Actions" in html
+    assert "Provider Actions" in html
+    assert "graphfakos.workspace.v1" in html
     assert guide["provider_id"] == "fixture"
     assert guide["screen"] == "explore"
     assert guide["focus_node_id"] == "document:viewer-spec"

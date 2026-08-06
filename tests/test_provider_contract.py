@@ -96,6 +96,10 @@ def test_fixture_provider_satisfies_reusable_conformance_case(tmp_path) -> None:
 
     assert result.graph.provider_id == "fixture"
     assert result.replay_graph is not None
+    assert result.workspace_manifest.provider_id == "fixture"
+    assert result.workspace_manifest.provider_status["provider_label"] == (
+        "Fixture Provider"
+    )
     assert result.report["saved_view"]
 
 

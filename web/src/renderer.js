@@ -31,15 +31,15 @@ function clusterCenters(nodes) {
   if (clusterIds.length === 1) return new Map([[clusterIds[0], { x: 0, y: 0, z: 0 }]]);
   const count = nodes.filter((node) => !node.hidden).length || nodes.length;
   const spread = count > 160
-    ? Math.min(11200, 980 + Math.sqrt(clusterIds.length) * 520)
+    ? Math.min(16800, 1180 + Math.sqrt(clusterIds.length) * 780)
     : count > 80
-      ? Math.min(6600, 820 + Math.sqrt(clusterIds.length) * 420)
-      : Math.min(2600, 620 + Math.sqrt(clusterIds.length) * 270);
+      ? Math.min(9200, 920 + Math.sqrt(clusterIds.length) * 560)
+      : Math.min(3600, 680 + Math.sqrt(clusterIds.length) * 340);
   const goldenAngle = Math.PI * (3 - Math.sqrt(5));
   return new Map(clusterIds.map((clusterId, index) => {
     const ring = Math.sqrt((index + 1.4) / clusterIds.length);
     const wobble = ((stableHash(`${clusterId}:wobble`) % 100) - 50) / 100;
-    const radius = spread * ring * (1.08 + Math.abs(wobble) * 0.46);
+    const radius = spread * ring * (1.14 + Math.abs(wobble) * 0.58);
     const angle = index * goldenAngle + wobble * 0.62;
     return [clusterId, {
       x: Math.cos(angle) * radius,
@@ -53,7 +53,7 @@ function seededPosition(id, clusterId, centers) {
   const nodeHash = stableHash(id);
   const center = centers.get(clusterId || "unclustered") || { x: 0, y: 0, z: 0 };
   const localAngle = (nodeHash % 360) * (Math.PI / 180);
-  const localRadius = 16 + (nodeHash % 72);
+  const localRadius = 22 + (nodeHash % 118);
   return {
     x: center.x + Math.cos(localAngle) * localRadius,
     y: center.y + Math.sin(localAngle) * localRadius,
@@ -81,12 +81,12 @@ function clusterForce(nodes, centers) {
 
 function forceProfile(visibleCount) {
   if (visibleCount > 160) {
-    return { charge: -920, linkDistance: 340, linkStrength: 0.038, clusterStrength: 0.034 };
+    return { charge: -1380, linkDistance: 520, linkStrength: 0.018, clusterStrength: 0.026 };
   }
   if (visibleCount > 80) {
-    return { charge: -520, linkDistance: 230, linkStrength: 0.074, clusterStrength: 0.058 };
+    return { charge: -720, linkDistance: 340, linkStrength: 0.052, clusterStrength: 0.046 };
   }
-  return { charge: -280, linkDistance: 136, linkStrength: 0.16, clusterStrength: 0.12 };
+  return { charge: -320, linkDistance: 168, linkStrength: 0.14, clusterStrength: 0.11 };
 }
 
 function applyForces(graph, nodes, centers, visibleCount) {
@@ -363,28 +363,28 @@ function mount(element, scene, callbacks = {}) {
   const linkColor = (link) => {
     if (link.selected) return "#72ddff";
     if (linkTouchesFocus(link)) return activeScene.theme === "space" ? "rgba(224, 250, 255, 0.92)" : "#17677c";
-    if (activeFocusId) return activeScene.theme === "space" ? "rgba(70, 85, 118, 0.42)" : "#a4afac";
-    if (isAggregateLink(link)) return activeScene.theme === "space" ? "rgba(139, 184, 238, 0.7)" : "#6b837c";
-    return activeScene.theme === "space" ? "rgba(132, 158, 202, 0.48)" : "#7f908c";
+    if (activeFocusId) return activeScene.theme === "space" ? "rgba(72, 91, 130, 0.3)" : "#b3beb9";
+    if (isAggregateLink(link)) return activeScene.theme === "space" ? "rgba(135, 193, 255, 0.62)" : "#738b86";
+    return activeScene.theme === "space" ? "rgba(132, 168, 222, 0.34)" : "#879792";
   };
   const linkWeight = (link) => (
     Math.max(1, Number(link.weight || link.edgeCount || link.edge_count || 1))
   );
   const linkWidth = (link) => {
-    if (link.selected) return 1.75;
-    if (linkTouchesFocus(link)) return 1.08;
-    if (isAggregateLink(link)) return Math.min(0.68, 0.16 + Math.log10(linkWeight(link)) * 0.12);
-    return 0.14;
+    if (link.selected) return 1.55;
+    if (linkTouchesFocus(link)) return 0.94;
+    if (isAggregateLink(link)) return Math.min(0.54, 0.11 + Math.log10(linkWeight(link)) * 0.1);
+    return 0.085;
   };
   const linkVisible = (link) => linkVisibleForMode(link);
   const visibleNodeCount = () => activeScene.nodes.filter((node) => !node.hidden).length;
   const sceneLinkOpacity = () => {
     const visibleCount = visibleNodeCount();
     let base = {
-      overview: 0.08,
-      balanced: 0.16,
-      detail: 0.24,
-      precision: 0.34,
+      overview: 0.045,
+      balanced: 0.105,
+      detail: 0.18,
+      precision: 0.28,
     }[semanticDetail] || 0.1;
     if (visibleCount <= 48) base = Math.max(base, 0.36);
     else if (visibleCount <= 110) base = Math.max(base, 0.24);
@@ -407,12 +407,12 @@ function mount(element, scene, callbacks = {}) {
     );
   };
   const nodeSize = (node) => {
-    const baseSize = 0.13 + Math.sqrt(Math.max(0, node.degree || 0)) * 0.03;
+    const baseSize = 0.1 + Math.sqrt(Math.max(0, node.degree || 0)) * 0.022;
     const focusBoost = selectedNodeIds.has(node.id) || node.id === hoveredNodeId || node.id === previewedNodeId
-      ? 1.72
-      : focusedNodeIds.has(node.id) && activeFocusId ? 1.26 : 1;
+      ? 1.58
+      : focusedNodeIds.has(node.id) && activeFocusId ? 1.18 : 1;
     const sparseScale = nodeScaleForCount(visibleNodeCount());
-    return Math.max(0.06, Math.min(4.4, baseSize * focusBoost * sparseScale * semanticNodeScale * (activeScene.nodeScale || 1)));
+    return Math.max(0.035, Math.min(3.2, baseSize * focusBoost * sparseScale * semanticNodeScale * (activeScene.nodeScale || 1)));
   };
   const shell = element.closest(".gf-canvas-shell");
   const focusLocator = shell?.querySelector("[data-gf-focus-locator]");
@@ -857,7 +857,7 @@ function mount(element, scene, callbacks = {}) {
     .nodeVal(nodeSize)
     .nodeOpacity(0.98)
     .nodeVisibility((node) => !activeScene.nodes.find((item) => item.id === node.id)?.hidden)
-    .nodeResolution(8)
+    .nodeResolution(7)
     .linkColor(linkColor)
     .linkOpacity(sceneLinkOpacity())
     .linkVisibility(linkVisible)

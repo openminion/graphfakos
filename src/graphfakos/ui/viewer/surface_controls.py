@@ -111,7 +111,7 @@ def display_controls(request: GraphFakosRequest) -> str:
     )
     return (
         "<details class='gf-display-dock' data-gf-display-dock='true'>"
-        "<summary><span>Display</span><small>scene</small></summary>"
+        "<summary><span>Density</span><small>dots / labels / links</small></summary>"
         "<div class='gf-display-dock-body'>"
         f"<div class='gf-scene-levels' aria-label='Graph detail level'>{levels}</div>"
         "<label><span>Dots</span>"
@@ -125,8 +125,8 @@ def display_controls(request: GraphFakosRequest) -> str:
         f"<input type='range' min='0.15' max='1' step='0.05' "
         f"value='{request.edge_opacity:.2f}' "
         "data-gf-scene-control='edge_opacity'></label>"
-        "<p>Double-click a node to fly to it. Hover or select to reveal its "
-        "neighborhood.</p></div></details>"
+        "<p>Keep overview sparse; use Local or Precision only after focusing "
+        "an island or node.</p></div></details>"
     )
 
 

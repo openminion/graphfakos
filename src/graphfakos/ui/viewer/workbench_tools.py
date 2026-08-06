@@ -60,29 +60,29 @@ def density_tuned_request(
     label_density = request.label_density
     edge_opacity = request.edge_opacity
     if request.node_scale == 1.0 and total_nodes >= 1_000_000:
-        node_scale = 0.24
+        node_scale = 0.16
     elif request.node_scale == 1.0 and total_nodes >= 200_000:
-        node_scale = 0.3
+        node_scale = 0.2
     elif request.node_scale == 1.0 and total_nodes >= 100_000:
-        node_scale = 0.36
+        node_scale = 0.26
     elif request.node_scale == 1.0 and visible_nodes >= 160:
-        node_scale = 0.46
+        node_scale = 0.34
     if request.label_density == 1.0 and total_nodes >= 1_000_000:
-        label_density = 0.16
+        label_density = 0.1
     elif request.label_density == 1.0 and total_nodes >= 200_000:
-        label_density = 0.22
+        label_density = 0.14
     elif request.label_density == 1.0 and total_nodes >= 100_000:
-        label_density = 0.26
+        label_density = 0.18
     elif request.label_density == 1.0 and visible_nodes >= 160:
-        label_density = 0.38
+        label_density = 0.28
     if request.edge_opacity == 1.0 and total_nodes >= 1_000_000:
-        edge_opacity = 0.38
+        edge_opacity = 0.28
     elif request.edge_opacity == 1.0 and total_nodes >= 200_000:
-        edge_opacity = 0.46
+        edge_opacity = 0.34
     elif request.edge_opacity == 1.0 and (
         total_nodes >= 100_000 or visible_nodes >= 160
     ):
-        edge_opacity = 0.55
+        edge_opacity = 0.42
     if (node_scale, label_density, edge_opacity) == (
         request.node_scale,
         request.label_density,

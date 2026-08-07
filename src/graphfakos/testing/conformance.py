@@ -26,6 +26,7 @@ from ..provider import (
     validate_graph,
 )
 from ..static import build_graph_report, render_static_html
+from ..viewer_contracts import GraphFakosWorkspaceManifest, workspace_manifest_for_graph
 from .assertions import assert_graph_viewer_contract
 
 
@@ -48,6 +49,7 @@ class GraphFakosProviderConformanceCase:
 @dataclass(frozen=True, slots=True)
 class GraphFakosProviderConformanceResult:
     graph: GraphFakosGraph
+    workspace_manifest: GraphFakosWorkspaceManifest
     report: dict[str, object]
     html: str
     replay_graph: GraphFakosGraph | None = None
@@ -64,6 +66,8 @@ def assert_provider_conformance(
     graph = load_provider_graph(case.provider, case.request)
     _assert_metadata(case, graph)
 
+    workspace_manifest = workspace_manifest_for_graph(graph, case.request)
+    _assert_workspace_manifest_contract(case, graph, workspace_manifest)
     html = render_static_html(case.provider, case.request)
     if (
         case.expected_role
@@ -84,6 +88,7 @@ def assert_provider_conformance(
     replay_graph = _assert_artifact_replay(case, graph)
     return GraphFakosProviderConformanceResult(
         graph=graph,
+        workspace_manifest=workspace_manifest,
         report=report,
         html=html,
         replay_graph=replay_graph,
@@ -181,6 +186,34 @@ def _assert_report_contract(
     assert isinstance(report["screen_manifest"], list)
     assert _mapping(report["analytics"])["node_count"] == len(graph.nodes)
     assert _mapping(report["diagnostics"])["node_count"] == len(graph.nodes)
+
+
+def _assert_workspace_manifest_contract(
+    case: GraphFakosProviderConformanceCase,
+    graph: GraphFakosGraph,
+    manifest: GraphFakosWorkspaceManifest,
+) -> None:
+    assert manifest.schema_version == "graphfakos.workspace.v1"
+    assert manifest.graph_id == graph.graph_id
+    assert manifest.provider_id == graph.provider_id
+    assert manifest.viewer_state.screen == case.request.screen
+    assert manifest.desktop_backend_path == f"/{case.request.screen or 'explore'}"
+    assert manifest.saved_view is not None
+    assert manifest.saved_view.state.screen == case.request.screen
+    assert manifest.provider_status["provider_id"] == graph.provider_id
+    assert manifest.provider_status["provider_label"] == graph.provider_label
+    assert manifest.provider_status["graph_role"] == graph.graph_role
+    assert list(manifest.provider_status["capabilities"]) == list(graph.capabilities)
+    assert manifest.performance_budget is not None
+    assert manifest.performance_budget.rendered_node_count == len(graph.nodes)
+    assert manifest.performance_budget.rendered_edge_count == len(graph.edges)
+    for capability in case.required_capabilities:
+        assert capability in manifest.provider_status["capabilities"]
+    if graph.nodes:
+        assert manifest.default_expansion_requests
+        assert not manifest.empty_state
+    else:
+        assert manifest.empty_state
 
 
 def _assert_artifact_replay(

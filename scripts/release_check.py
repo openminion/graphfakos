@@ -54,6 +54,7 @@ def _assert_package_docs_shape(root: Path) -> None:
         root / "docs" / "README.md",
         root / "docs" / "artifact-interchange.md",
         root / "docs" / "custom-provider-example.md",
+        root / "docs" / "integration-guide.md",
         root / "docs" / "live-sessions.md",
         root / "docs" / "provider-envelope.md",
         root / "docs" / "source-tree-owner-map.md",
@@ -76,6 +77,13 @@ def _assert_package_docs_shape(root: Path) -> None:
     ]
     if missing:
         raise RuntimeError(f"package docs/layout drifted: missing {missing!r}")
+
+
+def _latest_wheel(dist_dir: Path) -> Path:
+    wheels = sorted(dist_dir.glob("*.whl"))
+    if not wheels:
+        raise RuntimeError(f"release build did not produce a wheel under {dist_dir}")
+    return wheels[-1]
 
 
 def _assert_project_metadata(root: Path) -> None:
@@ -164,7 +172,7 @@ def main(argv: list[str] | None = None) -> int:
             wheel_python = venv_dir / "bin" / "python"
             smoke = venv_dir / "bin" / "graphfakos-smoke"
             ui_preview = venv_dir / "bin" / "graphfakos-ui"
-            wheel = sorted((root / "dist").glob("graphfakos-*.whl"))[-1]
+            wheel = _latest_wheel(root / "dist")
             _run([str(pip), "install", str(wheel)], cwd=root)
             _run(
                 [
@@ -174,6 +182,7 @@ def main(argv: list[str] | None = None) -> int:
                         "from importlib.resources import files; "
                         "from graphfakos import GraphFakosGraph, "
                         "GraphFakosDiagnostics, GraphFakosProvider, "
+                        "GraphFakosWorkspaceManifest, "
                         "GraphFakosGraphPatch, GraphFakosLiveProvider, "
                         "GraphFakosLiveReplayBundle, apply_graph_patch, "
                         "GraphPreviewOutputPaths, "
@@ -181,6 +190,7 @@ def main(argv: list[str] | None = None) -> int:
                         "build_graph_report, build_graph_diff, "
                         "diagnose_graph, render_embeddable_html, "
                         "render_static_html, screen_manifest, "
+                        "workspace_manifest_for_graph, "
                         "SUPPORTED_RENDER_ENGINES, validate_render_engine, "
                         "viewer_runtime_script, "
                         "write_provider_preview_outputs; "
@@ -189,11 +199,22 @@ def main(argv: list[str] | None = None) -> int:
                         "from graphfakos.contracts import GraphFakosRequest; "
                         "from graphfakos.render import render_graph_fragment, "
                         "render_graph_viewer, write_provider_graph_artifact; "
+                        "from graphfakos.testing import "
+                        "GraphFakosProviderConformanceCase, "
+                        "assert_provider_conformance; "
                         "assert files('graphfakos').joinpath('py.typed').is_file(); "
                         "assert files('graphfakos').joinpath('assets', 'viewer.js').is_file(); "
                         "assert files('graphfakos').joinpath('assets', 'renderer-3d.js').is_file(); "
                         "assert files('graphfakos').joinpath('assets', 'renderer-3d.js').stat().st_size > 1000000; "
-                        "assert len(DemoGraphProvider('dense').load_graph(GraphFakosRequest()).nodes) == 36; "
+                        "provider = DemoGraphProvider('dense'); "
+                        "request = GraphFakosRequest(); "
+                        "graph = provider.load_graph(request); "
+                        "manifest = workspace_manifest_for_graph(graph, request); "
+                        "result = assert_provider_conformance("
+                        "GraphFakosProviderConformanceCase(provider=FixtureGraphProvider())); "
+                        "assert isinstance(manifest, GraphFakosWorkspaceManifest); "
+                        "assert result.workspace_manifest.provider_id == 'fixture'; "
+                        "assert len(graph.nodes) == 36; "
                         "assert 'graphfakos-viewer' in viewer_runtime_script()"
                     ),
                 ],

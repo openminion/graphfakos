@@ -15,6 +15,17 @@ from .models import (
     GraphFakosViewerState,
 )
 
+_DEFAULT_GRAPH_ACTIONS = ("draft_node", "draft_edge", "retag_group", "merge_alias")
+_DEFAULT_CAPTURE_KINDS = ("note", "question", "observation", "task")
+_DEFAULT_VIEWER_ACTIONS = (
+    "search",
+    "filter",
+    "inspect_node",
+    "focus_neighborhood",
+    "highlight_path",
+    "export_visible_graph",
+)
+
 
 def _text(payload: Mapping[str, object], key: str, default: str = "") -> str:
     value = payload.get(key, default)
@@ -68,6 +79,17 @@ def _mapping_items(
     ):
         raise TypeError(f"{key} must be a list of objects")
     return tuple(value)
+
+
+def _provider_payload_value(
+    provider_payload: Mapping[str, object],
+    key: str,
+) -> object:
+    value = provider_payload.get(key, ())
+    if value:
+        return value
+    envelope = provider_payload.get("viewer_envelope", {})
+    return envelope.get(key, ()) if isinstance(envelope, Mapping) else ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -368,11 +390,7 @@ class GraphFakosWorkspaceManifest:
 
 
 def _declarations(graph: GraphFakosGraph, key: str) -> tuple[Mapping[str, object], ...]:
-    value = graph.provider_payload.get(key, ())
-    if not value:
-        envelope = graph.provider_payload.get("viewer_envelope", {})
-        if isinstance(envelope, Mapping):
-            value = envelope.get(key, ())
+    value = _provider_payload_value(graph.provider_payload, key)
     if not isinstance(value, (list, tuple)):
         return ()
     return tuple(item for item in value if isinstance(item, Mapping))
@@ -544,7 +562,7 @@ def _supported_graph_actions(graph: GraphFakosGraph) -> tuple[str, ...]:
     return _declared_strings(
         graph.provider_payload,
         "supported_actions",
-        ("draft_node", "draft_edge", "retag_group", "merge_alias"),
+        _DEFAULT_GRAPH_ACTIONS,
     )
 
 
@@ -554,7 +572,7 @@ def _supported_capture_kinds(graph: GraphFakosGraph) -> tuple[str, ...]:
     return _declared_strings(
         graph.provider_payload,
         "supported_captures",
-        ("note", "question", "observation", "task"),
+        _DEFAULT_CAPTURE_KINDS,
     )
 
 
@@ -563,11 +581,7 @@ def _declared_strings(
     key: str,
     fallback: tuple[str, ...],
 ) -> tuple[str, ...]:
-    value = provider_payload.get(key, ())
-    if not value:
-        envelope = provider_payload.get("viewer_envelope", {})
-        if isinstance(envelope, Mapping):
-            value = envelope.get(key, ())
+    value = _provider_payload_value(provider_payload, key)
     if not value:
         return fallback
     if not isinstance(value, (list, tuple)) or not all(
@@ -578,24 +592,17 @@ def _declared_strings(
 
 
 def _viewer_actions_for_graph(graph: GraphFakosGraph) -> tuple[str, ...]:
-    actions = [
-        "search",
-        "filter",
-        "inspect_node",
-        "focus_neighborhood",
-        "highlight_path",
-        "export_visible_graph",
-    ]
+    actions = _DEFAULT_VIEWER_ACTIONS
     if graph.provenance:
-        actions.append("show_provenance")
+        actions += ("show_provenance",)
     if graph.citations:
-        actions.append("copy_citation")
+        actions += ("copy_citation",)
     if "provider_status" in graph.capabilities:
-        actions.append("open_provider_status")
+        actions += ("open_provider_status",)
     return _declared_strings(
         graph.provider_payload,
         "viewer_actions",
-        tuple(actions),
+        actions,
     )
 
 
@@ -650,11 +657,7 @@ def _cluster_label(cluster_id: str, nodes: Iterable[GraphFakosNode]) -> str:
 def _provider_cluster_payloads(
     provider_payload: Mapping[str, object],
 ) -> tuple[Mapping[str, object], ...]:
-    value = provider_payload.get("clusters", ())
-    if not value:
-        envelope = provider_payload.get("viewer_envelope", {})
-        if isinstance(envelope, Mapping):
-            value = envelope.get("clusters", ())
+    value = _provider_payload_value(provider_payload, "clusters")
     if not isinstance(value, (list, tuple)):
         return ()
     return tuple(item for item in value if isinstance(item, Mapping))

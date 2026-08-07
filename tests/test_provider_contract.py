@@ -96,6 +96,10 @@ def test_fixture_provider_satisfies_reusable_conformance_case(tmp_path) -> None:
 
     assert result.graph.provider_id == "fixture"
     assert result.replay_graph is not None
+    assert result.workspace_manifest.provider_id == "fixture"
+    assert result.workspace_manifest.provider_status["provider_label"] == (
+        "Fixture Provider"
+    )
     assert result.report["saved_view"]
 
 
@@ -299,6 +303,50 @@ def test_workspace_manifest_respects_provider_declared_affordances() -> None:
 
     assert manifest.supported_actions == ("draft_node",)
     assert manifest.supported_captures == ("note",)
+
+
+def test_workspace_manifest_reads_affordances_from_viewer_envelope() -> None:
+    graph = GraphFakosGraph(
+        graph_id="envelope-backed",
+        label="Envelope Backed",
+        provider_id="envelope",
+        provider_label="Envelope Provider",
+        graph_role="third_party",
+        capabilities=("graph_action", "knowledge_capture"),
+        nodes=(
+            GraphFakosNode(
+                id="node:one",
+                label="One",
+                kind="note",
+                provider_payload={"cluster_id": "note-cluster"},
+            ),
+        ),
+        edges=(),
+        provider_payload={
+            "viewer_envelope": {
+                "supported_actions": ("draft_node",),
+                "supported_captures": ("question",),
+                "viewer_actions": ("search", "inspect_node"),
+                "clusters": (
+                    {
+                        "id": "note-cluster",
+                        "node_count": 3,
+                        "edge_count": 2,
+                        "cursor": "next-page",
+                    },
+                ),
+            },
+        },
+    )
+
+    manifest = workspace_manifest_for_graph(graph, GraphFakosRequest())
+
+    assert manifest.supported_actions == ("draft_node",)
+    assert manifest.supported_captures == ("question",)
+    assert manifest.viewer_actions == ("search", "inspect_node")
+    assert manifest.clusters[0].cluster_id == "note-cluster"
+    assert manifest.clusters[0].node_count == 3
+    assert manifest.clusters[0].expansion_cursor == "next-page"
 
 
 def test_workspace_manifest_respects_provider_declared_viewer_actions() -> None:

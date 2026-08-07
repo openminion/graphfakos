@@ -27,19 +27,9 @@ from graphfakos.ui.viewer import (
     render_navigation,
 )
 from graphfakos.ui.viewer.analysis import (
-    _advanced_filter_panel,
     _analytics_panel,
-    _component_explorer_panel,
-    _context_menu_panel,
-    _display_recipes_panel,
-    _export_replay_panel,
-    _investigation_pivot_panel,
     _neighborhood_toolbar,
     _path_toolbar,
-    _readability_coach_panel,
-    _selection_workbench_panel,
-    _style_rules_panel,
-    _timeline_animation_panel,
 )
 from graphfakos.ui.viewer.authoring import (
     _focus_workflow,
@@ -56,32 +46,16 @@ from graphfakos.ui.viewer.canvas import (
     _provenance_card,
     _selection_summary,
 )
-from graphfakos.ui.viewer.controls import (
-    _active_lens_bar,
-    _filter_toolbar,
-    _interaction_guide_panel,
-    _local_graph_controls,
-    _physics_display_controls,
-    _workspace_controls,
-)
 from graphfakos.ui.viewer.diffing import (
     _diff_section,
     _overlay_summary,
     build_graph_diff,
 )
-from graphfakos.ui.viewer.discovery import (
-    _command_palette,
-    _evidence_coverage_map_panel,
-    _expansion_planner_panel,
-    _facet_explorer_panel,
-    _graph_data_table_panel,
-    _relationship_data_table_panel,
-    _search_results_panel,
-)
 from graphfakos.ui.viewer.evidence import (
     _evidence_summary,
     _path_summary,
 )
+from graphfakos.ui.viewer.explore import explore_context
 from graphfakos.ui.viewer.filtering import (
     _active_query_terms,
     _filter_edges_by_request,
@@ -131,7 +105,6 @@ from graphfakos.ui.viewer.html import (
 )
 from graphfakos.ui.viewer.navigation import (
     _graph_navigator,
-    _navigation_map_panel,
     _preset_entry,
     _preset_rail,
     _preset_request,
@@ -572,47 +545,7 @@ def _render_explore(graph: GraphFakosGraph, request: GraphFakosRequest) -> str:
         f"{_selection_summary(filtered_graph, focus, selected_edge)}"
         f"{_query_summary(active_query)}"
     )
-    secondary = panel_stack(
-        (
-            _filter_toolbar(graph, request, "/explore"),
-            _workspace_controls(graph, request),
-            _local_graph_controls(graph, request, focus),
-            _physics_display_controls(request),
-            _active_lens_bar(graph, filtered_graph, request, focus, selected_edge),
-            _interaction_guide_panel(
-                graph, filtered_graph, request, focus, selected_edge
-            ),
-            _graph_navigator(graph, filtered_graph, request, focus),
-            _navigation_map_panel(graph, filtered_graph, request, focus, selected_edge),
-            _relationship_trail_panel(filtered_graph, request, focus),
-            _search_results_panel(filtered_graph, request, focus),
-            _graph_data_table_panel(filtered_graph, request),
-            _relationship_data_table_panel(filtered_graph, request),
-            _evidence_coverage_map_panel(filtered_graph, request),
-            _facet_explorer_panel(filtered_graph, request),
-            _expansion_planner_panel(filtered_graph, request, focus),
-            _command_palette(graph, filtered_graph, request, focus, selected_edge),
-            _readability_coach_panel(filtered_graph, request),
-            _display_recipes_panel(filtered_graph, request, focus),
-            _advanced_filter_panel(filtered_graph, request),
-            _component_explorer_panel(graph, request),
-            _selection_workbench_panel(filtered_graph, request),
-            _style_rules_panel(filtered_graph, request),
-            _timeline_animation_panel(graph, request),
-            _investigation_pivot_panel(filtered_graph, request, focus),
-            _context_menu_panel(request, focus, selected_edge),
-            _analytics_panel(graph, request),
-            _export_replay_panel(graph, request),
-            _focus_workflow(graph, request, focus),
-            _knowledge_capture_panel(filtered_graph, request, focus),
-            _graph_action_panel(filtered_graph, request, focus),
-            _inspector(graph, focus, selected_edge),
-            _panel(
-                "Visible Nodes",
-                _node_cards(filtered_graph.nodes[: request.limit], request),
-            ),
-        )
-    )
+    secondary = explore_context(graph, filtered_graph, request, focus, selected_edge)
     return render_graph_workspace(primary, secondary)
 
 

@@ -885,6 +885,36 @@ body.gf-page[data-theme="space"] .gf-spatial-trail {
 .gf-provider-field { display: grid; grid-template-columns: minmax(76px, .7fr) 1.3fr; }
 .gf-provider-field dt { color: var(--gf-muted); font-size: 10px; }
 .gf-provider-field dd { margin: 0; overflow-wrap: anywhere; }
+.gf-tool-group {
+  background: color-mix(in srgb, var(--gf-panel) 86%, transparent);
+  border: 1px solid var(--gf-line);
+  border-radius: 18px;
+  margin: 10px 0;
+  overflow: hidden;
+}
+.gf-tool-group > summary {
+  align-items: flex-start;
+  cursor: pointer;
+  display: grid;
+  gap: 3px;
+  list-style: none;
+  padding: 12px 14px;
+}
+.gf-tool-group > summary::-webkit-details-marker { display: none; }
+.gf-tool-group > summary strong {
+  color: var(--gf-text);
+  font-size: 14px;
+  font-weight: 900;
+}
+.gf-tool-group > summary span {
+  color: var(--gf-muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+.gf-tool-group > div {
+  border-top: 1px solid var(--gf-line);
+  padding: 8px;
+}
 @media (max-width: 1100px) {
   .gf-canvas-workbench { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

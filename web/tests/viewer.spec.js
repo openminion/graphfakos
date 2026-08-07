@@ -12,6 +12,7 @@ import {
   zoomStableNodeScale,
 } from "../src/semantic-detail.js";
 import { directionalNodeId } from "../src/spatial-navigation.js";
+import { testServerUrl } from "./server-routes.js";
 
 test("maps camera distance to semantic graph detail", () => {
   expect(semanticZoom(900, 900)).toBe(1);
@@ -25,20 +26,20 @@ test("maps camera distance to semantic graph detail", () => {
   expect(detailLevelForCamera({ nodeCount: 240, referenceDistance: 900, cameraDistance: 360 }))
     .toBe("precision");
   expect(labelBudgetForDetail("overview", 1, 240)).toBe(1);
-  expect(labelBudgetForDetail("detail", 1, 240)).toBe(8);
+  expect(labelBudgetForDetail("detail", 1, 240)).toBe(4);
   expect(detailLevelForSceneLevel("islands", "precision")).toBe("overview");
   expect(detailLevelForSceneLevel("cluster", "overview")).toBe("balanced");
   expect(detailLevelForSceneLevel("local", "overview")).toBe("detail");
   expect(modeSummaryForSceneLevel("precision")).toContain("inspection");
   expect(nodeScaleForCount(12)).toBeGreaterThan(nodeScaleForCount(48));
   expect(nodeScaleForCount(48)).toBeGreaterThan(nodeScaleForCount(240));
-  expect(nodeScaleForCount(240)).toBeLessThan(0.5);
+  expect(nodeScaleForCount(240)).toBeLessThan(0.25);
 });
 
 test("keeps node marks readable while camera zoom changes", () => {
   expect(zoomStableNodeScale(4)).toBeLessThan(zoomStableNodeScale(1));
   expect(zoomStableNodeScale(0.25)).toBeGreaterThan(zoomStableNodeScale(1));
-  expect(zoomStableNodeScale(100)).toBeGreaterThanOrEqual(0.32);
+  expect(zoomStableNodeScale(100)).toBeGreaterThanOrEqual(0.24);
 });
 
 test("progressive edge detail preserves aggregates and active context", () => {
@@ -93,8 +94,9 @@ test("shapes natural curves and separates parallel links", () => {
   expect(byId.get("parallel:a").curvature).toBeLessThan(0);
   expect(byId.get("parallel:b").curvature).toBeGreaterThan(0);
   expect(byId.get("parallel:a").curveRotation).toBe(byId.get("parallel:b").curveRotation);
-  expect(Math.abs(byId.get("cross").curvature)).toBeGreaterThan(0.3);
+  expect(Math.abs(byId.get("cross").curvature)).toBeGreaterThan(0.7);
   expect(Math.abs(byId.get("bundle").curvature)).toBeGreaterThan(Math.abs(byId.get("cross").curvature));
+  expect(Math.abs(byId.get("bundle").curvature)).toBeGreaterThan(1);
   expect(Math.abs(byId.get("loop").curvature)).toBeGreaterThan(0.5);
   expect(shapeLinks(nodes, links)).toEqual(shaped);
 });
@@ -559,7 +561,7 @@ test("preserves selection and reversible scene changes", async ({ page }) => {
   await page.locator(".gf-canvas-shell").press("ControlOrMeta+z");
 });
 
-test("keeps Obsidian-style display controls on the graph surface", async ({ page }) => {
+test("keeps Obsidian-style density controls on the graph surface", async ({ page }) => {
   await page.goto("/explore");
   await expect(page.locator(".gf-canvas-shell")).toHaveAttribute("data-webgl-ready", "true");
   const display = page.locator("[data-gf-display-dock]");
@@ -574,6 +576,7 @@ test("keeps Obsidian-style display controls on the graph surface", async ({ page
   expect(state.node_scale).toBeLessThan(1);
   expect(state.scene_level).toBe("cluster");
   await expect(display.locator("[data-gf-scene-level='cluster']")).toHaveAttribute("data-active", "true");
+  await expect(display.locator("summary")).toContainText("Density");
 });
 
 test("runs graph operating dock controls without leaving the canvas", async ({ page }) => {
@@ -1189,13 +1192,13 @@ test("has no critical automated accessibility violations", async ({ page }) => {
 for (const fixture of [
   {
     label: "200K",
-    url: "http://127.0.0.1:8794/explore",
+    url: testServerUrl("scale200k"),
     total: "200000",
     maxFirstSceneMs: 12_000,
   },
   {
     label: "1M",
-    url: "http://127.0.0.1:8795/explore",
+    url: testServerUrl("scale1m"),
     total: "1000000",
     maxFirstSceneMs: 15_000,
   },
@@ -1244,7 +1247,7 @@ for (const fixture of [
 }
 
 test("reveals more dense-scene context as the 3D camera approaches", async ({ page }) => {
-  await page.goto("http://127.0.0.1:8794/explore");
+  await page.goto(testServerUrl("scale200k"));
   const graph = page.locator(".gf-canvas-shell");
   const viewer = page.locator("graphfakos-viewer");
   await expect(graph).toHaveAttribute("data-webgl-ready", "true", { timeout: 15_000 });

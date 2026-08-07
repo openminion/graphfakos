@@ -34,7 +34,8 @@ itself.
    a graph database or fact engine.
 2. Follow [Install](#install) and [Quick Start](#quick-start) to open the local
    workbench.
-3. Read [Provider Contract](#provider-contract) before adapting another graph.
+3. Read [Provider Contract](#provider-contract) and the
+   [Integration guide](docs/integration-guide.md) before adapting another graph.
 4. Use the [package docs](docs/README.md) for live sessions, interchange,
    accessibility, and UI contracts.
 5. Read [Development](#development) before changing the package.

@@ -37,6 +37,8 @@ and `graphfakos.ui`.
 - `docs/README.md`: package-local docs index and integration model
 - `docs/artifact-interchange.md`: portable artifact replay and review workflow
 - `docs/custom-provider-example.md`: package-neutral third-party provider example
+- `docs/integration-guide.md`: wrapper integration, workspace manifest handoff,
+  and provider conformance checklist
 - `docs/ui-contracts.md`: shared viewer contract, wrapper responsibilities,
   and provider-adapter expectations
 - `docs/accessibility.md`: WCAG 2.2 AA automated/manual viewer proof matrix
@@ -68,6 +70,8 @@ and `graphfakos.ui`.
 - `src/graphfakos/py.typed`: PEP 561 marker for typed package consumers
 - `src/graphfakos/ui/app.py`: thin provider-loading and screen-composition
   entrypoint; it does not own graph algorithms, layout math, or panel details
+- `src/graphfakos/ui/viewer/explore.py`: Explore-screen tool composition,
+  grouping, and product-first context ordering
 - `src/graphfakos/ui/viewer/routing.py`: route serialization and request query
   parsing
 - `src/graphfakos/ui/viewer/graph_ops.py`: provider-neutral traversal,

@@ -107,6 +107,14 @@ GraphFakos can render the controls and validate the returned DTOs. It does not
 persist captures, invent expansion neighbors, or apply graph actions unless the
 provider implements those workflows.
 
+Current OpenMinion-family provider behavior:
+
+| Provider package | GraphFakos role | Capture/edit behavior |
+| --- | --- | --- |
+| Sophiagraph | durable second-brain memory lens | provider-backed captures and candidate graph actions |
+| PragmaGraph | observed source/document graph lens | read-oriented viewer envelope and live patches; no durable memory writes |
+| OpenMinion | orchestration shell over configured brains | second-brain visual lens is read-only from the viewer; use OpenMinion memory commands for durable writes |
+
 ## Workspace Manifest
 
 `workspace_manifest_for_graph(graph, request)` is the host handoff contract. It
@@ -164,6 +172,35 @@ When the provider supports optional workflows, pass `expansion_request`,
 case. Keep those tests in the provider package so they run against the native
 adapter and real package defaults.
 
+## Local Sibling Matrix
+
+When GraphFakos, Sophiagraph, PragmaGraph, and OpenMinion are checked out under
+the same `agent-frameworks/` workspace, run the source-level integration matrix
+from `graphfakos/`:
+
+```bash
+make integration-check
+```
+
+That command exercises:
+
+1. GraphFakos consuming Sophiagraph and PragmaGraph provider projections,
+2. Sophiagraph's GraphFakos adapter, workbench, and compatibility contracts,
+3. PragmaGraph's GraphFakos adapter, viewer envelope, and UI contracts,
+4. OpenMinion's GraphFakos-backed graph viewer, and
+5. OpenMinion's PragmaGraph provider co-enable paths.
+
+Use the wheelhouse variant before coordinated package releases or when changing
+dependency lower bounds:
+
+```bash
+make integration-wheel-check
+```
+
+It builds local wheels for the sibling packages and installs them together in a
+fresh virtual environment, so the check catches package metadata and dependency
+resolution drift that source-path tests can miss.
+
 ## Wrapper Checklist
 
 Use this checklist before shipping a package-local `*-ui` wrapper:
@@ -179,3 +216,5 @@ Use this checklist before shipping a package-local `*-ui` wrapper:
   capabilities, actions, facets, warnings, or empty-state hints.
 - Any mutation, capture, refresh, or expansion path is explicitly implemented
   by the provider package.
+- Provider docs say whether editing/capture is `supported`, `read-only`, or
+  `unsupported`; GraphFakos only renders controls that the provider advertises.

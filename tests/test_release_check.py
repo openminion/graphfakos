@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.util
 from pathlib import Path
 
 
@@ -30,4 +31,24 @@ def test_release_check_script_covers_viewer_contract() -> None:
     assert "render_graph_fragment" in release_check
     assert "write_provider_preview_outputs" in release_check
     assert "_assert_project_metadata" in release_check
+    assert "_latest_wheel" in release_check
     assert "twine" in release_check
+
+
+def test_release_check_reports_missing_wheel(tmp_path) -> None:
+    root = Path(__file__).resolve().parents[1]
+    module_path = root / "scripts" / "release_check.py"
+    spec = importlib.util.spec_from_file_location(
+        "graphfakos_release_check", module_path
+    )
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    try:
+        module._latest_wheel(tmp_path)
+    except RuntimeError as exc:
+        assert "did not produce a wheel" in str(exc)
+    else:
+        raise AssertionError("missing wheel should fail with a clear RuntimeError")

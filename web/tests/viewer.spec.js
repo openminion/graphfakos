@@ -12,6 +12,7 @@ import {
   zoomStableNodeScale,
 } from "../src/semantic-detail.js";
 import { directionalNodeId } from "../src/spatial-navigation.js";
+import { testServerUrl } from "./server-routes.js";
 
 test("maps camera distance to semantic graph detail", () => {
   expect(semanticZoom(900, 900)).toBe(1);
@@ -1191,13 +1192,13 @@ test("has no critical automated accessibility violations", async ({ page }) => {
 for (const fixture of [
   {
     label: "200K",
-    url: "http://127.0.0.1:8794/explore",
+    url: testServerUrl("scale200k"),
     total: "200000",
     maxFirstSceneMs: 12_000,
   },
   {
     label: "1M",
-    url: "http://127.0.0.1:8795/explore",
+    url: testServerUrl("scale1m"),
     total: "1000000",
     maxFirstSceneMs: 15_000,
   },
@@ -1246,7 +1247,7 @@ for (const fixture of [
 }
 
 test("reveals more dense-scene context as the 3D camera approaches", async ({ page }) => {
-  await page.goto("http://127.0.0.1:8794/explore");
+  await page.goto(testServerUrl("scale200k"));
   const graph = page.locator(".gf-canvas-shell");
   const viewer = page.locator("graphfakos-viewer");
   await expect(graph).toHaveAttribute("data-webgl-ready", "true", { timeout: 15_000 });

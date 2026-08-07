@@ -1,11 +1,12 @@
 import { defineConfig } from "@playwright/test";
+import { testServers } from "./tests/server-routes.js";
 
 export default defineConfig({
   testDir: "./tests",
   timeout: 30_000,
   workers: 1,
   use: {
-    baseURL: "http://127.0.0.1:8793",
+    baseURL: testServers.dense.baseURL,
     browserName: process.env.GRAPHFAKOS_BROWSER || "chromium",
     screenshot: "only-on-failure",
     trace: "retain-on-failure",
@@ -13,23 +14,23 @@ export default defineConfig({
   },
   webServer: [
     {
-      command: "PYTHONPATH=../src ../.venv/bin/python -m graphfakos ui --demo-scenario dense --screen explore --render-engine 3d --theme space --layout grouped --render-limit 240 --serve --port 8793",
+      command: `PYTHONPATH=../src ../.venv/bin/python -m graphfakos ui --demo-scenario dense --screen explore --render-engine 3d --theme space --layout grouped --render-limit 240 --serve --port ${testServers.dense.port}`,
       cwd: ".",
-      port: 8793,
+      port: testServers.dense.port,
       reuseExistingServer: false,
       timeout: 30_000,
     },
     {
-      command: "PYTHONPATH=../src ../.venv/bin/python -m graphfakos ui --provider-envelope fixtures/viewer-scale-200000.json --screen explore --render-engine 3d --theme space --layout islands --render-limit 240 --serve --port 8794",
+      command: `PYTHONPATH=../src ../.venv/bin/python -m graphfakos ui --provider-envelope fixtures/viewer-scale-200000.json --screen explore --render-engine 3d --theme space --layout islands --render-limit 240 --serve --port ${testServers.scale200k.port}`,
       cwd: ".",
-      port: 8794,
+      port: testServers.scale200k.port,
       reuseExistingServer: false,
       timeout: 30_000,
     },
     {
-      command: "PYTHONPATH=../src ../.venv/bin/python -m graphfakos ui --provider-envelope fixtures/viewer-scale-1000000.json --screen explore --render-engine 3d --theme space --layout islands --render-limit 240 --serve --port 8795",
+      command: `PYTHONPATH=../src ../.venv/bin/python -m graphfakos ui --provider-envelope fixtures/viewer-scale-1000000.json --screen explore --render-engine 3d --theme space --layout islands --render-limit 240 --serve --port ${testServers.scale1m.port}`,
       cwd: ".",
-      port: 8795,
+      port: testServers.scale1m.port,
       reuseExistingServer: false,
       timeout: 30_000,
     },

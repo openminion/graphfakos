@@ -1,16 +1,25 @@
 import { expect, test } from "@playwright/test";
+import { testServerUrl } from "./server-routes.js";
 
 const visualRoutes = [
   {
     name: "dense demo space",
-    url: "http://127.0.0.1:8793/explore?theme=space&render_engine=3d&layout=grouped&render_limit=240",
+    url: testServerUrl(
+      "dense",
+      "/explore",
+      "theme=space&render_engine=3d&layout=grouped&render_limit=240",
+    ),
     path: "test-results/visual-dense-demo-space.png",
     minimumRawNodes: 36,
     maximumLabels: 28,
   },
   {
     name: "200k islands space",
-    url: "http://127.0.0.1:8794/explore?theme=space&render_engine=3d&layout=islands&render_limit=240",
+    url: testServerUrl(
+      "scale200k",
+      "/explore",
+      "theme=space&render_engine=3d&layout=islands&render_limit=240",
+    ),
     path: "test-results/visual-scale-200k-space.png",
     minimumRawNodes: 200000,
     maximumLabels: 24,
@@ -18,7 +27,11 @@ const visualRoutes = [
   },
   {
     name: "1m islands space",
-    url: "http://127.0.0.1:8795/explore?theme=space&render_engine=3d&layout=islands&render_limit=240",
+    url: testServerUrl(
+      "scale1m",
+      "/explore",
+      "theme=space&render_engine=3d&layout=islands&render_limit=240",
+    ),
     path: "test-results/visual-scale-1m-space.png",
     minimumRawNodes: 1000000,
     maximumLabels: 18,

@@ -79,6 +79,13 @@ def _assert_package_docs_shape(root: Path) -> None:
         raise RuntimeError(f"package docs/layout drifted: missing {missing!r}")
 
 
+def _latest_wheel(dist_dir: Path) -> Path:
+    wheels = sorted(dist_dir.glob("*.whl"))
+    if not wheels:
+        raise RuntimeError(f"release build did not produce a wheel under {dist_dir}")
+    return wheels[-1]
+
+
 def _assert_project_metadata(root: Path) -> None:
     metadata = tomllib.loads((root / "pyproject.toml").read_text())
     project = metadata["project"]
@@ -165,7 +172,7 @@ def main(argv: list[str] | None = None) -> int:
             wheel_python = venv_dir / "bin" / "python"
             smoke = venv_dir / "bin" / "graphfakos-smoke"
             ui_preview = venv_dir / "bin" / "graphfakos-ui"
-            wheel = sorted((root / "dist").glob("graphfakos-*.whl"))[-1]
+            wheel = _latest_wheel(root / "dist")
             _run([str(pip), "install", str(wheel)], cwd=root)
             _run(
                 [

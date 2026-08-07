@@ -70,8 +70,8 @@ def _run(check: Check, packages: dict[str, PackageRoot]) -> None:
     cmd = [str(package.python), "-m", "pytest", "-q", *check.args]
     env = os.environ.copy()
     env["PYTHONPATH"] = os.pathsep.join(check.pythonpath)
-    print(f"\n==> {check.label}")
-    print("+", " ".join(cmd))
+    print(f"\n==> {check.label}", flush=True)
+    print("+", " ".join(cmd), flush=True)
     subprocess.run(cmd, cwd=package.root, env=env, check=True)
 
 
@@ -132,12 +132,12 @@ def _source_checks(packages: dict[str, PackageRoot]) -> tuple[Check, ...]:
 
 def _run_browser_e2e(packages: dict[str, PackageRoot]) -> None:
     graphfakos = packages["graphfakos"]
-    print("\n==> GraphFakos browser viewer integration")
+    print("\n==> GraphFakos browser viewer integration", flush=True)
     subprocess.run(["make", "browser-e2e"], cwd=graphfakos.root, check=True)
 
 
 def _build_wheel(package: PackageRoot, wheelhouse: Path) -> Path:
-    print(f"\n==> Build local wheel for {package.name}")
+    print(f"\n==> Build local wheel for {package.name}", flush=True)
     subprocess.run(
         [
             str(package.python),
@@ -178,8 +178,8 @@ def _run_wheel_smoke(packages: dict[str, PackageRoot]) -> None:
             str(wheels["pragmagraph"]),
             f"{wheels['openminion']}[viewer]",
         ]
-        print("\n==> Install local wheels together")
-        print("+", " ".join(install_cmd))
+        print("\n==> Install local wheels together", flush=True)
+        print("+", " ".join(install_cmd), flush=True)
         subprocess.run(install_cmd, check=True)
         smoke = (
             "import graphfakos, sophiagraph, pragmagraph, openminion; "

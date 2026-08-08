@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from html import escape
 import json
 from typing import cast
@@ -49,8 +50,8 @@ def _request_from_query(
             filters[key] = value
         elif key in query:
             filters.pop(key, None)
-    return GraphFakosRequest(
-        screen=request.screen,
+    return replace(
+        request,
         preset_id=(
             _first_query_value(query, "preset")
             or _first_query_value(query, "preset_id")
@@ -76,8 +77,6 @@ def _request_from_query(
         max_depth=int(_first_query_value(query, "max_depth") or request.max_depth),
         filters=filters,
         layout=_first_query_value(query, "layout") or request.layout,
-        include_provenance=request.include_provenance,
-        include_provider_payload=request.include_provider_payload,
         limit=int(_first_query_value(query, "limit") or request.limit),
         render_limit=int(
             _first_query_value(query, "render_limit") or request.render_limit
@@ -103,6 +102,7 @@ def _request_from_query(
             "show_neighbor_links",
             request.show_neighbor_links,
         ),
+        scene_level=_first_query_value(query, "scene_level") or request.scene_level,
         edge_clutter=_first_query_value(query, "edge_clutter") or request.edge_clutter,
         analytics_overlay=_first_query_value(query, "analytics_overlay")
         or request.analytics_overlay,

@@ -384,6 +384,25 @@
 
   const routeFromUrl = (url) => `${url.pathname}${url.search}`;
 
+  const visualRouteKeys = [
+    "render_engine",
+    "theme",
+    "scene_level",
+    "hidden_groups",
+    "expanded_groups",
+    "show_orphans",
+    "show_neighbor_links",
+    "edge_clutter",
+    "analytics_overlay",
+    "node_scale",
+    "edge_scale",
+    "edge_opacity",
+    "label_density",
+    "style_color_by",
+    "style_size_by",
+    "style_edge_width_by",
+  ];
+
   const savedViewRoute = (state) => {
     const current = normalizeState(state);
     const params = new URLSearchParams();
@@ -402,10 +421,9 @@
     put("camera_yaw", current.camera_yaw.toFixed(2));
     put("camera_pitch", current.camera_pitch.toFixed(2));
     put("camera_pose", cameraPoseParam(current.camera_pose));
-    put("render_engine", current.render_engine);
-    put("theme", current.theme);
     put("saved_view_id", current.saved_view_id);
-    put("hidden_groups", current.hidden_groups);
+    visualRouteKeys.forEach((key) => put(key, current[key]));
+    ["limit", "render_limit"].forEach((key) => put(key, current[key]));
     if (Object.keys(current.pinned_positions || {}).length) {
       put("pinned_positions", JSON.stringify(current.pinned_positions));
     }
@@ -521,39 +539,14 @@
 
   const updateSavedLink = (root, state) => {
     const link = root.querySelector("[data-gf-save-view]");
-    if (!link || typeof URL !== "function") return;
-    const url = new URL(link.getAttribute("href") || "/", "http://graphfakos.local");
-    url.searchParams.set("camera_x", state.camera_x.toFixed(2));
-    url.searchParams.set("camera_y", state.camera_y.toFixed(2));
-    url.searchParams.set("camera_zoom", state.camera_zoom.toFixed(2));
-    url.searchParams.set("camera_yaw", state.camera_yaw.toFixed(2));
-    url.searchParams.set("camera_pitch", state.camera_pitch.toFixed(2));
-    setUrlParam(url, "camera_pose", cameraPoseParam(state.camera_pose));
-    setUrlParam(url, "focus_node_id", state.selected_node_id);
-    setUrlParam(url, "selected_node_ids", state.selected_node_ids);
-    setUrlParam(url, "selected_edge_id", state.selected_edge_id);
-    setUrlParam(url, "hidden_groups", state.hidden_groups);
-    const pinned = state.pinned_positions || {};
-    if (Object.keys(pinned).length) {
-      url.searchParams.set("pinned_positions", JSON.stringify(pinned));
-    } else {
-      url.searchParams.delete("pinned_positions");
-    }
-    link.setAttribute("href", `${url.pathname}${url.search}`);
+    if (!link) return;
+    link.setAttribute("href", savedViewRoute(state));
   };
 
   const preserveNavigationState = (url, state) => {
     const restoreCamera = url.searchParams.get("camera_scope") !== "fresh";
     url.searchParams.delete("camera_scope");
-    for (const key of [
-      "hidden_groups",
-      "expanded_groups",
-      "node_scale",
-      "edge_opacity",
-      "label_density",
-      "scene_level",
-      "edge_clutter",
-    ]) {
+    for (const key of visualRouteKeys) {
       if (!url.searchParams.has(key)) setUrlParam(url, key, state[key]);
     }
     if (restoreCamera && !url.searchParams.has("camera_pose")) {
@@ -3131,11 +3124,12 @@
         const themeToggle = event.target?.closest?.("[data-gf-theme-toggle]");
         if (themeToggle) {
           event.preventDefault();
-          const target = new URL(themeToggle.getAttribute("href"), window.location.href);
-          const theme = target.searchParams.get("theme") || "default";
+          const fallback = new URL(themeToggle.getAttribute("href"), window.location.href);
+          const theme = fallback.searchParams.get("theme") || "default";
           this.state = normalizeState({ ...this.state, theme });
           document.body?.setAttribute?.("data-theme", theme);
           writeStoredTheme(theme);
+          const target = new URL(savedViewRoute(this.state), window.location.href);
           this.navigate(target);
           return;
         }

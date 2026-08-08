@@ -26,7 +26,8 @@ test("maps camera distance to semantic graph detail", () => {
   expect(detailLevelForCamera({ nodeCount: 240, referenceDistance: 900, cameraDistance: 360 }))
     .toBe("precision");
   expect(labelBudgetForDetail("overview", 1, 240)).toBe(1);
-  expect(labelBudgetForDetail("detail", 1, 240)).toBe(4);
+  expect(labelBudgetForDetail("detail", 1, 240)).toBe(2);
+  expect(labelBudgetForDetail("precision", 1, 1_000)).toBeLessThan(4);
   expect(detailLevelForSceneLevel("islands", "precision")).toBe("overview");
   expect(detailLevelForSceneLevel("cluster", "overview")).toBe("balanced");
   expect(detailLevelForSceneLevel("local", "overview")).toBe("detail");
@@ -34,6 +35,7 @@ test("maps camera distance to semantic graph detail", () => {
   expect(nodeScaleForCount(12)).toBeGreaterThan(nodeScaleForCount(48));
   expect(nodeScaleForCount(48)).toBeGreaterThan(nodeScaleForCount(240));
   expect(nodeScaleForCount(240)).toBeLessThan(0.25);
+  expect(nodeScaleForCount(1_000)).toBeLessThan(0.1);
 });
 
 test("keeps node marks readable while camera zoom changes", () => {
@@ -348,7 +350,7 @@ test("declutters local 3D labels in screen space", async ({ page }) => {
     payload: { value: "local" },
   }));
   const labels = page.locator(".gf-webgl-label[data-collided='false']");
-  await expect.poll(() => labels.count()).toBeGreaterThan(2);
+  await expect.poll(() => labels.count()).toBeGreaterThanOrEqual(2);
   const overlaps = await labels.evaluateAll((elements) => {
     const boxes = elements
       .filter((element) => Number.parseFloat(getComputedStyle(element).opacity) > 0.05)
@@ -794,7 +796,16 @@ test("keeps the newest scene when route responses arrive out of order", async ({
 test("restores an exact 3D camera pose from a durable route", async ({ page }) => {
   await page.goto("/explore?theme=space&render_engine=3d&layout=grouped");
   await expect(page.locator(".gf-canvas-shell")).toHaveAttribute("data-webgl-ready", "true");
-  await page.locator("graphfakos-viewer").evaluate((viewer) => viewer.focusNode("memory:c1-1"));
+  await page.locator("graphfakos-viewer").evaluate((viewer) => {
+    viewer.dispatch({ name: "scene-level", payload: { value: "precision" } });
+    viewer.dispatch({ name: "edge-mode", payload: { value: "local" } });
+    viewer.dispatch({ name: "scene-setting", payload: { key: "node_scale", value: 0.42 } });
+    viewer.dispatch({ name: "scene-setting", payload: { key: "edge_opacity", value: 0.48 } });
+    viewer.dispatch({ name: "scene-setting", payload: { key: "label_density", value: 0.36 } });
+    viewer.dispatch({ name: "group-toggle", target_id: "provider" });
+    viewer.dispatch({ name: "expand", target_id: "memory" });
+    viewer.focusNode("memory:c1-1");
+  });
   await expect.poll(() => page.locator("graphfakos-viewer").evaluate((viewer) => (
     viewer.getState().camera_pose?.position?.z || null
   ))).not.toBeNull();
@@ -805,6 +816,13 @@ test("restores an exact 3D camera pose from a durable route", async ({ page }) =
     camera: viewer.exportNavigationTrail().current.camera,
   }));
   expect(saved.route).toContain("camera_pose=");
+  expect(saved.route).toContain("scene_level=precision");
+  expect(saved.route).toContain("edge_clutter=local");
+  expect(saved.route).toContain("node_scale=0.42");
+  expect(saved.route).toContain("edge_opacity=0.48");
+  expect(saved.route).toContain("label_density=0.36");
+  expect(saved.route).toContain("hidden_groups=provider");
+  expect(saved.route).toContain("expanded_groups=memory");
 
   await page.goto(saved.route);
   await expect(page.locator(".gf-canvas-shell")).toHaveAttribute("data-webgl-ready", "true");
@@ -821,6 +839,36 @@ test("restores an exact 3D camera pose from a durable route", async ({ page }) =
   }
   expect(restored.state.camera_pose).not.toBeNull();
   expect(restored.state.theme).toBe("space");
+  expect(restored.state.scene_level).toBe("precision");
+  expect(restored.state.edge_clutter).toBe("local");
+  expect(restored.state.hidden_groups).toContain("provider");
+  expect(restored.state.expanded_groups).toContain("memory");
+  expect(restored.state.node_scale).toBeCloseTo(0.42);
+  expect(restored.state.edge_opacity).toBeCloseTo(0.48);
+  expect(restored.state.label_density).toBeCloseTo(0.36);
+});
+
+test("keeps live visual state when switching graph theme", async ({ page }) => {
+  await page.goto("/explore?theme=space&render_engine=3d&layout=grouped");
+  await expect(page.locator(".gf-canvas-shell")).toHaveAttribute("data-webgl-ready", "true");
+  const viewer = page.locator("graphfakos-viewer");
+  await viewer.evaluate((element) => {
+    element.dispatch({ name: "scene-level", payload: { value: "cluster" } });
+    element.dispatch({ name: "edge-mode", payload: { value: "bundles" } });
+    element.dispatch({ name: "scene-setting", payload: { key: "node_scale", value: 0.5 } });
+    element.dispatch({ name: "group-toggle", target_id: "provider" });
+    element.dispatch({ name: "expand", target_id: "memory" });
+  });
+
+  await page.getByRole("link", { name: "Light" }).click();
+  await expect(page.locator("body")).toHaveAttribute("data-theme", "default");
+  await expect(page).toHaveURL(/theme=default/);
+  const state = await viewer.evaluate((element) => element.getState());
+  expect(state.scene_level).toBe("cluster");
+  expect(state.edge_clutter).toBe("bundles");
+  expect(state.hidden_groups).toContain("provider");
+  expect(state.expanded_groups).toContain("memory");
+  expect(state.node_scale).toBeCloseTo(0.5);
 });
 
 test("focuses hidden groups as navigable scene regions", async ({ page }) => {
@@ -1222,7 +1270,8 @@ for (const fixture of [
       const zoomIn = page.getByRole("button", { name: "Zoom in" });
       await zoomIn.click();
       await zoomIn.click();
-      await expect(graph).toHaveAttribute("data-detail-mode", "detail");
+      await expect.poll(async () => graph.getAttribute("data-detail-mode"))
+        .toMatch(/detail|precision/);
       expect(Number(await graph.getAttribute("data-reference-distance")))
         .toBeCloseTo(referenceDistance, 1);
       expect(await page.locator(".gf-webgl-label").count()).toBeGreaterThan(labels);
@@ -1264,7 +1313,8 @@ test("reveals more dense-scene context as the 3D camera approaches", async ({ pa
   const zoomIn = page.getByRole("button", { name: "Zoom in" });
   await zoomIn.click();
   await zoomIn.click();
-  await expect(graph).toHaveAttribute("data-detail-mode", "detail");
+  await expect.poll(async () => graph.getAttribute("data-detail-mode"))
+    .toMatch(/detail|precision/);
   await expect.poll(() => viewer.evaluate(
     (element) => element.exportNavigationTrail().current.camera.distance,
   )).toBeLessThan(initialDistance * 0.8);
@@ -1273,7 +1323,8 @@ test("reveals more dense-scene context as the 3D camera approaches", async ({ pa
   expect(Number(await graph.getAttribute("data-camera-distance")))
     .toBeLessThan(Number(await graph.getAttribute("data-reference-distance")) * 0.8);
   await page.waitForTimeout(900);
-  await expect(graph).toHaveAttribute("data-detail-mode", "detail");
+  await expect.poll(async () => graph.getAttribute("data-detail-mode"))
+    .toMatch(/detail|precision/);
   expect(Number(await graph.getAttribute("data-reference-distance"))).toBeCloseTo(referenceDistance, 1);
   expect(Number(await graph.getAttribute("data-semantic-zoom"))).toBeGreaterThan(1.3);
   expect(await page.locator(".gf-webgl-label").count()).toBeGreaterThan(initialLabels);

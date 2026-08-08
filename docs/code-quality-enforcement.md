@@ -48,6 +48,12 @@ Run `make release-check` when package metadata, exports, docs required by the
 wheel, or release behavior changes. Run `make browser-e2e` when the dynamic
 viewer, renderer, routes, or interaction contracts change.
 
+Run `make integration-check` when changing GraphFakos provider DTOs, workspace
+manifests, provider-envelope handling, or any Sophiagraph/PragmaGraph/OpenMinion
+adapter-facing behavior. Run `make integration-wheel-check` before coordinated
+package releases or dependency lower-bound changes so local wheels are installed
+together instead of accidentally validating only published dependencies.
+
 For a broad cleanup or maintainability pass, follow
 [Cleanup workflow](cleanup-workflow.md) rather than treating a hand-picked file
 set as a package-wide review.

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Literal, cast
 
 from . import camera
@@ -101,7 +101,7 @@ class GraphFakosViewerState:
             camera_pose=request.camera_pose,
             render_engine=request.render_engine,
             theme=request.theme,
-            scene_level="overview",
+            scene_level=request.scene_level,
             filters=dict(request.filters),
             expanded_groups=request.expanded_groups,
             hidden_groups=request.hidden_groups,
@@ -1553,6 +1553,7 @@ class GraphFakosRequest:
     saved_view_id: str = ""
     show_orphans: bool = True
     show_neighbor_links: bool = True
+    scene_level: str = "overview"
     edge_clutter: str = "normal"
     analytics_overlay: str = "degree"
     center_force: float = 0.012
@@ -1578,59 +1579,11 @@ class GraphFakosRequest:
     pivot_mode: str = ""
 
     def with_screen(self, screen: GraphFakosScreen) -> GraphFakosRequest:
-        return GraphFakosRequest(
+        return replace(
+            self,
             screen=screen,
-            preset_id=self.preset_id,
-            query=self.query,
-            focus_node_id=self.focus_node_id,
-            selected_node_ids=self.selected_node_ids,
-            selected_edge_id=self.selected_edge_id,
-            source_node_id=self.source_node_id,
-            target_node_id=self.target_node_id,
-            comparison_graph_id=self.comparison_graph_id,
-            max_depth=self.max_depth,
             filters=dict(self.filters),
-            layout=self.layout,
-            include_provenance=self.include_provenance,
-            include_provider_payload=self.include_provider_payload,
-            limit=self.limit,
-            render_limit=self.render_limit,
-            camera_x=self.camera_x,
-            camera_y=self.camera_y,
-            camera_zoom=self.camera_zoom,
-            camera_yaw=self.camera_yaw,
-            camera_pitch=self.camera_pitch,
-            camera_pose=self.camera_pose,
-            render_engine=self.render_engine,
-            theme=self.theme,
-            expanded_groups=self.expanded_groups,
-            hidden_groups=self.hidden_groups,
-            saved_view_id=self.saved_view_id,
-            show_orphans=self.show_orphans,
-            show_neighbor_links=self.show_neighbor_links,
-            edge_clutter=self.edge_clutter,
-            analytics_overlay=self.analytics_overlay,
-            center_force=self.center_force,
-            repel_force=self.repel_force,
-            link_distance=self.link_distance,
-            node_scale=self.node_scale,
-            edge_scale=self.edge_scale,
-            edge_opacity=self.edge_opacity,
-            label_density=self.label_density,
             pinned_positions=dict(self.pinned_positions),
-            style_color_by=self.style_color_by,
-            style_size_by=self.style_size_by,
-            style_edge_width_by=self.style_edge_width_by,
-            min_degree=self.min_degree,
-            max_degree=self.max_degree,
-            component_id=self.component_id,
-            connected_to_node_id=self.connected_to_node_id,
-            evidence_filter=self.evidence_filter,
-            cluster_id=self.cluster_id,
-            timeline_frame=self.timeline_frame,
-            timeline_playback=self.timeline_playback,
-            pivot_node_id=self.pivot_node_id,
-            pivot_mode=self.pivot_mode,
         )
 
     def to_dict(self) -> dict[str, object]:
@@ -1664,6 +1617,7 @@ class GraphFakosRequest:
             "saved_view_id": self.saved_view_id,
             "show_orphans": self.show_orphans,
             "show_neighbor_links": self.show_neighbor_links,
+            "scene_level": self.scene_level,
             "edge_clutter": self.edge_clutter,
             "analytics_overlay": self.analytics_overlay,
             "center_force": self.center_force,
@@ -1765,6 +1719,9 @@ class GraphFakosRequest:
             show_neighbor_links=_bool(
                 payload.get("show_neighbor_links", True),
                 "request.show_neighbor_links",
+            ),
+            scene_level=_string(
+                payload.get("scene_level", "overview"), "request.scene_level"
             ),
             edge_clutter=_string(
                 payload.get("edge_clutter", "normal"),

@@ -8,7 +8,7 @@ PRE_COMMIT := $(PYTHON) -m pre_commit
 PYTEST := $(PYTHON) -m pytest
 RUFF := $(PYTHON) -m ruff
 
-.PHONY: help venv dev-install hooks-install hooks-run web-install web-build benchmark-fixtures preview preview-demo preview-dense preview-timeline preview-warnings preview-path preview-provenance preview-workbench preview-budget preview-islands preview-html clean-preview visual-qa fix format format-check lint validate-patterns loc-check method-loc-check helper-duplicates-check path-structure-check filename-underscore-check broad-exception-check type-ignore-check public-surface-check test browser-test browser-e2e check release-check
+.PHONY: help venv dev-install hooks-install hooks-run web-install web-build benchmark-fixtures preview preview-demo preview-dense preview-timeline preview-warnings preview-path preview-provenance preview-workbench preview-budget preview-islands preview-html clean-preview visual-qa fix format format-check lint validate-patterns loc-check method-loc-check helper-duplicates-check path-structure-check filename-underscore-check broad-exception-check type-ignore-check public-surface-check test browser-test browser-e2e integration-check integration-wheel-check check release-check
 
 help:
 	@printf '%s\n' \
@@ -38,6 +38,8 @@ help:
 		'  make test          Run package pytest suite' \
 		'  make browser-test  Run browser runtime pytest coverage' \
 		'  make browser-e2e   Run the pinned real-browser viewer smoke' \
+		'  make integration-check Run local sibling package integration slices' \
+		'  make integration-wheel-check Build/install local sibling wheels together' \
 		'  make check         Run format-check, lint, and test' \
 		'  make release-check Run package release smoke'
 
@@ -155,6 +157,12 @@ benchmark-fixtures: $(DEV_STAMP)
 
 browser-e2e: $(DEV_STAMP)
 	cd "$(REPO_ROOT)/web" && npm test
+
+integration-check: $(DEV_STAMP)
+	PYTHONPATH="$(REPO_ROOT)/src" $(PYTHON) "$(REPO_ROOT)/scripts/check_integration.py"
+
+integration-wheel-check: $(DEV_STAMP)
+	PYTHONPATH="$(REPO_ROOT)/src" $(PYTHON) "$(REPO_ROOT)/scripts/check_integration.py" --wheel-smoke
 
 visual-qa: $(DEV_STAMP)
 	cd "$(REPO_ROOT)/web" && npm run visual

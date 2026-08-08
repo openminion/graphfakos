@@ -97,7 +97,9 @@ def canvas_toolbar(request: GraphFakosRequest) -> str:
 
 
 def display_controls(request: GraphFakosRequest) -> str:
-    active_level = "local" if request.focus_node_id else "overview"
+    active_level = request.scene_level or (
+        "local" if request.focus_node_id else "overview"
+    )
     levels = "".join(
         f"<button type='button' data-gf-scene-level='{level}' "
         f"data-active='{str(active_level == level).lower()}'>{label}</button>"

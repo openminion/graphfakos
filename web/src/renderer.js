@@ -31,10 +31,10 @@ function clusterCenters(nodes) {
   if (clusterIds.length === 1) return new Map([[clusterIds[0], { x: 0, y: 0, z: 0 }]]);
   const count = nodes.filter((node) => !node.hidden).length || nodes.length;
   const spread = count > 160
-    ? Math.min(16800, 1180 + Math.sqrt(clusterIds.length) * 780)
+    ? Math.min(19600, 1420 + Math.sqrt(clusterIds.length) * 920)
     : count > 80
-      ? Math.min(9200, 920 + Math.sqrt(clusterIds.length) * 560)
-      : Math.min(3600, 680 + Math.sqrt(clusterIds.length) * 340);
+      ? Math.min(11200, 1060 + Math.sqrt(clusterIds.length) * 660)
+      : Math.min(4200, 760 + Math.sqrt(clusterIds.length) * 390);
   const goldenAngle = Math.PI * (3 - Math.sqrt(5));
   return new Map(clusterIds.map((clusterId, index) => {
     const ring = Math.sqrt((index + 1.4) / clusterIds.length);
@@ -53,7 +53,7 @@ function seededPosition(id, clusterId, centers) {
   const nodeHash = stableHash(id);
   const center = centers.get(clusterId || "unclustered") || { x: 0, y: 0, z: 0 };
   const localAngle = (nodeHash % 360) * (Math.PI / 180);
-  const localRadius = 22 + (nodeHash % 118);
+  const localRadius = 16 + (nodeHash % 78);
   return {
     x: center.x + Math.cos(localAngle) * localRadius,
     y: center.y + Math.sin(localAngle) * localRadius,
@@ -81,10 +81,10 @@ function clusterForce(nodes, centers) {
 
 function forceProfile(visibleCount) {
   if (visibleCount > 160) {
-    return { charge: -1380, linkDistance: 520, linkStrength: 0.018, clusterStrength: 0.026 };
+    return { charge: -1680, linkDistance: 610, linkStrength: 0.014, clusterStrength: 0.02 };
   }
   if (visibleCount > 80) {
-    return { charge: -720, linkDistance: 340, linkStrength: 0.052, clusterStrength: 0.046 };
+    return { charge: -860, linkDistance: 390, linkStrength: 0.042, clusterStrength: 0.038 };
   }
   return { charge: -320, linkDistance: 168, linkStrength: 0.14, clusterStrength: 0.11 };
 }
@@ -376,6 +376,17 @@ function mount(element, scene, callbacks = {}) {
     if (isAggregateLink(link)) return Math.min(0.54, 0.11 + Math.log10(linkWeight(link)) * 0.1);
     return 0.085;
   };
+  const linkParticles = (link) => {
+    if (reducedMotion || !linkVisibleForMode(link)) return 0;
+    if (link.selected) return 3;
+    return linkTouchesFocus(link) ? 1 : 0;
+  };
+  const linkParticleWidth = (link) => (link.selected ? 1.8 : 1);
+  const linkParticleColor = (link) => (
+    link.selected || linkTouchesFocus(link)
+      ? (activeScene.theme === "space" ? "#bdf4ff" : "#17677c")
+      : "rgba(132, 168, 222, 0)"
+  );
   const linkVisible = (link) => linkVisibleForMode(link);
   const visibleNodeCount = () => activeScene.nodes.filter((node) => !node.hidden).length;
   const sceneLinkOpacity = () => {
@@ -517,6 +528,9 @@ function mount(element, scene, callbacks = {}) {
     graph.nodeColor(nodeColor);
     graph.linkColor(linkColor);
     graph.linkWidth(linkWidth);
+    graph.linkDirectionalParticles(linkParticles);
+    graph.linkDirectionalParticleWidth(linkParticleWidth);
+    graph.linkDirectionalParticleColor(linkParticleColor);
     graph.nodeThreeObject(nodeObject);
     graph.refresh();
     scheduleLabelLayout();
@@ -862,6 +876,10 @@ function mount(element, scene, callbacks = {}) {
     .linkOpacity(sceneLinkOpacity())
     .linkVisibility(linkVisible)
     .linkWidth(linkWidth)
+    .linkDirectionalParticles(linkParticles)
+    .linkDirectionalParticleSpeed(0.004)
+    .linkDirectionalParticleWidth(linkParticleWidth)
+    .linkDirectionalParticleColor(linkParticleColor)
     .linkCurvature("curvature")
     .linkCurveRotation("curveRotation")
     .warmupTicks(reducedMotion ? 0 : 72)

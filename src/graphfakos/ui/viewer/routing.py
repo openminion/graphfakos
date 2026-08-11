@@ -22,6 +22,20 @@ _SCREEN_NAV: tuple[tuple[GraphFakosScreen, str], ...] = (
     ("context_preview", "Context"),
 )
 
+_TEXT_QUERY_KEYS = tuple(
+    "query selected_edge_id source_node_id target_node_id comparison_graph_id "
+    "layout render_engine theme saved_view_id scene_level edge_clutter "
+    "analytics_overlay style_color_by style_size_by style_edge_width_by "
+    "component_id connected_to_node_id evidence_filter cluster_id timeline_frame "
+    "timeline_playback pivot_node_id pivot_mode".split()
+)
+_FLOAT_QUERY_KEYS = tuple(
+    "camera_x camera_y camera_zoom camera_yaw camera_pitch center_force repel_force "
+    "link_distance node_scale edge_scale edge_opacity label_density".split()
+)
+_INT_QUERY_KEYS = ("min_degree", "max_degree")
+_TUPLE_QUERY_KEYS = ("selected_node_ids", "expanded_groups", "hidden_groups")
+
 
 def _screen_from_path(path: str) -> GraphFakosScreen | None:
     value = path.strip("/") or "explore"
@@ -50,94 +64,65 @@ def _request_from_query(
             filters[key] = value
         elif key in query:
             filters.pop(key, None)
-    return replace(
-        request,
-        preset_id=(
-            _first_query_value(query, "preset")
-            or _first_query_value(query, "preset_id")
-            or request.preset_id
+    values: dict[str, object] = {
+        "preset_id": _first_query_match(
+            query, ("preset", "preset_id"), request.preset_id
         ),
-        query=_first_query_value(query, "query") or request.query,
-        focus_node_id=(
-            _first_query_value(query, "focus_node_id")
-            or _first_query_value(query, "node_id")
-            or request.focus_node_id
+        "focus_node_id": _first_query_match(
+            query, ("focus_node_id", "node_id"), request.focus_node_id
         ),
-        selected_node_ids=_tuple_query_value(
-            query, "selected_node_ids", request.selected_node_ids
+        "filters": filters,
+        "max_depth": _required_int_query_value(query, "max_depth", request.max_depth),
+        "limit": _required_int_query_value(query, "limit", request.limit),
+        "render_limit": _required_int_query_value(
+            query, "render_limit", request.render_limit
         ),
-        selected_edge_id=_first_query_value(query, "selected_edge_id")
-        or request.selected_edge_id,
-        source_node_id=_first_query_value(query, "source_node_id")
-        or request.source_node_id,
-        target_node_id=_first_query_value(query, "target_node_id")
-        or request.target_node_id,
-        comparison_graph_id=_first_query_value(query, "comparison_graph_id")
-        or request.comparison_graph_id,
-        max_depth=int(_first_query_value(query, "max_depth") or request.max_depth),
-        filters=filters,
-        layout=_first_query_value(query, "layout") or request.layout,
-        limit=int(_first_query_value(query, "limit") or request.limit),
-        render_limit=int(
-            _first_query_value(query, "render_limit") or request.render_limit
+        "camera_pose": _camera_pose_query_value(query, request.camera_pose),
+        "show_orphans": _bool_query_value(query, "show_orphans", request.show_orphans),
+        "show_neighbor_links": _bool_query_value(
+            query, "show_neighbor_links", request.show_neighbor_links
         ),
-        camera_x=_float_query_value(query, "camera_x", request.camera_x),
-        camera_y=_float_query_value(query, "camera_y", request.camera_y),
-        camera_zoom=_float_query_value(query, "camera_zoom", request.camera_zoom),
-        camera_yaw=_float_query_value(query, "camera_yaw", request.camera_yaw),
-        camera_pitch=_float_query_value(query, "camera_pitch", request.camera_pitch),
-        camera_pose=_camera_pose_query_value(query, request.camera_pose),
-        render_engine=_first_query_value(query, "render_engine")
-        or request.render_engine,
-        theme=_first_query_value(query, "theme") or request.theme,
-        expanded_groups=_tuple_query_value(
-            query, "expanded_groups", request.expanded_groups
-        ),
-        hidden_groups=_tuple_query_value(query, "hidden_groups", request.hidden_groups),
-        saved_view_id=_first_query_value(query, "saved_view_id")
-        or request.saved_view_id,
-        show_orphans=_bool_query_value(query, "show_orphans", request.show_orphans),
-        show_neighbor_links=_bool_query_value(
-            query,
-            "show_neighbor_links",
-            request.show_neighbor_links,
-        ),
-        scene_level=_first_query_value(query, "scene_level") or request.scene_level,
-        edge_clutter=_first_query_value(query, "edge_clutter") or request.edge_clutter,
-        analytics_overlay=_first_query_value(query, "analytics_overlay")
-        or request.analytics_overlay,
-        center_force=_float_query_value(query, "center_force", request.center_force),
-        repel_force=_float_query_value(query, "repel_force", request.repel_force),
-        link_distance=_float_query_value(query, "link_distance", request.link_distance),
-        node_scale=_float_query_value(query, "node_scale", request.node_scale),
-        edge_scale=_float_query_value(query, "edge_scale", request.edge_scale),
-        edge_opacity=_float_query_value(query, "edge_opacity", request.edge_opacity),
-        label_density=_float_query_value(query, "label_density", request.label_density),
-        pinned_positions=_positions_query_value(
+        "pinned_positions": _positions_query_value(
             query, "pinned_positions", request.pinned_positions
         ),
-        style_color_by=_first_query_value(query, "style_color_by")
-        or request.style_color_by,
-        style_size_by=_first_query_value(query, "style_size_by")
-        or request.style_size_by,
-        style_edge_width_by=_first_query_value(query, "style_edge_width_by")
-        or request.style_edge_width_by,
-        min_degree=_int_query_value(query, "min_degree", request.min_degree),
-        max_degree=_int_query_value(query, "max_degree", request.max_degree),
-        component_id=_first_query_value(query, "component_id") or request.component_id,
-        connected_to_node_id=_first_query_value(query, "connected_to_node_id")
-        or request.connected_to_node_id,
-        evidence_filter=_first_query_value(query, "evidence_filter")
-        or request.evidence_filter,
-        cluster_id=_first_query_value(query, "cluster_id") or request.cluster_id,
-        timeline_frame=_first_query_value(query, "timeline_frame")
-        or request.timeline_frame,
-        timeline_playback=_first_query_value(query, "timeline_playback")
-        or request.timeline_playback,
-        pivot_node_id=_first_query_value(query, "pivot_node_id")
-        or request.pivot_node_id,
-        pivot_mode=_first_query_value(query, "pivot_mode") or request.pivot_mode,
+    }
+    values.update(
+        {
+            key: _first_query_value(query, key) or getattr(request, key)
+            for key in _TEXT_QUERY_KEYS
+        }
     )
+    values.update(
+        {
+            key: _tuple_query_value(query, key, getattr(request, key))
+            for key in _TUPLE_QUERY_KEYS
+        }
+    )
+    values.update(
+        {
+            key: _float_query_value(query, key, getattr(request, key))
+            for key in _FLOAT_QUERY_KEYS
+        }
+    )
+    values.update(
+        {
+            key: _int_query_value(query, key, getattr(request, key))
+            for key in _INT_QUERY_KEYS
+        }
+    )
+    return replace(request, **values)
+
+
+def _first_query_match(
+    query: dict[str, list[str]],
+    keys: tuple[str, ...],
+    fallback: str | None,
+) -> str | None:
+    for key in keys:
+        value = _first_query_value(query, key)
+        if value is not None:
+            return value
+    return fallback
 
 
 def _first_query_value(query: dict[str, list[str]], key: str) -> str | None:
@@ -184,6 +169,15 @@ def _int_query_value(
         return int(value)
     except ValueError:
         return fallback
+
+
+def _required_int_query_value(
+    query: dict[str, list[str]],
+    key: str,
+    fallback: int,
+) -> int:
+    value = _int_query_value(query, key, fallback)
+    return fallback if value is None else value
 
 
 def _tuple_query_value(

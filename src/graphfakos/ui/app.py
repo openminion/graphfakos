@@ -750,12 +750,9 @@ def _timeline_event_cards(events: list[dict[str, str]]) -> str:
                     (event["value"], "neutral"),
                 ]
             )
-            + "<div class='gf-route-row'>"
-            + f"<div>Open frame</div><a class='gf-inline-link' href='{escape(event['route'])}'>Open</a></div>"
-            + "<div class='gf-route-row'>"
-            + f"<div>Focus node</div><a class='gf-inline-link' href='{escape(event['focus_route'])}'>Open</a></div>"
-            + "<div class='gf-route-row'>"
-            + f"<div>Timeline case packet</div><a class='gf-inline-link' href='{escape(event['case_packet_route'])}'>Open</a></div>"
+            + _route_row("Open frame", event["route"])
+            + _route_row("Focus node", event["focus_route"])
+            + _route_row("Timeline case packet", event["case_packet_route"])
             + "</article>"
         )
     return f"{html}</div>"
@@ -967,25 +964,14 @@ def _diff_change_cards(changes: list[dict[str, object]]) -> str:
     for change in changes:
         fields = change.get("fields")
         field_text = ", ".join(fields) if isinstance(fields, list) else ""
-        case_packet_route = change.get("case_packet_route")
-        source_route = change.get("source_route")
-        target_route = change.get("target_route")
-        extra_routes = ""
-        if isinstance(case_packet_route, str):
-            extra_routes += (
-                "<div class='gf-route-row'>"
-                f"<div>Case packet</div><a class='gf-inline-link' href='{escape(case_packet_route)}'>Open</a></div>"
-            )
-        if isinstance(source_route, str):
-            extra_routes += (
-                "<div class='gf-route-row'>"
-                f"<div>Source node</div><a class='gf-inline-link' href='{escape(source_route)}'>Open</a></div>"
-            )
-        if isinstance(target_route, str):
-            extra_routes += (
-                "<div class='gf-route-row'>"
-                f"<div>Target node</div><a class='gf-inline-link' href='{escape(target_route)}'>Open</a></div>"
-            )
+        extra_routes = _optional_route_rows(
+            change,
+            (
+                ("Case packet", "case_packet_route"),
+                ("Source node", "source_route"),
+                ("Target node", "target_route"),
+            ),
+        )
         html += (
             "<article class='gf-card gf-diff-card'>"
             f"<h4>{escape(str(change.get('label', change.get('id', 'change'))))}</h4>"
@@ -997,12 +983,31 @@ def _diff_change_cards(changes: list[dict[str, object]]) -> str:
                 ]
             )
             + (f"<p>Fields: {escape(field_text)}</p>" if field_text else "")
-            + "<div class='gf-route-row'>"
-            + f"<div>Review change</div><a class='gf-inline-link' href='{escape(str(change.get('route', '#')))}'>Open</a></div>"
+            + _route_row("Review change", str(change.get("route", "#")))
             + extra_routes
             + "</article>"
         )
     return f"{html}</div>"
+
+
+def _optional_route_rows(
+    payload: dict[str, object],
+    routes: tuple[tuple[str, str], ...],
+) -> str:
+    rows = []
+    for label, key in routes:
+        route = payload.get(key)
+        if isinstance(route, str):
+            rows.append(_route_row(label, route))
+    return "".join(rows)
+
+
+def _route_row(label: str, route: str) -> str:
+    return (
+        "<div class='gf-route-row'>"
+        f"<div>{escape(label)}</div>"
+        f"<a class='gf-inline-link' href='{escape(route)}'>Open</a></div>"
+    )
 
 
 def _string_items(value: object) -> list[str]:

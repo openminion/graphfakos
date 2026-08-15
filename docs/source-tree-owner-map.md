@@ -110,6 +110,8 @@ and `graphfakos.ui`.
   fallback-SVG, and custom-element runtime orchestration
 - `web/src/renderer.js`: source owner for the true WebGL 3D renderer; built to
   `src/graphfakos/assets/renderer-3d.js` for offline wheel use
+- `web/src/scene-geometry.js`: deterministic 3D scene spacing, seeded
+  positions, force profile, and fit-bound calculations
 - `web/src/focus-readability.js`: screen-space label collision and inspector
   camera-reservation math used by the WebGL renderer
 - `web/src/spatial-navigation.js`: deterministic screen-direction node ranking

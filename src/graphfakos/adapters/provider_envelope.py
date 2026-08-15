@@ -60,8 +60,11 @@ def graph_from_provider_envelope(
     """Convert a provider-neutral viewer envelope into a GraphFakos graph."""
 
     clusters = tuple(_mapping(item) for item in envelope.get("clusters") or ())
+    content_index = _mapping(envelope.get("content_index"))
     nodes = [_cluster_node(cluster) for cluster in clusters]
-    nodes.extend(_raw_node(_mapping(item)) for item in envelope.get("nodes") or ())
+    nodes.extend(
+        _raw_node(_mapping(item), content_index) for item in envelope.get("nodes") or ()
+    )
     edges = [_raw_edge(_mapping(item)) for item in envelope.get("edges") or ()]
     edges.extend(
         _bundle_edge(_mapping(item), index)
@@ -126,6 +129,7 @@ def graph_from_provider_envelope(
         capability_details={
             "cluster_overview": "Cluster aggregate nodes and edge bundles are rendered by default.",
             "large_graph_lod": "Raw omitted counts remain provider-owned and expansion-ready.",
+            "content_preview": "Provider content_index entries are preserved for inspector and citation previews.",
         },
         available_facets={
             "node_kind": tuple(sorted({node.kind for node in nodes})),
@@ -164,13 +168,30 @@ def _cluster_node(cluster: Mapping[str, Any]) -> GraphFakosNode:
     )
 
 
-def _raw_node(node: Mapping[str, Any]) -> GraphFakosNode:
+def _raw_node(
+    node: Mapping[str, Any],
+    content_index: Mapping[str, Any] | None = None,
+) -> GraphFakosNode:
     cluster_id = str(node.get("cluster_id") or "")
+    node_id = str(node.get("id") or "")
+    content = _mapping((content_index or {}).get(node_id))
+    content_preview = str(
+        content.get("preview")
+        or content.get("text")
+        or node.get("preview")
+        or node.get("content")
+        or ""
+    )
+    payload = dict(node)
+    if content_preview:
+        payload["content_preview"] = content_preview
+    if content:
+        payload["content_index"] = dict(content)
     return GraphFakosNode(
-        id=str(node.get("id") or ""),
-        label=str(node.get("label") or node.get("id") or ""),
+        id=node_id,
+        label=str(node.get("label") or node_id),
         kind=str(node.get("kind") or "node"),
-        summary=str(node.get("summary") or ""),
+        summary=str(node.get("summary") or content_preview),
         tags=tuple(
             item
             for item in (
@@ -183,10 +204,10 @@ def _raw_node(node: Mapping[str, Any]) -> GraphFakosNode:
         score=_float_or_none(node.get("confidence")),
         confidence=_float_or_none(node.get("confidence")),
         source=str(node.get("source_kind") or ""),
-        provenance_ids=(f"provenance:{node.get('id')}",),
-        citation_ids=(f"citation:{node.get('id')}",),
+        provenance_ids=(f"provenance:{node_id}",),
+        citation_ids=(f"citation:{node_id}",),
         visual=GraphFakosVisual(group=cluster_id, size=1),
-        provider_payload=dict(node),
+        provider_payload=payload,
     )
 
 

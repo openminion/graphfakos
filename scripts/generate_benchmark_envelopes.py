@@ -26,6 +26,7 @@ def benchmark_envelope(total_nodes: int) -> dict[str, object]:
     total_edges = int(total_nodes * 1.45)
     clusters = []
     nodes = []
+    content_index = {}
     for index in range(cluster_count):
         cluster_id = f"scale-{index + 1:04d}"
         kind = cluster_kind(index)
@@ -70,6 +71,15 @@ def benchmark_envelope(total_nodes: int) -> dict[str, object]:
                     "confidence": 0.9,
                 }
             )
+            content_index[f"{cluster_id}:representative"] = {
+                "title": f"{kind.title()} island {index + 1:04d}",
+                "preview": content[:180],
+                "text": content,
+                "source_ref": {
+                    "path": f"synthetic/{kind}/{cluster_id}.md",
+                    "line": 1 + index % 37,
+                },
+            }
     edge_bundles = []
     for index in range(1, visible_cluster_count + 1):
         targets = {((index % visible_cluster_count) + 1)}
@@ -79,6 +89,8 @@ def benchmark_envelope(total_nodes: int) -> dict[str, object]:
             targets.add(
                 ((index + visible_cluster_count // 3) % visible_cluster_count) + 1
             )
+        if index % 17 == 0:
+            targets.add(((index * 7 + 23) % visible_cluster_count) + 1)
         for target in sorted(targets):
             if target == index:
                 continue
@@ -119,6 +131,7 @@ def benchmark_envelope(total_nodes: int) -> dict[str, object]:
         "nodes": nodes,
         "edges": [],
         "clusters": clusters,
+        "content_index": content_index,
         "edge_bundles": edge_bundles,
         "omitted": [
             {"reason": "node_budget", "count": max(0, total_nodes - visible_nodes)},

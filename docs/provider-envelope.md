@@ -98,6 +98,11 @@ hints, and edit/capture affordances to a web shell or desktop wrapper without
 parsing rendered HTML. Provider cluster declarations may use either `id` or
 `cluster_id`; expansion cursors stay provider-owned.
 
+When `content_index` contains a visible node id, GraphFakos preserves the entry
+on that node's provider payload and uses it for inspector, tooltip, and citation
+previews. The provider still owns the full document or fact body; GraphFakos
+only carries bounded preview text and source references through the viewer.
+
 Viewer-local actions such as search, filtering, node inspection, neighborhood
 focus, path highlighting, static export, provenance review, and citation copy
 describe what the GraphFakos shell can do with the current DTOs. They are not

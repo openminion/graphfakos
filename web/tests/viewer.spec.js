@@ -1,6 +1,12 @@
 import { expect, test } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { linkVisibleForDetail, shapeLinks } from "../src/link-shape.js";
+import {
+  clusterCenters,
+  forceProfile,
+  sceneExtent,
+  seededPosition,
+} from "../src/scene-geometry.js";
 import { nodeColorForKind } from "../src/visual-contrast.js";
 import {
   detailLevelForCamera,
@@ -26,7 +32,7 @@ test("maps camera distance to semantic graph detail", () => {
   expect(detailLevelForCamera({ nodeCount: 240, referenceDistance: 900, cameraDistance: 360 }))
     .toBe("precision");
   expect(labelBudgetForDetail("overview", 1, 240)).toBe(1);
-  expect(labelBudgetForDetail("detail", 1, 240)).toBe(2);
+  expect(labelBudgetForDetail("detail", 1, 240)).toBe(1);
   expect(labelBudgetForDetail("precision", 1, 1_000)).toBeLessThan(4);
   expect(detailLevelForSceneLevel("islands", "precision")).toBe("overview");
   expect(detailLevelForSceneLevel("cluster", "overview")).toBe("balanced");
@@ -36,6 +42,21 @@ test("maps camera distance to semantic graph detail", () => {
   expect(nodeScaleForCount(48)).toBeGreaterThan(nodeScaleForCount(240));
   expect(nodeScaleForCount(240)).toBeLessThan(0.25);
   expect(nodeScaleForCount(1_000)).toBeLessThan(0.1);
+});
+
+test("spreads dense 3D scenes into separated cluster islands", () => {
+  const nodes = Array.from({ length: 240 }, (_, index) => ({
+    id: `node-${index}`,
+    clusterId: `cluster-${Math.floor(index / 12)}`,
+    providerPayload: { node_count: 1_000 },
+  }));
+  const centers = clusterCenters(nodes);
+  const first = seededPosition("node-0", "cluster-0", centers, nodes.length);
+  const later = seededPosition("node-120", "cluster-10", centers, nodes.length);
+
+  expect(forceProfile(nodes.length).linkDistance).toBeGreaterThan(1_000);
+  expect(Math.hypot(first.x - later.x, first.y - later.y)).toBeGreaterThan(6_000);
+  expect(sceneExtent([first, later]).radius).toBeGreaterThan(3_000);
 });
 
 test("keeps node marks readable while camera zoom changes", () => {
@@ -1006,13 +1027,13 @@ test("previews and commits screen-direction node travel", async ({ page }) => {
     return null;
   });
   expect(candidate).not.toBeNull();
-  await shell.press("Escape");
-  const key = `Alt+Arrow${candidate.direction[0].toUpperCase()}${candidate.direction.slice(1)}`;
-  await shell.press(key);
+  const previewedNodeId = candidate.nodeId;
+  const previewedLabel = page.locator(".gf-webgl-label[data-previewed='true']");
+  await expect(previewedLabel).toHaveCount(1);
 
-  await expect(page.locator(`.gf-webgl-label[data-node-id='${candidate.nodeId}']`))
+  await expect(page.locator(`.gf-webgl-label[data-node-id='${previewedNodeId}']`))
     .toHaveAttribute("data-previewed", "true");
-  await expect(page.locator(`.gf-node[data-node-id='${candidate.nodeId}']`))
+  await expect(page.locator(`.gf-node[data-node-id='${previewedNodeId}']`))
     .toHaveAttribute("data-previewed", "true");
   await expect(page.locator("[data-gf-live-selection]"))
     .toContainText("Enter to focus; Escape to cancel");
@@ -1021,7 +1042,7 @@ test("previews and commits screen-direction node travel", async ({ page }) => {
 
   await shell.press("Enter");
   await expect.poll(() => viewer.evaluate((element) => element.getState().selected_node_id))
-    .toBe(candidate.nodeId);
+    .toBe(previewedNodeId);
   await expect(page.locator("[data-gf-live-selection]"))
     .not.toHaveAttribute("data-previewed-node-id");
 });

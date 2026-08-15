@@ -120,6 +120,15 @@ def test_provider_envelope_converts_to_cluster_graph() -> None:
     assert any(edge.kind == "edge_bundle" for edge in graph.edges)
     assert len({edge.id for edge in graph.edges}) == len(graph.edges)
     assert any(edge.id.startswith("edge-bundle:") for edge in graph.edges)
+    raw_node = next(node for node in graph.nodes if node.id == "scale-001:node:0000")
+    assert (
+        raw_node.provider_payload["content_preview"]
+        == "Actual provider content preview."
+    )
+    assert (
+        raw_node.provider_payload["content_index"]["source_ref"]["path"]
+        == "src/file.py"
+    )
     assert graph.citations[0].excerpt == "Actual provider content preview."
 
 
@@ -176,6 +185,8 @@ def test_benchmark_envelopes_keep_large_clusters_and_dynamic_bundles() -> None:
     assert len({item["kind"] for item in envelope["clusters"]}) > 3
     assert len(bundle_targets) > 240
     assert envelope["nodes"][0]["content"]
+    assert envelope["content_index"][envelope["nodes"][0]["id"]]["preview"]
+    assert envelope["content_index"][envelope["nodes"][0]["id"]]["source_ref"]["path"]
     assert envelope["render_hint"] == {
         "preferred_engine": "3d",
         "theme": "space",

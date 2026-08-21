@@ -4,7 +4,11 @@ import json
 import subprocess
 import sys
 
-from graphfakos.adapters.provider_envelope import graph_from_provider_envelope
+from graphfakos.adapters.provider_envelope import (
+    ProviderEnvelopeGraphProvider,
+    graph_from_provider_envelope,
+)
+from graphfakos.models import GraphFakosExpansionRequest, GraphFakosRequest
 from scripts.generate_benchmark_envelopes import benchmark_envelope
 
 
@@ -120,6 +124,15 @@ def test_provider_envelope_converts_to_cluster_graph() -> None:
     assert any(edge.kind == "edge_bundle" for edge in graph.edges)
     assert len({edge.id for edge in graph.edges}) == len(graph.edges)
     assert any(edge.id.startswith("edge-bundle:") for edge in graph.edges)
+    raw_node = next(node for node in graph.nodes if node.id == "scale-001:node:0000")
+    assert (
+        raw_node.provider_payload["content_preview"]
+        == "Actual provider content preview."
+    )
+    assert (
+        raw_node.provider_payload["content_index"]["source_ref"]["path"]
+        == "src/file.py"
+    )
     assert graph.citations[0].excerpt == "Actual provider content preview."
 
 
@@ -176,8 +189,55 @@ def test_benchmark_envelopes_keep_large_clusters_and_dynamic_bundles() -> None:
     assert len({item["kind"] for item in envelope["clusters"]}) > 3
     assert len(bundle_targets) > 240
     assert envelope["nodes"][0]["content"]
+    assert envelope["content_index"][envelope["nodes"][0]["id"]]["preview"]
+    assert envelope["content_index"][envelope["nodes"][0]["id"]]["source_ref"]["path"]
+    assert envelope["capabilities"]["lazy_expansion"] is True
+    first_cursor = envelope["clusters"][0]["expansion_cursor"]
+    assert len(envelope["expansions"][first_cursor]["nodes"]) == 8
+    assert len(envelope["expansions"]) == 24
+    assert "expansion_cursor" not in envelope["clusters"][24]
     assert envelope["render_hint"] == {
         "preferred_engine": "3d",
         "theme": "space",
         "layout": "islands",
     }
+
+
+def test_provider_envelope_streams_a_bounded_expansion_page(tmp_path) -> None:
+    envelope_path = tmp_path / "viewer.json"
+    envelope_path.write_text(
+        json.dumps(benchmark_envelope(200_000)),
+        encoding="utf-8",
+    )
+    provider = ProviderEnvelopeGraphProvider(str(envelope_path))
+    base = provider.load_graph(GraphFakosRequest())
+    expanded = provider.expand_graph(
+        GraphFakosRequest(),
+        GraphFakosExpansionRequest(
+            source_id="cluster:scale-0001",
+            cursor="scale-0001:offset:0",
+        ),
+    )
+
+    assert expanded is not None
+    assert len(expanded.nodes) == 9
+    assert len(expanded.edges) == 8
+    assert len(expanded.nodes) < len(base.nodes)
+    assert "lazy_expansion" in expanded.capabilities
+    assert (
+        sum(
+            node.provider_payload.get("expansion_source_id") == "cluster:scale-0001"
+            for node in expanded.nodes
+        )
+        == 8
+    )
+    assert (
+        provider.expand_graph(
+            GraphFakosRequest(),
+            GraphFakosExpansionRequest(
+                source_id="cluster:missing",
+                cursor="missing:offset:0",
+            ),
+        )
+        is None
+    )

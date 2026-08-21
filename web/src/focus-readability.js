@@ -41,7 +41,7 @@ function translatedCameraForReservation({
   const screenX = surfaceBounds.left + ((projected.x + 1) / 2) * surfaceBounds.width;
   const safeRight = Math.min(
     surfaceBounds.right - 24,
-    overlayBounds.left - Math.max(56, labelWidth / 2 + 20),
+    overlayBounds.left - Math.max(68, labelWidth / 2 + 32),
   );
   if (screenX <= safeRight) return null;
   const distance = Math.hypot(

@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
 from html import escape
 
-from graphfakos.models import GraphFakosRequest
+from graphfakos.models import GraphFakosGraph, GraphFakosNode, GraphFakosRequest
+from graphfakos.ui.viewer.filtering import _facet_values
+from graphfakos.ui.viewer.graph_ops import _node_cluster_id
+from graphfakos.ui.viewer.html import panel_body as _panel_body
+from graphfakos.ui.viewer.html import summary_note as _summary_note
 from graphfakos.ui.viewer.routing import _route_href
 
 
@@ -130,6 +135,86 @@ def display_controls(request: GraphFakosRequest) -> str:
         "<p>Keep overview sparse; use Local or Precision only after focusing "
         "an island or node.</p></div></details>"
     )
+
+
+def render_budget_panel(
+    request: GraphFakosRequest,
+    hidden_nodes: int,
+    hidden_edges: int,
+) -> str:
+    if hidden_nodes <= 0 and hidden_edges <= 0:
+        return ""
+    larger_limit = request.render_limit + max(25, request.render_limit // 2)
+    route = _route_href(request, overrides={"render_limit": larger_limit})
+    return _panel_body(
+        "Render Budget",
+        _summary_note(
+            f"{hidden_nodes} node(s) and {hidden_edges} edge(s) are summarized outside the current canvas budget."
+        )
+        + f"<a class='gf-inline-link' href='{escape(route)}'>Show more</a>",
+    )
+
+
+def group_controls(graph: GraphFakosGraph, request: GraphFakosRequest) -> str:
+    kinds = _facet_values(graph, "node_kind")
+    clusters = _cluster_control_rows(graph)
+    if not kinds and not clusters:
+        return ""
+    hidden = set(request.hidden_groups)
+    kind_buttons = "".join(
+        f"<button type='button' data-gf-group='{escape(kind)}' "
+        f"data-active='{str(kind not in hidden).lower()}' "
+        f"title='Toggle {escape(kind)} nodes. Alt-click to focus.'>{escape(kind)}</button>"
+        for kind in kinds
+    )
+    kind_links = "".join(
+        f"<a href='{_route_href(request, overrides={'node_kind': kind})}'>{escape(kind)}</a>"
+        for kind in kinds
+    )
+    cluster_buttons = "".join(
+        f"<article class='gf-cluster-card' data-gf-group-card='{escape(cluster_id)}' data-active='{str(cluster_id not in hidden).lower()}'>"
+        f"<button type='button' class='gf-cluster-focus' data-gf-group-focus='{escape(cluster_id)}' aria-label='Focus cluster {escape(label)}'><span>cluster</span><strong>{escape(label)}</strong><small>{count} nodes · {hub}</small>"
+        f"</button><button type='button' class='gf-cluster-toggle' data-gf-group='{escape(cluster_id)}' "
+        f"data-active='{str(cluster_id not in hidden).lower()}' aria-pressed='{str(cluster_id not in hidden).lower()}' aria-label='Show or hide cluster {escape(label)}'>Visible</button></article>"
+        for cluster_id, label, count, hub in clusters
+    )
+    return (
+        "<div class='gf-group-controls' aria-label='Node group controls'>"
+        "<div class='gf-group-controls-head'>"
+        "<span>Dense navigation</span>"
+        f"<button type='button' data-gf-group-show-all='true'>Show all</button></div>"
+        f"<div class='gf-group-kind-row'>{kind_buttons}</div>"
+        f"<div class='gf-group-cluster-row'>{cluster_buttons}</div>"
+        f"<div class='gf-group-fallback'>{kind_links}</div></div>"
+    )
+
+
+def _cluster_control_rows(
+    graph: GraphFakosGraph,
+) -> list[tuple[str, str, int, str]]:
+    buckets: dict[str, list[GraphFakosNode]] = defaultdict(list)
+    for node in graph.nodes:
+        buckets[_node_cluster_id(node)].append(node)
+    rows = []
+    for cluster_id, nodes in sorted(
+        buckets.items(),
+        key=lambda item: (-len(item[1]), item[0]),
+    )[:12]:
+        if not cluster_id:
+            continue
+        hub = max(nodes, key=lambda node: node.score or 0.0)
+        rows.append(
+            (cluster_id, _cluster_label(cluster_id, hub), len(nodes), hub.label)
+        )
+    return rows
+
+
+def _cluster_label(cluster_id: str, hub: GraphFakosNode) -> str:
+    if cluster_id.startswith("scale-"):
+        return "Scale " + cluster_id.removeprefix("scale-").upper()
+    if cluster_id.startswith("cluster-"):
+        return "Cluster " + cluster_id.removeprefix("cluster-").upper()
+    return hub.visual.group or hub.kind.title()
 
 
 def compass_hud() -> str:

@@ -25,10 +25,10 @@ function rounded(value) {
   return Math.round(value * 10_000) / 10_000;
 }
 
-const localCurve = 0.22;
-const bridgeCurve = 0.74;
-const bundleCurve = 1.05;
-const parallelSpacing = 0.32;
+const localCurve = 0.3;
+const bridgeCurve = 0.92;
+const bundleCurve = 1.22;
+const parallelSpacing = 0.42;
 
 function curveProfile(source, target, sameCluster, key, index, lane, aggregate) {
   if (source === target) {
@@ -39,14 +39,17 @@ function curveProfile(source, target, sameCluster, key, index, lane, aggregate) 
   }
 
   const rawWeight = aggregate?.edgeCount || aggregate?.weight || aggregate?.edge_count || 1;
-  const weight = Math.min(0.42, Math.log10(Math.max(1, Number(rawWeight))) * 0.082);
+  const weight = Math.min(0.54, Math.log10(Math.max(1, Number(rawWeight))) * 0.1);
   const base = (
     aggregate ? bundleCurve : sameCluster ? localCurve : bridgeCurve
-  ) + weight + (stableHash(key) % 9) * 0.018;
+  ) + weight + (stableHash(key) % 13) * 0.019;
   const sign = lane === 0 ? curveSign(key) : Math.sign(lane);
+  const rotationKey = aggregate
+    ? `${key}:${index}:${rawWeight}:bundle-rotation`
+    : `${key}:${source}:${target}:rotation`;
   return {
-    curvature: rounded(sign * Math.min(1.45, base + Math.abs(lane) * parallelSpacing)),
-    curveRotation: (stableHash(`${key}:${source}:${target}:rotation`) % 6283) / 1000,
+    curvature: rounded(sign * Math.min(1.72, base + Math.abs(lane) * parallelSpacing)),
+    curveRotation: (stableHash(rotationKey) % 6283) / 1000,
   };
 }
 

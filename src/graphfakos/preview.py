@@ -89,7 +89,8 @@ class LocalPreviewProviderSession:
 
     def reset_graph(self) -> GraphFakosGraph:
         self._graph_override = None
-        return self._imported_graph or self._provider.load_graph(GraphFakosRequest())
+        self._imported_graph = None
+        return self._provider.load_graph(GraphFakosRequest())
 
     def import_payload(
         self,

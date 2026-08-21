@@ -206,7 +206,10 @@ make browser-e2e
 
 The 1M fixture models 1,000 clusters of 1,000 nodes each. The browser receives
 aggregate cluster records, omitted counts, edge bundles, and expansion cursors;
-it does not allocate or claim to draw one million raw WebGL objects.
+it does not allocate or claim to draw one million raw WebGL objects. Benchmark
+envelopes also include deterministic `content_index` previews so local
+inspector, tooltip, and citation flows can be tested against real payload text
+instead of empty graph dots.
 
 Capture dense visual review screenshots:
 

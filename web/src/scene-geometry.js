@@ -23,10 +23,10 @@ export function clusterCenters(nodes) {
   const visibleCount = shownNodes.length;
   const totalWeight = shownNodes.reduce((total, node) => total + clusterWeight(node), 0);
   const spread = visibleCount > 160
-    ? Math.min(42000, 9800 + Math.sqrt(clusterIds.length) * 1920)
+    ? Math.min(7200, 1900 + Math.sqrt(clusterIds.length) * 340)
     : visibleCount > 80
-      ? Math.min(24000, 5200 + Math.sqrt(clusterIds.length) * 1160)
-      : Math.min(9200, 2500 + Math.sqrt(clusterIds.length) * 620);
+      ? Math.min(5000, 1400 + Math.sqrt(clusterIds.length) * 280)
+      : Math.min(2800, 760 + Math.sqrt(clusterIds.length) * 180);
   const goldenAngle = Math.PI * (3 - Math.sqrt(5));
 
   return new Map(clusterIds.map((clusterId, index) => {
@@ -35,12 +35,12 @@ export function clusterCenters(nodes) {
     const mass = Math.sqrt(weight / Math.max(1, totalWeight));
     const ring = Math.sqrt((index + 1.2) / clusterIds.length);
     const wobble = ((stableHash(`${clusterId}:wobble`) % 100) - 50) / 100;
-    const radius = spread * ring * (1.1 + mass * 1.65 + Math.abs(wobble) * 0.42);
+    const radius = spread * ring * (0.92 + mass * 1.35 + Math.abs(wobble) * 0.28);
     const angle = index * goldenAngle + wobble * 0.72;
     return [clusterId, {
       x: Math.cos(angle) * radius,
       y: Math.sin(angle) * radius,
-      z: ((index % 17) - 8) * Math.max(120, spread * 0.018) + wobble * 180,
+      z: ((index % 17) - 8) * Math.max(54, spread * 0.014) + wobble * 90,
     }];
   }));
 }
@@ -50,12 +50,12 @@ export function seededPosition(id, clusterId, centers, nodeCount = 0) {
   const center = centers.get(clusterId || "unclustered") || { x: 0, y: 0, z: 0 };
   const localAngle = (nodeHash % 360) * (Math.PI / 180);
   const count = Math.max(0, Number(nodeCount) || 0);
-  const localSpread = count > 160 ? 180 : count > 80 ? 120 : 76;
+  const localSpread = count > 160 ? 112 : count > 80 ? 88 : 64;
   const localRadius = 9 + (nodeHash % localSpread);
   return {
     x: center.x + Math.cos(localAngle) * localRadius,
     y: center.y + Math.sin(localAngle) * localRadius,
-    z: center.z + ((nodeHash % 61) - 30) * (count > 160 ? 3.8 : 2.4),
+    z: center.z + ((nodeHash % 61) - 30) * (count > 160 ? 2.5 : 1.8),
   };
 }
 
@@ -79,12 +79,12 @@ export function clusterForce(nodes, centers) {
 
 export function forceProfile(visibleCount) {
   if (visibleCount > 160) {
-    return { charge: -4200, linkDistance: 1360, linkStrength: 0.006, clusterStrength: 0.012 };
+    return { charge: -1100, linkDistance: 420, linkStrength: 0.012, clusterStrength: 0.02 };
   }
   if (visibleCount > 80) {
-    return { charge: -1800, linkDistance: 760, linkStrength: 0.018, clusterStrength: 0.024 };
+    return { charge: -700, linkDistance: 300, linkStrength: 0.03, clusterStrength: 0.04 };
   }
-  return { charge: -520, linkDistance: 230, linkStrength: 0.1, clusterStrength: 0.085 };
+  return { charge: -300, linkDistance: 160, linkStrength: 0.1, clusterStrength: 0.085 };
 }
 
 export function applyForces(graph, nodes, centers, visibleCount) {
@@ -119,5 +119,37 @@ export function sceneExtent(nodes) {
       1,
       80_000,
     ),
+  };
+}
+
+export function projectedSceneMetrics(points, viewport) {
+  const width = Math.max(1, Number(viewport?.width) || 1);
+  const height = Math.max(1, Number(viewport?.height) || 1);
+  const visible = points.filter((point) => (
+    Number.isFinite(point?.x)
+    && Number.isFinite(point?.y)
+    && point.x >= 0
+    && point.x <= width
+    && point.y >= 0
+    && point.y <= height
+  ));
+  if (!visible.length) return { coverage: 0, occupancy: 0, visibleCount: 0 };
+  const bounds = visible.reduce((result, point) => ({
+    minX: Math.min(result.minX, point.x),
+    maxX: Math.max(result.maxX, point.x),
+    minY: Math.min(result.minY, point.y),
+    maxY: Math.max(result.maxY, point.y),
+  }), {
+    minX: width,
+    maxX: 0,
+    minY: height,
+    maxY: 0,
+  });
+  const horizontal = clamp((bounds.maxX - bounds.minX) / width, 0, 1);
+  const vertical = clamp((bounds.maxY - bounds.minY) / height, 0, 1);
+  return {
+    coverage: Math.max(horizontal, vertical),
+    occupancy: horizontal * vertical,
+    visibleCount: visible.length,
   };
 }

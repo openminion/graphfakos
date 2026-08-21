@@ -9,6 +9,7 @@ from typing import Any, Mapping
 from ..models import (
     GraphFakosCitation,
     GraphFakosEdge,
+    GraphFakosExpansionRequest,
     GraphFakosGraph,
     GraphFakosNode,
     GraphFakosProvenance,
@@ -30,6 +31,7 @@ class ProviderEnvelopeGraphProvider:
         "large_graph_lod",
         "content_preview",
         "evidence",
+        "lazy_expansion",
         "static_export",
         "local_preview",
     )
@@ -48,6 +50,46 @@ class ProviderEnvelopeGraphProvider:
         graph = graph_from_provider_envelope(
             self._envelope, source_path=str(self._path)
         )
+        validate_graph(graph)
+        return graph
+
+    def expand_graph(
+        self,
+        request: GraphFakosRequest,
+        expansion: GraphFakosExpansionRequest,
+    ) -> GraphFakosGraph | None:
+        cursor = expansion.cursor or _cluster_cursor(
+            self._envelope,
+            expansion.source_id,
+        )
+        page = _mapping(_mapping(self._envelope.get("expansions")).get(cursor))
+        if not page:
+            return None
+        cluster_id = expansion.source_id.removeprefix("cluster:")
+        source_cluster = next(
+            (
+                _mapping(cluster)
+                for cluster in self._envelope.get("clusters") or ()
+                if _mapping(cluster).get("id") == cluster_id
+            ),
+            None,
+        )
+        if source_cluster is None:
+            return None
+        envelope = {
+            **self._envelope,
+            "snapshot_id": (
+                f"{self._envelope.get('snapshot_id', 'provider-envelope')}"
+                f":expanded:{expansion.source_id}"
+            ),
+            "clusters": [source_cluster],
+            "nodes": list(page.get("nodes") or ()),
+            "edges": list(page.get("edges") or ()),
+            "edge_bundles": [],
+            "content_index": _mapping(page.get("content_index")),
+            "omitted": [],
+        }
+        graph = graph_from_provider_envelope(envelope, source_path=str(self._path))
         validate_graph(graph)
         return graph
 
@@ -282,6 +324,15 @@ def _capabilities(envelope: Mapping[str, Any]) -> tuple[str, ...]:
     }
     enabled = {key for key, value in capability_payload.items() if bool(value)}
     return tuple(sorted(defaults | enabled))
+
+
+def _cluster_cursor(envelope: Mapping[str, Any], source_id: str) -> str:
+    cluster_id = source_id.removeprefix("cluster:")
+    for raw_cluster in envelope.get("clusters") or ():
+        cluster = _mapping(raw_cluster)
+        if cluster.get("id") == cluster_id:
+            return str(cluster.get("expansion_cursor") or "")
+    return ""
 
 
 def _graph_label(envelope: Mapping[str, Any]) -> str:

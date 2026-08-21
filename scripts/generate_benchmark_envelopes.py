@@ -19,38 +19,84 @@ def cluster_kind(index: int) -> str:
     return ("memory", "note", "file", "task", "provider", "warning")[index % 6]
 
 
+def expansion_page(cluster_id: str, kind: str, cluster_index: int) -> dict[str, object]:
+    nodes = []
+    edges = []
+    content_index = {}
+    source_id = f"cluster:{cluster_id}"
+    for offset in range(8):
+        node_id = f"{cluster_id}:detail:{offset + 1:02d}"
+        content = (
+            f"Expanded {kind} record {offset + 1} from {cluster_id}. "
+            "This bounded fixture record represents provider-streamed detail."
+        )
+        nodes.append(
+            {
+                "id": node_id,
+                "label": f"{kind.title()} detail {cluster_index + 1}.{offset + 1}",
+                "kind": kind,
+                "cluster_id": cluster_id,
+                "expansion_source_id": source_id,
+                "summary": content,
+                "source_kind": "synthetic-provider",
+                "freshness": "current",
+                "confidence": round(0.95 - offset * 0.03, 2),
+            }
+        )
+        edges.append(
+            {
+                "id": f"expanded-edge:{cluster_id}:{offset + 1:02d}",
+                "source_id": source_id if offset == 0 else nodes[offset - 1]["id"],
+                "target_id": node_id,
+                "kind": "contains" if offset == 0 else "relates",
+            }
+        )
+        content_index[node_id] = {
+            "title": f"{kind.title()} detail {cluster_index + 1}.{offset + 1}",
+            "preview": content,
+            "text": content,
+            "source_ref": {
+                "path": f"synthetic/{kind}/{cluster_id}/{offset + 1:02d}.md",
+                "line": 1,
+            },
+        }
+    return {"nodes": nodes, "edges": edges, "content_index": content_index}
+
+
 def benchmark_envelope(total_nodes: int) -> dict[str, object]:
     nodes_per_cluster = nodes_per_cluster_for(total_nodes)
     cluster_count = total_nodes // nodes_per_cluster
     visible_cluster_count = min(cluster_count, 240)
+    expansion_cluster_count = min(visible_cluster_count, 24)
     total_edges = int(total_nodes * 1.45)
     clusters = []
     nodes = []
     content_index = {}
+    expansions = {}
     for index in range(cluster_count):
         cluster_id = f"scale-{index + 1:04d}"
         kind = cluster_kind(index)
         centroid_angle = index * 2.399963229728653
         centroid_ring = ((index % 37) + 8) / 45
-        clusters.append(
-            {
-                "id": cluster_id,
-                "label": f"Scale {index + 1:04d}",
-                "kind": kind,
-                "node_count": nodes_per_cluster,
-                "edge_count": int(nodes_per_cluster * 1.45),
-                "color_hint": "",
-                "centroid_hint": {
-                    "x": round(0.5 + 0.46 * centroid_ring * cos(centroid_angle), 4),
-                    "y": round(0.5 + 0.42 * centroid_ring * sin(centroid_angle), 4),
-                },
-                "expansion_cursor": f"{cluster_id}:offset:0",
-                "provider_payload": {
-                    "sample_window": f"{index * nodes_per_cluster}-{(index + 1) * nodes_per_cluster - 1}",
-                    "density": "large" if total_nodes >= 200_000 else "demo",
-                },
-            }
-        )
+        cluster = {
+            "id": cluster_id,
+            "label": f"Scale {index + 1:04d}",
+            "kind": kind,
+            "node_count": nodes_per_cluster,
+            "edge_count": int(nodes_per_cluster * 1.45),
+            "color_hint": "",
+            "centroid_hint": {
+                "x": round(0.5 + 0.46 * centroid_ring * cos(centroid_angle), 4),
+                "y": round(0.5 + 0.42 * centroid_ring * sin(centroid_angle), 4),
+            },
+            "provider_payload": {
+                "sample_window": f"{index * nodes_per_cluster}-{(index + 1) * nodes_per_cluster - 1}",
+                "density": "large" if total_nodes >= 200_000 else "demo",
+            },
+        }
+        if index < expansion_cluster_count:
+            cluster["expansion_cursor"] = f"{cluster_id}:offset:0"
+        clusters.append(cluster)
         if index < visible_cluster_count:
             content = (
                 f"{kind.title()} island {index + 1:04d} summarizes "
@@ -80,6 +126,12 @@ def benchmark_envelope(total_nodes: int) -> dict[str, object]:
                     "line": 1 + index % 37,
                 },
             }
+            if index < expansion_cluster_count:
+                expansions[f"{cluster_id}:offset:0"] = expansion_page(
+                    cluster_id,
+                    kind,
+                    index,
+                )
     edge_bundles = []
     for index in range(1, visible_cluster_count + 1):
         targets = {((index % visible_cluster_count) + 1)}
@@ -132,12 +184,17 @@ def benchmark_envelope(total_nodes: int) -> dict[str, object]:
         "edges": [],
         "clusters": clusters,
         "content_index": content_index,
+        "expansions": expansions,
         "edge_bundles": edge_bundles,
         "omitted": [
             {"reason": "node_budget", "count": max(0, total_nodes - visible_nodes)},
             {"reason": "edge_budget", "count": max(0, total_edges - len(edge_bundles))},
         ],
-        "capabilities": {"content_preview": True, "durable_mutation": False},
+        "capabilities": {
+            "content_preview": True,
+            "durable_mutation": False,
+            "lazy_expansion": True,
+        },
     }
 
 

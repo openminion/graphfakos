@@ -436,7 +436,7 @@ def test_local_preview_imports_graph_artifact_and_keeps_it_across_routes() -> No
     assert imported_graph.label in html
     assert (
         handle_provider_action(session, "/api/reset", {})["graph"]["graph_id"]
-        == imported_graph.graph_id
+        == FixtureGraphProvider().load_graph(GraphFakosRequest()).graph_id
     )
 
 

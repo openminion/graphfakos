@@ -1485,6 +1485,7 @@
       score: number(node.dataset.score, 0),
       summary: node.dataset.summary || "",
       contentPreview: node.dataset.contentPreview || node.dataset.summary || "",
+      aggregate: node.dataset.kind === "cluster",
       priority: node.dataset.labelPriority || "ambient",
       selected: state.selected_node_ids.includes(node.dataset.nodeId || ""),
       hidden: state.hidden_groups.includes(node.dataset.kind || "")
@@ -1501,12 +1502,42 @@
     })),
   });
 
-  const webglSceneFromGraph = (graph, state) => ({
-    ...webglDisplayState(state, state.scene_level || "overview"),
-    nodes: (graph.nodes || []).map((node) => ({
+  const graphSliceForState = (graph, state) => {
+    const nodes = graph.nodes || [];
+    const limit = Math.max(1, number(state.render_limit, 240));
+    if (nodes.length <= limit) return { nodes, edges: graph.edges || [] };
+    const selected = new Set(state.selected_node_ids || []);
+    const visibleNodes = [...nodes]
+      .sort((left, right) => {
+        const rank = (node) => (
+          (selected.has(node.id) ? 10_000 : 0)
+          + (selected.has(node.provider_payload?.expansion_source_id) ? 8_000 : 0)
+          + (node.kind === "cluster" ? 4_000 : 0)
+          + number(node.score, 0) * 100
+        );
+        return rank(right) - rank(left) || String(left.id).localeCompare(String(right.id));
+      })
+      .slice(0, limit);
+    const visibleIds = new Set(visibleNodes.map((node) => node.id));
+    return {
+      nodes: visibleNodes,
+      edges: (graph.edges || []).filter((edge) => (
+        visibleIds.has(edge.source_id) && visibleIds.has(edge.target_id)
+      )),
+    };
+  };
+
+  const webglSceneFromGraph = (graph, state) => {
+    const slice = graphSliceForState(graph, state);
+    return {
+      ...webglDisplayState(state, state.scene_level || "overview"),
+      nodes: slice.nodes.map((node) => ({
       id: node.id,
       label: node.label || node.id,
       kind: node.kind || "node",
+      colorKind: node.kind === "cluster"
+        ? node.provider_payload?.kind || "cluster"
+        : node.kind || "node",
       clusterId: node.provider_payload?.cluster_id || node.visual?.group || node.kind || "",
       degree: 0,
       score: number(node.score, 0),
@@ -1520,13 +1551,15 @@
         || node.summary
         || "",
       provider_payload: clone(node.provider_payload),
+      aggregate: node.kind === "cluster" || number(node.provider_payload?.node_count, 0) > 1,
+      rawNodeCount: number(node.provider_payload?.node_count, 1),
       priority: state.selected_node_ids.includes(node.id) ? "focus" : "ambient",
       selected: state.selected_node_ids.includes(node.id),
       hidden: state.hidden_groups.includes(node.kind || "")
         || state.hidden_groups.includes(node.provider_payload?.cluster_id || node.visual?.group || "")
         || node.provider_payload?.viewer_hidden === true,
-    })),
-    links: (graph.edges || []).map((edge) => ({
+      })),
+      links: slice.edges.map((edge) => ({
       id: edge.id,
       sourceId: edge.source_id,
       targetId: edge.target_id,
@@ -1535,8 +1568,9 @@
       weight: number(edge.weight || edge.provider_payload?.edge_count, 1),
       selected: edge.id === state.selected_edge_id,
       hidden: edge.provider_payload?.viewer_hidden === true,
-    })),
-  });
+      })),
+    };
+  };
 
   class GraphFakosViewer extends (typeof HTMLElement === "undefined" ? class {} : HTMLElement) {
     #wired = false;

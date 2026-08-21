@@ -31,6 +31,23 @@
     result_revision: { value: viewer.getState?.().live_revision || "" },
     operations: [{ kind: "snapshot_reset", graph }],
   });
+  const mergedById = (left, right) => [
+    ...new Map([...(left || []), ...(right || [])].map((item) => [item.id, item])).values(),
+  ];
+  const mergeGraphs = (current, expanded) => ({
+    ...current,
+    ...expanded,
+    nodes: mergedById(current?.nodes, expanded?.nodes),
+    edges: mergedById(current?.edges, expanded?.edges),
+    provenance: mergedById(current?.provenance, expanded?.provenance),
+    citations: mergedById(current?.citations, expanded?.citations),
+    warnings: [...new Set([...(current?.warnings || []), ...(expanded?.warnings || [])])],
+    stats: { ...(current?.stats || {}), ...(expanded?.stats || {}) },
+    provider_payload: {
+      ...(current?.provider_payload || {}),
+      ...(expanded?.provider_payload || {}),
+    },
+  });
   const filteredGraph = (viewer, keep) => ({
     ...viewer.graph,
     nodes: (viewer.graph?.nodes || []).map((node) => ({
@@ -71,17 +88,24 @@
     if (action === "expand") {
       const sourceId = [...selected][0];
       if (!sourceId) return;
+      const source = (viewer.graph?.nodes || []).find((node) => node.id === sourceId);
+      const cursor = source?.provider_payload?.expansion_cursor || "";
       button.disabled = true;
       try {
         const response = await fetch("/api/expand", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ source_id: sourceId, depth: 1 }),
+          body: JSON.stringify({
+            source_id: sourceId,
+            depth: 1,
+            cursor,
+          }),
         });
         const result = await response.json();
         if (!response.ok || !result.ok) throw new Error(result.error || "Expansion failed");
-        if (status) status.textContent = `Loaded provider details around ${sourceId}.`;
-        await viewer.navigate?.("/explore");
+        applyGraph(viewer, mergeGraphs(viewer.graph, result.graph));
+        viewer.dispatch({ name: "expand", target_id: sourceId });
+        if (status) status.textContent = `Loaded provider details around ${sourceId} without moving the camera.`;
       } catch (error) {
         if (status) status.textContent = String(error.message || error);
       } finally {

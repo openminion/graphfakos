@@ -4,15 +4,19 @@ import { linkVisibleForDetail, shapeLinks } from "../src/link-shape.js";
 import {
   clusterCenters,
   forceProfile,
+  projectedSceneMetrics,
   sceneExtent,
   seededPosition,
 } from "../src/scene-geometry.js";
-import { nodeColorForKind } from "../src/visual-contrast.js";
+import { contrastRatio, nodeColorForKind } from "../src/visual-contrast.js";
 import {
   detailLevelForCamera,
+  detailLevelForPerformance,
   detailLevelForSceneLevel,
   labelBudgetForDetail,
+  limitDetailLevel,
   modeSummaryForSceneLevel,
+  nodeRelSizeForCamera,
   nodeScaleForCount,
   semanticZoom,
   zoomStableNodeScale,
@@ -31,17 +35,17 @@ test("maps camera distance to semantic graph detail", () => {
     .toBe("detail");
   expect(detailLevelForCamera({ nodeCount: 240, referenceDistance: 900, cameraDistance: 360 }))
     .toBe("precision");
-  expect(labelBudgetForDetail("overview", 1, 240)).toBe(1);
-  expect(labelBudgetForDetail("detail", 1, 240)).toBe(1);
-  expect(labelBudgetForDetail("precision", 1, 1_000)).toBeLessThan(4);
+  expect(labelBudgetForDetail("overview", 1, 240)).toBe(2);
+  expect(labelBudgetForDetail("detail", 1, 240)).toBe(8);
+  expect(labelBudgetForDetail("precision", 1, 1_000)).toBeLessThan(9);
   expect(detailLevelForSceneLevel("islands", "precision")).toBe("overview");
   expect(detailLevelForSceneLevel("cluster", "overview")).toBe("balanced");
   expect(detailLevelForSceneLevel("local", "overview")).toBe("detail");
   expect(modeSummaryForSceneLevel("precision")).toContain("inspection");
   expect(nodeScaleForCount(12)).toBeGreaterThan(nodeScaleForCount(48));
   expect(nodeScaleForCount(48)).toBeGreaterThan(nodeScaleForCount(240));
-  expect(nodeScaleForCount(240)).toBeLessThan(0.25);
-  expect(nodeScaleForCount(1_000)).toBeLessThan(0.1);
+  expect(nodeScaleForCount(240)).toBe(0.5);
+  expect(nodeScaleForCount(1_000)).toBe(0.3);
 });
 
 test("spreads dense 3D scenes into separated cluster islands", () => {
@@ -54,15 +58,34 @@ test("spreads dense 3D scenes into separated cluster islands", () => {
   const first = seededPosition("node-0", "cluster-0", centers, nodes.length);
   const later = seededPosition("node-120", "cluster-10", centers, nodes.length);
 
-  expect(forceProfile(nodes.length).linkDistance).toBeGreaterThan(1_000);
-  expect(Math.hypot(first.x - later.x, first.y - later.y)).toBeGreaterThan(6_000);
-  expect(sceneExtent([first, later]).radius).toBeGreaterThan(3_000);
+  expect(forceProfile(nodes.length).linkDistance).toBeGreaterThan(300);
+  expect(Math.hypot(first.x - later.x, first.y - later.y)).toBeGreaterThan(900);
+  expect(sceneExtent([first, later]).radius).toBeGreaterThan(450);
 });
 
 test("keeps node marks readable while camera zoom changes", () => {
   expect(zoomStableNodeScale(4)).toBeLessThan(zoomStableNodeScale(1));
   expect(zoomStableNodeScale(0.25)).toBeGreaterThan(zoomStableNodeScale(1));
   expect(zoomStableNodeScale(100)).toBeGreaterThanOrEqual(0.24);
+  expect(nodeRelSizeForCamera({ cameraDistance: 8_000, viewportHeight: 700, nodeCount: 240 }))
+    .toBeGreaterThan(nodeRelSizeForCamera({ cameraDistance: 800, viewportHeight: 700, nodeCount: 240 }));
+});
+
+test("caps semantic detail when measured frame pressure rises", () => {
+  expect(detailLevelForPerformance("precision", { fps: 22, frameMs: 44 })).toBe("detail");
+  expect(detailLevelForPerformance("detail", { fps: 60, frameMs: 16 })).toBe("detail");
+  expect(detailLevelForPerformance("balanced", { fps: 40, frameMs: 25 })).toBe("balanced");
+  expect(limitDetailLevel("precision", "balanced")).toBe("balanced");
+});
+
+test("measures projected scene coverage without counting off-screen marks", () => {
+  const metrics = projectedSceneMetrics(
+    [{ x: 100, y: 100 }, { x: 900, y: 500 }, { x: -10, y: 20 }],
+    { width: 1_000, height: 600 },
+  );
+  expect(metrics.visibleCount).toBe(2);
+  expect(metrics.coverage).toBeCloseTo(0.8);
+  expect(metrics.occupancy).toBeGreaterThan(0.5);
 });
 
 test("progressive edge detail preserves aggregates and active context", () => {
@@ -78,6 +101,9 @@ test("progressive edge detail preserves aggregates and active context", () => {
 test("keeps dense cluster summaries brighter than generic graph items", () => {
   expect(nodeColorForKind("cluster")).toBe("#8fdaff");
   expect(nodeColorForKind("unknown")).toBe("#a8c5f2");
+  for (const kind of ["cluster", "provider", "memory", "warning", "unknown"]) {
+    expect(contrastRatio(nodeColorForKind(kind), "#070d24")).toBeGreaterThan(4.5);
+  }
 });
 
 test("chooses the nearest visible node in a screen direction", () => {
@@ -687,6 +713,8 @@ test("runs selection, distribution, perspective, and import workflows", async ({
   expect(response.ok()).toBe(true);
   expect((await response.json()).ok).toBe(true);
   await expect(page).toHaveURL(/\/explore/);
+  const reset = await page.request.post("/api/reset", { data: {} });
+  expect(reset.ok()).toBe(true);
 });
 
 test("loads provider-backed details and reports live rendering performance", async ({ page }) => {
@@ -697,12 +725,22 @@ test("loads provider-backed details and reports live rendering performance", asy
     name: "select-node",
     target_id: "provider:cluster-1",
   }));
+  const before = await viewer.evaluate((element) => ({
+    camera: element.exportNavigationTrail().current.camera,
+    selected: element.getState().selected_node_ids,
+  }));
 
   const expansionResponse = page.waitForResponse((response) => response.url().endsWith("/api/expand"));
   await page.locator("[data-gf-selection-action='expand']").click();
   const response = await expansionResponse;
   expect(response.ok()).toBe(true);
   expect((await response.json()).ok).toBe(true);
+  const after = await viewer.evaluate((element) => ({
+    camera: element.exportNavigationTrail().current.camera,
+    selected: element.getState().selected_node_ids,
+  }));
+  expect(after.selected).toEqual(before.selected);
+  expect(after.camera.distance).toBeCloseTo(before.camera.distance, 0);
 
   const performance = page.locator("[data-gf-performance-hud]");
   await performance.locator("summary").click();
@@ -711,6 +749,43 @@ test("loads provider-backed details and reports live rendering performance", asy
   await expect(performance.locator("[data-gf-perf-detail]")).toHaveText(
     /overview|balanced|detail|precision/,
   );
+  expect((await page.request.post("/api/reset", { data: {} })).ok()).toBe(true);
+});
+
+test("expands a large provider island without replacing camera or selection", async ({ page }) => {
+  test.setTimeout(60_000);
+  await page.goto(testServerUrl("scale200k"));
+  const shell = page.locator(".gf-canvas-shell");
+  const viewer = page.locator("graphfakos-viewer");
+  await expect(shell).toHaveAttribute("data-engine-settled", "true", { timeout: 30_000 });
+  const before = await viewer.evaluate((element) => {
+    element.dispatch({ name: "select-node", target_id: "cluster:scale-0001" });
+    return {
+      camera: element.exportNavigationTrail().current.camera,
+      nodeCount: element.graph.nodes.length,
+    };
+  });
+  const expansionResponse = page.waitForResponse((response) => response.url().endsWith("/api/expand"));
+  await page.locator("[data-gf-selection-action='expand']").click();
+  expect((await expansionResponse).ok()).toBe(true);
+  await expect.poll(() => viewer.evaluate((element) => (
+    element.graph.nodes.filter((node) => (
+      node.provider_payload?.expansion_source_id === "cluster:scale-0001"
+    )).length
+  ))).toBe(8);
+  const after = await viewer.evaluate((element) => ({
+    camera: element.exportNavigationTrail().current.camera,
+    nodeCount: element.graph.nodes.length,
+    selected: element.getState().selected_node_ids,
+  }));
+  expect(after.nodeCount).toBe(before.nodeCount + 8);
+  expect(after.selected).toContain("cluster:scale-0001");
+  expect(after.camera.distance).toBeCloseTo(before.camera.distance, 0);
+  await expect(shell).toHaveAttribute("data-engine-settled", "true", { timeout: 30_000 });
+  expect(Number(await shell.getAttribute("data-visible-marks"))).toBeLessThanOrEqual(240);
+  expect((await page.request.post(`${testServerUrl("scale200k").replace(/\/explore$/, "")}/api/reset`, {
+    data: {},
+  })).ok()).toBe(true);
 });
 
 test("preserves theme and group visibility across viewer routes", async ({ page }) => {

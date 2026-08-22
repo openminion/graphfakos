@@ -60,7 +60,7 @@ function createLabelObject(node) {
   element.append(title, context);
   const object = new CSS2DObject(element);
   object.position.set(0, 8, 0);
-  return { element, object, title, context };
+  return { element, hideTimer: 0, object, title, context };
 }
 
 function createNodeObject() {
@@ -71,10 +71,16 @@ function createNodeObject() {
   return { group, label: null };
 }
 
-function updateNodeObject(record, node, showLabel, hovered, selected, related, previewed) {
+function updateNodeObject(record, node, showLabel, hovered, selected, related, previewed, exitDelay) {
   if (!showLabel && record.label) {
-    record.group.remove(record.label.object);
-    record.label = null;
+    const label = record.label;
+    label.element.dataset.visible = "false";
+    if (!label.hideTimer) {
+      label.hideTimer = window.setTimeout(() => {
+        record.group.remove(label.object);
+        if (record.label === label) record.label = null;
+      }, exitDelay);
+    }
   }
   if (!showLabel) return record.group;
   if (!record.label) {
@@ -82,12 +88,15 @@ function updateNodeObject(record, node, showLabel, hovered, selected, related, p
     record.group.add(record.label.object);
   }
   const { element, title, context } = record.label;
+  window.clearTimeout(record.label.hideTimer);
+  record.label.hideTimer = 0;
   element.dataset.nodeId = node.id;
   element.dataset.priority = node.priority || "ambient";
   element.dataset.hovered = String(hovered);
   element.dataset.selected = String(selected);
   element.dataset.related = String(related);
   element.dataset.previewed = String(previewed);
+  element.dataset.visible = "true";
   title.textContent = node.label;
   context.textContent = labelContext(node);
   return record.group;
@@ -217,6 +226,7 @@ function mount(element, scene, callbacks = {}) {
   let labelFrame = 0;
   let labelLayoutFrame = 0;
   let settleTimer = 0;
+  let detailTimer = 0;
   let stableProjectedFrames = 0;
   let previousProjectedMetrics = null;
   let cameraPreserved = false;
@@ -369,6 +379,7 @@ function mount(element, scene, callbacks = {}) {
       selected,
       related,
       previewed,
+      reducedMotion ? 0 : 160,
     );
   };
   const nodeSize = (node) => {
@@ -686,6 +697,7 @@ function mount(element, scene, callbacks = {}) {
       nodeCount: visibleNodeCount(),
       referenceDistance: semanticReferenceDistance || camera.distance,
       cameraDistance: camera.distance,
+      currentLevel: semanticDetail,
     });
     const requestedLevel =
       activeScene.sceneLevel && activeScene.sceneLevel !== "overview"
@@ -711,7 +723,12 @@ function mount(element, scene, callbacks = {}) {
     graph.linkVisibility(linkVisible);
     if (changed) {
       visibleLabelIds = labelIds(nodes, activeScene, semanticDetail);
-      graph.linkOpacity(sceneLinkOpacity());
+      graph.linkOpacity(sceneLinkOpacity() * (reducedMotion ? 1 : 0.45));
+      window.clearTimeout(detailTimer);
+      detailTimer = window.setTimeout(
+        () => graph.linkOpacity(sceneLinkOpacity()),
+        reducedMotion ? 0 : 150,
+      );
       refreshVisuals();
     }
     callbacks.onDetailChange?.({
@@ -858,6 +875,7 @@ function mount(element, scene, callbacks = {}) {
   };
   const observeProjectedStability = () => {
     const metrics = updateProjectedMetrics();
+    if (hoveredNodeId || previewedNodeId) placeHoveredLabel();
     const stable = previousProjectedMetrics
       && Math.abs(metrics.coverage - previousProjectedMetrics.coverage) < 0.002
       && Math.abs(metrics.occupancy - previousProjectedMetrics.occupancy) < 0.002
@@ -1044,8 +1062,7 @@ function mount(element, scene, callbacks = {}) {
     },
     reset: () => {
       markCameraInteraction();
-      graph.cameraPosition({ x: 0, y: 0, z: 720 }, { x: 0, y: 0, z: 0 }, 500);
-      graph.d3ReheatSimulation();
+      frameGraph(500, { resetReference: true });
     },
     resetOrientation: () => {
       markCameraInteraction();
@@ -1067,21 +1084,51 @@ function mount(element, scene, callbacks = {}) {
         stableProjectedFrames = 0;
         previousProjectedMetrics = null;
         if (shell) shell.dataset.engineSettled = "false";
-        const positions = new Map(nodes.map((node) => [node.id, node]));
+        const positions = new Map(nodes.map((node) => [node.id, {
+          x: node.x,
+          y: node.y,
+          z: node.z,
+          fx: node.fx,
+          fy: node.fy,
+          fz: node.fz,
+        }]));
+        const nextNodeIds = new Set(nextScene.nodes.map((node) => node.id));
+        const additiveExpansion = [...positions.keys()].every((nodeId) => nextNodeIds.has(nodeId))
+          && nextScene.nodes.some((node) => (
+            !positions.has(node.id) && node.provider_payload?.expansion_source_id
+          ));
         centers = clusterCenters(nextScene.nodes);
-        nodes = nextScene.nodes.map((node) => ({
-          ...node,
-          ...(positions.get(node.id) || seededPosition(node.id, node.clusterId || node.kind, centers, nextScene.nodes.length)),
-        }));
+        nodes = nextScene.nodes.map((node) => {
+          const previous = positions.get(node.id);
+          if (previous) return { ...node, ...previous };
+          const seeded = seededPosition(
+            node.id,
+            node.clusterId || node.kind,
+            centers,
+            nextScene.nodes.length,
+          );
+          const source = positions.get(node.provider_payload?.expansion_source_id);
+          if (!source) return { ...node, ...seeded };
+          const center = centers.get(node.clusterId || node.kind) || { x: 0, y: 0, z: 0 };
+          return {
+            ...node,
+            x: source.x + (seeded.x - center.x) * 0.55,
+            y: source.y + (seeded.y - center.y) * 0.55,
+            z: source.z + (seeded.z - center.z) * 0.55,
+          };
+        });
         const activeNodeIds = new Set(nodes.map((node) => node.id));
         for (const nodeId of nodeObjects.keys()) {
-          if (!activeNodeIds.has(nodeId)) nodeObjects.delete(nodeId);
+          if (activeNodeIds.has(nodeId)) continue;
+          window.clearTimeout(nodeObjects.get(nodeId)?.label?.hideTimer);
+          nodeObjects.delete(nodeId);
         }
         links = shapeLinks(nodes, nextScene.links);
         if (!nodes.some((node) => node.id === previewedNodeId && !node.hidden)) previewedNodeId = "";
         graph.graphData({ nodes, links });
         applyForces(graph, nodes, centers, visibleNodeCount());
-        if (!reducedMotion) graph.d3ReheatSimulation();
+        if (!reducedMotion && !additiveExpansion) graph.d3ReheatSimulation();
+        else markSceneSettled(160);
       }
       refreshInteractionContext();
       visibleLabelIds = labelIds(nodes, activeScene, semanticDetail);
@@ -1098,6 +1145,8 @@ function mount(element, scene, callbacks = {}) {
       layoutJob?.cancel();
       window.clearTimeout(frameTimer);
       window.clearTimeout(settleTimer);
+      window.clearTimeout(detailTimer);
+      for (const record of nodeObjects.values()) window.clearTimeout(record.label?.hideTimer);
       window.cancelAnimationFrame(cameraFrame);
       window.cancelAnimationFrame(labelFrame);
       window.cancelAnimationFrame(labelLayoutFrame);

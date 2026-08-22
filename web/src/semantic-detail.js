@@ -12,6 +12,8 @@ const sceneLevelDetails = {
 };
 
 const detailLevels = ["overview", "balanced", "detail", "precision"];
+const detailEnterZoom = { balanced: 0.78, detail: 1.45, precision: 2.4 };
+const detailLeaveZoom = { balanced: 0.64, detail: 1.22, precision: 2.05 };
 
 const clamp = (value, minimum, maximum) => Math.max(minimum, Math.min(maximum, value));
 
@@ -24,13 +26,27 @@ export function semanticZoom(referenceDistance, cameraDistance) {
   return clamp(reference / distance, 0.2, 8);
 }
 
-export function detailLevelForCamera({ nodeCount, referenceDistance, cameraDistance }) {
+export function detailLevelForCamera({
+  nodeCount,
+  referenceDistance,
+  cameraDistance,
+  currentLevel = "",
+}) {
   const count = Math.max(0, Number(nodeCount) || 0);
   const zoom = semanticZoom(referenceDistance, cameraDistance);
-  if (zoom >= 2.25) return "precision";
-  if (zoom >= 1.35 || count <= 48) return "detail";
-  if (zoom >= 0.72 || count <= 110) return "balanced";
-  return "overview";
+  let nextLevel = "overview";
+  if (zoom >= 2.25) nextLevel = "precision";
+  else if (zoom >= 1.35 || count <= 48) nextLevel = "detail";
+  else if (zoom >= 0.72 || count <= 110) nextLevel = "balanced";
+  if (!detailLevels.includes(currentLevel) || count <= 110 || currentLevel === nextLevel) {
+    return nextLevel;
+  }
+  const currentIndex = detailLevels.indexOf(currentLevel);
+  const nextIndex = detailLevels.indexOf(nextLevel);
+  if (nextIndex > currentIndex) {
+    return zoom >= detailEnterZoom[nextLevel] ? nextLevel : currentLevel;
+  }
+  return zoom < detailLeaveZoom[currentLevel] ? nextLevel : currentLevel;
 }
 
 export function detailLevelForSceneLevel(sceneLevel, autoLevel = "overview") {

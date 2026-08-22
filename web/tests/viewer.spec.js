@@ -35,6 +35,30 @@ test("maps camera distance to semantic graph detail", () => {
     .toBe("detail");
   expect(detailLevelForCamera({ nodeCount: 240, referenceDistance: 900, cameraDistance: 360 }))
     .toBe("precision");
+  expect(detailLevelForCamera({
+    nodeCount: 240,
+    referenceDistance: 900,
+    cameraDistance: 900 / 1.4,
+    currentLevel: "balanced",
+  })).toBe("balanced");
+  expect(detailLevelForCamera({
+    nodeCount: 240,
+    referenceDistance: 900,
+    cameraDistance: 900 / 1.5,
+    currentLevel: "balanced",
+  })).toBe("detail");
+  expect(detailLevelForCamera({
+    nodeCount: 240,
+    referenceDistance: 900,
+    cameraDistance: 900 / 1.3,
+    currentLevel: "detail",
+  })).toBe("detail");
+  expect(detailLevelForCamera({
+    nodeCount: 240,
+    referenceDistance: 900,
+    cameraDistance: 900 / 1.2,
+    currentLevel: "detail",
+  })).toBe("balanced");
   expect(labelBudgetForDetail("overview", 1, 240)).toBe(2);
   expect(labelBudgetForDetail("detail", 1, 240)).toBe(8);
   expect(labelBudgetForDetail("precision", 1, 1_000)).toBeLessThan(9);
@@ -757,6 +781,9 @@ test("expands a large provider island without replacing camera or selection", as
   await page.goto(testServerUrl("scale200k"));
   const shell = page.locator(".gf-canvas-shell");
   const viewer = page.locator("graphfakos-viewer");
+  const minimapNode = page.locator(
+    "[data-gf-minimap-map] circle[data-minimap-node-id='cluster:scale-0001']",
+  );
   await expect(shell).toHaveAttribute("data-engine-settled", "true", { timeout: 30_000 });
   const before = await viewer.evaluate((element) => {
     element.dispatch({ name: "select-node", target_id: "cluster:scale-0001" });
@@ -765,6 +792,11 @@ test("expands a large provider island without replacing camera or selection", as
       nodeCount: element.graph.nodes.length,
     };
   });
+  await expect(minimapNode).toHaveAttribute("data-selected", "true");
+  const beforeMapPosition = await minimapNode.evaluate((node) => ({
+    x: Number(node.getAttribute("cx")),
+    y: Number(node.getAttribute("cy")),
+  }));
   const expansionResponse = page.waitForResponse((response) => response.url().endsWith("/api/expand"));
   await page.locator("[data-gf-selection-action='expand']").click();
   expect((await expansionResponse).ok()).toBe(true);
@@ -781,7 +813,17 @@ test("expands a large provider island without replacing camera or selection", as
   expect(after.nodeCount).toBe(before.nodeCount + 8);
   expect(after.selected).toContain("cluster:scale-0001");
   expect(after.camera.distance).toBeCloseTo(before.camera.distance, 0);
+  expect(after.camera.yaw).toBeCloseTo(before.camera.yaw, 1);
+  expect(after.camera.pitch).toBeCloseTo(before.camera.pitch, 1);
   await expect(shell).toHaveAttribute("data-engine-settled", "true", { timeout: 30_000 });
+  const afterMapPosition = await minimapNode.evaluate((node) => ({
+    x: Number(node.getAttribute("cx")),
+    y: Number(node.getAttribute("cy")),
+  }));
+  expect(Math.hypot(
+    afterMapPosition.x - beforeMapPosition.x,
+    afterMapPosition.y - beforeMapPosition.y,
+  )).toBeLessThan(6);
   expect(Number(await shell.getAttribute("data-visible-marks"))).toBeLessThanOrEqual(240);
   expect((await page.request.post(`${testServerUrl("scale200k").replace(/\/explore$/, "")}/api/reset`, {
     data: {},
@@ -1424,6 +1466,12 @@ test("reveals more dense-scene context as the 3D camera approaches", async ({ pa
   expect(Number(await graph.getAttribute("data-reference-distance"))).toBeCloseTo(referenceDistance, 1);
   expect(Number(await graph.getAttribute("data-semantic-zoom"))).toBeGreaterThan(1.3);
   expect(await page.locator(".gf-webgl-label").count()).toBeGreaterThan(initialLabels);
+
+  await page.locator("summary[aria-label='More graph controls']").click();
+  await page.getByRole("button", { name: "Reset camera" }).click();
+  await expect.poll(async () => graph.getAttribute("data-detail-mode")).toBe("overview");
+  await expect.poll(async () => page.locator(".gf-webgl-label").count())
+    .toBeLessThanOrEqual(initialLabels);
 });
 
 test.describe("JavaScript-disabled fallback", () => {

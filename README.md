@@ -17,13 +17,13 @@
 </p>
 
 <p align="center">
-  <a href="https://pypi.org/project/graphfakos/"><img alt="PyPI" src="https://img.shields.io/badge/pypi-v0.0.11-3775A9"></a>
+  <a href="https://pypi.org/project/graphfakos/"><img alt="PyPI" src="https://img.shields.io/badge/pypi-v0.0.12rc1-3775A9"></a>
   <a href="https://pypi.org/project/graphfakos/"><img alt="Python" src="https://img.shields.io/pypi/pyversions/graphfakos?cacheSeconds=300"></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-blue"></a>
   <img alt="Status" src="https://img.shields.io/badge/status-alpha-6B7280">
 </p>
 
-GraphFakos `v0.0.11` is a public alpha graph viewer package. It gives graph
+GraphFakos `v0.0.12rc1` is a public alpha graph viewer package. It gives graph
 providers one shared set of DTOs, adapter contracts, static rendering, local
 preview tools, and interaction payloads without taking ownership of the graph
 itself.
@@ -55,7 +55,7 @@ should be treated as a scam.
 | | |
 | --- | --- |
 | Package | `graphfakos` |
-| Current line | `v0.0.11` public alpha |
+| Current line | `v0.0.12rc1` public alpha |
 | Python | 3.11+ |
 | Best fit | Shared local graph viewing across independent providers |
 | Core contract | `GraphFakosProvider` |

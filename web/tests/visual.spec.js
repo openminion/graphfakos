@@ -85,4 +85,26 @@ test.describe("visual QA @visual", () => {
       });
     });
   }
+
+  test("captures focused relationship context", async ({ page }) => {
+    await page.goto(testServerUrl(
+      "dense",
+      "/explore",
+      "theme=space&render_engine=3d&layout=grouped&render_limit=240",
+    ));
+    const shell = page.locator(".gf-canvas-shell");
+    const viewer = page.locator("graphfakos-viewer");
+    await expect(shell).toHaveAttribute("data-engine-settled", "true", { timeout: 30_000 });
+    await viewer.evaluate((element) => element.focusNode("provider:cluster-1"));
+    await expect(page.locator(
+      ".gf-webgl-label[data-node-id='provider:cluster-1'][data-selected='true']",
+    )).toBeVisible();
+    await expect.poll(() => page.locator(".gf-webgl-label[data-related='true']").count())
+      .toBeGreaterThan(0);
+    await page.waitForTimeout(600);
+    await page.screenshot({
+      path: "test-results/visual-dense-focus-space.png",
+      fullPage: false,
+    });
+  });
 });

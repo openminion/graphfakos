@@ -213,6 +213,7 @@ SURFACE_STYLE = """
   color: var(--gf-accent);
 }
 .gf-webgl-label {
+  animation: gf-webgl-label-enter .16s ease-out;
   background: color-mix(in srgb, var(--gf-canvas-bg) 78%, transparent);
   border: 1px solid color-mix(in srgb, var(--gf-accent) 22%, transparent);
   border-radius: 999px;
@@ -222,8 +223,10 @@ SURFACE_STYLE = """
   opacity: .78;
   padding: 1px 5px;
   pointer-events: auto;
+  transition: background .16s ease, border-color .16s ease, box-shadow .16s ease, opacity .16s ease;
   white-space: nowrap;
 }
+@keyframes gf-webgl-label-enter { from { opacity: 0; } }
 .gf-webgl-label[data-priority="ambient"] { opacity: .48; }
 .gf-webgl-label[data-related="true"] {
   border-color: color-mix(in srgb, var(--gf-accent) 42%, var(--gf-line));
@@ -279,6 +282,10 @@ SURFACE_STYLE = """
 .gf-webgl-label[data-edge-y="bottom"] { margin-top: -46px; }
 .gf-webgl-label[data-edge-x="left"] { margin-left: 58px; }
 .gf-webgl-label[data-edge-x="right"] { margin-left: -58px; }
+.gf-webgl-label[data-visible="false"] {
+  opacity: 0;
+  pointer-events: none;
+}
 .gf-orientation-hud {
   align-items: center;
   backdrop-filter: blur(12px);
@@ -920,5 +927,8 @@ body.gf-page[data-theme="space"] .gf-spatial-trail {
 }
 @media (max-width: 680px) {
   .gf-canvas-workbench { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gf-webgl-label { animation: none; transition: none; }
 }
 """

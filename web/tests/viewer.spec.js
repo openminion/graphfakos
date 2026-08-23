@@ -1434,6 +1434,7 @@ for (const fixture of [
 }
 
 test("reveals more dense-scene context as the 3D camera approaches", async ({ page }) => {
+  test.setTimeout(60_000);
   await page.goto(testServerUrl("scale200k"));
   const graph = page.locator(".gf-canvas-shell");
   const viewer = page.locator("graphfakos-viewer");

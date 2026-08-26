@@ -107,4 +107,24 @@ test.describe("visual QA @visual", () => {
       fullPage: false,
     });
   });
+
+  test("captures compact mobile graph surface", async ({ page }) => {
+    await page.setViewportSize({ width: 430, height: 860 });
+    await page.goto(testServerUrl(
+      "dense",
+      "/explore",
+      "theme=space&render_engine=3d&layout=grouped&render_limit=240",
+    ));
+    const shell = page.locator(".gf-canvas-shell");
+    await expect(shell).toHaveAttribute("data-webgl-ready", "true", { timeout: 15_000 });
+    await expect(shell).toHaveAttribute("data-engine-settled", "true", { timeout: 30_000 });
+    const canvasBox = await shell.boundingBox();
+    expect(canvasBox.y).toBeLessThan(300);
+    expect(canvasBox.width).toBeGreaterThan(390);
+    await expect(page.locator("body")).toHaveAttribute("data-theme", "space");
+    await page.screenshot({
+      path: "test-results/visual-dense-mobile-space.png",
+      fullPage: false,
+    });
+  });
 });

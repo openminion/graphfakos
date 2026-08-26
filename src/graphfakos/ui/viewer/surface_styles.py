@@ -32,6 +32,51 @@ SURFACE_STYLE = """
   }
   .gf-nav-analysis { margin-top: 8px; }
 }
+@media (max-width: 520px) {
+  .gf-content { padding: 7px 8px 14px; }
+  .gf-header { gap: 6px; margin-bottom: 6px; }
+  .gf-embed-root:is([data-graphfakos-screen="explore"], [data-graphfakos-screen="neighborhood"]) .gf-header h2 {
+    font-size: 20px;
+  }
+  .gf-header .gf-summary { flex-wrap: nowrap; gap: 4px; overflow: hidden; }
+  .gf-header .gf-summary .gf-badge {
+    flex: 0 0 auto; font-size: 10px; min-height: 22px; padding: 2px 6px;
+  }
+  .gf-header .gf-summary .gf-badge:nth-child(n + 5) { display: none; }
+  .gf-embed-root:is([data-graphfakos-screen="explore"], [data-graphfakos-screen="neighborhood"]) .gf-canvas-panel {
+    padding: 6px;
+  }
+  .gf-panel-heading { flex-wrap: nowrap; gap: 6px; }
+  .gf-panel-heading h3 { flex: 0 0 auto; font-size: 15px; margin: 0; }
+  .gf-canvas-actions {
+    flex: 1 1 auto; flex-wrap: nowrap; min-width: 0; overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .gf-canvas-actions::-webkit-scrollbar { display: none; }
+  .gf-command-dock { order: -1; }
+  .gf-canvas-tools { flex: 0 0 auto; flex-wrap: nowrap; }
+  .gf-focus-history:has(> button:disabled + button:disabled) { display: none; }
+  .gf-canvas-tools button,
+  .gf-canvas-tools .gf-tool-link,
+  .gf-tool-menu > summary { min-height: 28px; min-width: 28px; }
+  .gf-scene-status {
+    flex-wrap: nowrap; gap: 5px; justify-content: flex-end; margin: 2px 0 5px;
+  }
+  .gf-scene-status [data-gf-scene-counts] { display: none; }
+  .gf-detail-status { font-size: 0; margin-right: auto; }
+  .gf-detail-status strong { font-size: 10px; padding: 3px 6px; }
+  .gf-canvas-help summary { height: 22px; width: 22px; }
+  .gf-display-dock { left: 8px; top: 8px; }
+  .gf-display-dock > summary {
+    font-size: 10px; min-height: 30px; padding: 4px 8px;
+  }
+  .gf-display-dock > summary small { display: none; }
+  .gf-minimap { padding: 6px; right: 8px; top: 8px; width: 96px; }
+  .gf-minimap-heading { font-size: 10px; margin-bottom: 5px; }
+  .gf-embed-root:is([data-graphfakos-screen="explore"], [data-graphfakos-screen="neighborhood"]) .gf-canvas {
+    height: calc(100dvh - 205px); min-height: 500px;
+  }
+}
 .gf-webgl-surface {
   background: var(--gf-canvas-bg);
   border-radius: 16px;

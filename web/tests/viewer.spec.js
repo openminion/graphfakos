@@ -1348,7 +1348,15 @@ test("keeps mobile navigation compact until requested", async ({ page }) => {
   await expect(toggle).toHaveAttribute("aria-expanded", "false");
   await expect(menu).toBeHidden();
   expect((await nav.boundingBox()).height).toBeLessThan(64);
-  expect((await page.locator(".gf-canvas-shell").boundingBox()).y).toBeLessThan(450);
+  const canvas = page.locator(".gf-canvas-shell");
+  expect((await canvas.boundingBox()).y).toBeLessThan(300);
+  expect(await page.locator(".gf-header .gf-summary .gf-badge:visible").count()).toBe(4);
+  await expect(page.locator("[data-gf-scene-counts]")).toBeHidden();
+  const actionBar = await page.locator(".gf-canvas-panel > .gf-panel-heading").boundingBox();
+  expect(actionBar.height).toBeLessThan(40);
+  const displayDock = await page.locator(".gf-display-dock").boundingBox();
+  const minimap = await page.locator(".gf-minimap").boundingBox();
+  expect(displayDock.x + displayDock.width).toBeLessThan(minimap.x);
   expect(await page.evaluate(() => document.documentElement.scrollWidth))
     .toBeLessThanOrEqual(await page.evaluate(() => document.documentElement.clientWidth));
 

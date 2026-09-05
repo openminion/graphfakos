@@ -132,7 +132,7 @@ from .viewer_contracts import (
     workspace_manifest_for_graph,
 )
 
-__version__ = "0.0.12"
+__version__ = "0.0.13rc1"
 PACKAGE_STATUS = "semantic-alpha"
 STABLE_IMPORT_ROOTS = (
     "graphfakos.artifacts",

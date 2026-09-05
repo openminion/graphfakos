@@ -76,13 +76,13 @@ def density_tuned_request(
     elif request.label_density == 1.0 and visible_nodes >= 160:
         label_density = 0.28
     if request.edge_opacity == 1.0 and total_nodes >= 1_000_000:
-        edge_opacity = 0.28
+        edge_opacity = 0.72
     elif request.edge_opacity == 1.0 and total_nodes >= 200_000:
-        edge_opacity = 0.34
+        edge_opacity = 0.74
     elif request.edge_opacity == 1.0 and (
         total_nodes >= 100_000 or visible_nodes >= 160
     ):
-        edge_opacity = 0.42
+        edge_opacity = 0.54
     if (node_scale, label_density, edge_opacity) == (
         request.node_scale,
         request.label_density,

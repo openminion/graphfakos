@@ -106,6 +106,8 @@ def _graph_canvas(
             f"<path class='gf-edge' data-edge-id='{escape(edge.id)}' "
             f"data-source-id='{escape(edge.source_id)}' data-target-id='{escape(edge.target_id)}' "
             f"data-kind='{escape(edge.kind)}' data-selected='{selected}' "
+            f"data-scope='{escape(str(edge.provider_payload.get('scope') or ''))}' "
+            f"data-weight='{edge.weight or 1}' "
             f"data-label='{escape(edge_label)}' "
             f"data-inspect-route='{escape(edge_inspect_route)}' "
             f"data-path-route='{escape(edge_path_route)}' "
@@ -186,6 +188,10 @@ def _graph_canvas(
             f"data-citation-ids='{escape(' '.join(node.citation_ids))}' "
             f"data-component-id='{escape(component_ids.get(node.id, ''))}' "
             f"data-cluster-id='{escape(_node_cluster_id(node))}' "
+            f"data-region-id='{escape(str(node.provider_payload.get('region_id') or ''))}' "
+            f"data-region-label='{escape(str(node.provider_payload.get('region_label') or ''))}' "
+            f"data-color-kind='{escape(str(node.provider_payload.get('kind') or node.kind))}' "
+            f"data-raw-node-count='{int(node.provider_payload.get('node_count') or 1)}' "
             f"data-style-color='{escape(_style_value(node, request.style_color_by, component_ids))}' "
             f"data-style-size='{escape(_style_value(node, request.style_size_by, component_ids, degree=degree))}' "
             f"data-pinned='{pinned}' data-provider-pinned='{str(node.visual.pinned).lower()}' "
@@ -244,7 +250,7 @@ def _graph_canvas(
         "refY='4' orient='auto'><path d='M0,0 L8,4 L0,8 z'></path></marker></defs>"
         f"<g class='gf-viewport' transform='translate({camera_x:.2f} {camera_y:.2f}) scale({camera_zoom:.2f})'>"
         f"{edge_lines}{node_marks}</g></svg>{surface_controls.spatial_trail(request)}"
-        f"{_node_inspect_overlay(graph, request.focus_node_id)}</div>"
+        f"{_node_inspect_overlay(graph, request.focus_node_id)}{surface_controls.group_controls(graph, request)}</div>"
         "<noscript><p class='gf-note'>JavaScript is off. Use the linked SVG nodes, graph data tables, and route-backed controls to inspect this graph.</p></noscript>"
         f"{_graph_minimap(graph, request, positions, width, height, selected_id, (camera_x, camera_y, camera_zoom))}</div>"
         f"<p class='gf-live-selection' data-gf-live-selection='true' aria-live='polite' "
@@ -254,7 +260,6 @@ def _graph_canvas(
         "aria-live='polite'>Live updates: idle.</p>"
         "<button type='button' class='gf-compact-button' data-gf-live-resync='true' "
         "hidden>Resync live graph</button>"
-        f"{surface_controls.group_controls(graph, request)}"
         f"{graph_operating_dock(graph, request, context_graph)}"
         f"{canvas_workbench(graph, request)}"
         f"{surface_controls.render_budget_panel(request, hidden_nodes, hidden_edges)}"
@@ -418,6 +423,8 @@ def _should_show_label(
     density = _clamped(request.label_density, 0.0, 1.0)
     if node.id == request.focus_node_id or node.id in request.selected_node_ids:
         return True
+    if node.provider_payload.get("landmark"):
+        return True
     if visible_count <= 12:
         return density >= 0.2
     if visible_count >= 160:
@@ -445,6 +452,8 @@ def _node_label_priority(
         return "focus"
     if node.visual.pinned or node.id in request.pinned_positions:
         return "focus"
+    if node.provider_payload.get("landmark"):
+        return "landmark"
     if degree >= 6:
         return "hub"
     if visible_count <= 36:

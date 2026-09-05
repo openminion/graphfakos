@@ -97,6 +97,11 @@ function updateNodeObject(record, node, showLabel, hovered, selected, related, p
   element.dataset.related = String(related);
   element.dataset.previewed = String(previewed);
   element.dataset.visible = "true";
+  if (!hovered && !previewed && element.dataset.offsetX) {
+    element.style.translate = "";
+    delete element.dataset.offsetX;
+    delete element.dataset.offsetY;
+  }
   title.textContent = node.label;
   context.textContent = labelContext(node);
   return record.group;
@@ -150,18 +155,24 @@ self.onmessage = ({ data }) => {
 
 function labelIds(nodes, scene, detailLevel) {
   const budget = labelBudgetForDetail(detailLevel, scene.labelDensity, nodes.length);
-  return new Set([...nodes]
-    .sort((left, right) => {
+  const ranked = [...nodes].sort((left, right) => {
       const leftRank = left.selected
         ? 1000
-        : left.priority === "focus" ? 800 : left.aggregate || left.kind === "cluster" ? 650 : left.priority === "hub" ? 500 : 0;
+        : left.priority === "focus" ? 800 : left.priority === "landmark" ? 700 : left.aggregate || left.kind === "cluster" ? 650 : left.priority === "hub" ? 500 : 0;
       const rightRank = right.selected
         ? 1000
-        : right.priority === "focus" ? 800 : right.aggregate || right.kind === "cluster" ? 650 : right.priority === "hub" ? 500 : 0;
+        : right.priority === "focus" ? 800 : right.priority === "landmark" ? 700 : right.aggregate || right.kind === "cluster" ? 650 : right.priority === "hub" ? 500 : 0;
       return rightRank - leftRank || (right.degree || 0) - (left.degree || 0) || left.label.localeCompare(right.label);
-    })
-    .slice(0, Math.min(budget, nodes.length))
-    .map((node) => node.id));
+    });
+  const landmarks = ranked.filter((node) => node.landmark || node.priority === "landmark").slice(0, 12);
+  const limit = Math.min(
+    nodes.length,
+    detailLevel === "detail" || detailLevel === "precision"
+      ? landmarks.length + budget
+      : Math.max(budget, landmarks.length),
+  );
+  const orderedIds = new Map([...landmarks, ...ranked].map((node) => [node.id, true]));
+  return new Set([...orderedIds.keys()].slice(0, limit));
 }
 
 function connectedIds(links, focusId) {
@@ -299,6 +310,14 @@ function mount(element, scene, callbacks = {}) {
   const nodeCluster = (nodeId) => (
     nodes.find((node) => node.id === nodeId)?.clusterId || ""
   );
+  const nodeRegion = (nodeId) => (
+    nodes.find((node) => node.id === nodeId)?.regionId || ""
+  );
+  const isRegionBridge = (link) => {
+    if (link.scope === "bridge") return true;
+    const { source, target } = linkEndpoints(link);
+    return Boolean(nodeRegion(source) && nodeRegion(source) !== nodeRegion(target));
+  };
   const isClusterDragNode = (node) => Boolean(
     node?.clusterId
     && (
@@ -328,7 +347,8 @@ function mount(element, scene, callbacks = {}) {
     if (link.selected) return "#72ddff";
     if (linkTouchesFocus(link)) return activeScene.theme === "space" ? "rgba(224, 250, 255, 0.92)" : "#17677c";
     if (activeFocusId) return activeScene.theme === "space" ? "rgba(72, 91, 130, 0.3)" : "#b3beb9";
-    if (isAggregateLink(link)) return activeScene.theme === "space" ? "rgba(151, 210, 255, 0.78)" : "#647f79";
+    if (isRegionBridge(link)) return activeScene.theme === "space" ? "rgba(194, 231, 255, 0.9)" : "#436c69";
+    if (isAggregateLink(link)) return activeScene.theme === "space" ? "rgba(151, 210, 255, 0.7)" : "#647f79";
     return activeScene.theme === "space" ? "rgba(132, 176, 232, 0.46)" : "#7d908a";
   };
   const linkWeight = (link) => (
@@ -337,7 +357,8 @@ function mount(element, scene, callbacks = {}) {
   const linkWidth = (link) => {
     if (link.selected) return 1.55;
     if (linkTouchesFocus(link)) return 0.94;
-    if (isAggregateLink(link)) return Math.min(0.72, 0.2 + Math.log10(linkWeight(link)) * 0.12);
+    if (isRegionBridge(link)) return Math.min(1.2, 0.55 + Math.log10(linkWeight(link)) * 0.18);
+    if (isAggregateLink(link)) return Math.min(0.9, 0.34 + Math.log10(linkWeight(link)) * 0.14);
     return 0.11;
   };
   const linkParticles = (link) => {
@@ -356,10 +377,10 @@ function mount(element, scene, callbacks = {}) {
   const sceneLinkOpacity = () => {
     const visibleCount = visibleNodeCount();
     let base = {
-      overview: 0.22,
-      balanced: 0.24,
-      detail: 0.2,
-      precision: 0.3,
+      overview: 0.3,
+      balanced: 0.3,
+      detail: 0.24,
+      precision: 0.32,
     }[semanticDetail] || 0.1;
     if (visibleCount <= 48) base = Math.max(base, 0.36);
     else if (visibleCount <= 110) base = Math.max(base, 0.24);
@@ -479,7 +500,7 @@ function mount(element, scene, callbacks = {}) {
         (node.id === hoveredNodeId || node.id === previewedNodeId ? 4000 : 0)
         + (selectedNodeIds.has(node.id) ? 3000 : 0)
         + (contextLabelIds.has(node.id) ? 2000 : 0)
-        + (node.priority === "focus" ? 1000 : node.priority === "hub" ? 500 : 0)
+        + (node.priority === "focus" ? 1000 : node.priority === "landmark" ? 700 : node.priority === "hub" ? 500 : 0)
         + Math.min(200, node.degree || 0)
       );
       const records = nodes.map((node) => ({
@@ -525,27 +546,34 @@ function mount(element, scene, callbacks = {}) {
       const visibleBottom = Math.min(window.innerHeight, surfaceBounds.bottom);
       const visibleLeft = Math.max(0, surfaceBounds.left);
       const visibleRight = Math.min(window.innerWidth, surfaceBounds.right);
-      const next = { x: 0, y: 8 };
+      const currentX = Number(label.element.dataset.offsetX || 0);
+      const currentY = Number(label.element.dataset.offsetY || 0);
+      const base = {
+        top: labelBounds.top - currentY,
+        right: labelBounds.right - currentX,
+        bottom: labelBounds.bottom - currentY,
+        left: labelBounds.left - currentX,
+      };
+      const next = { x: 0, y: 0 };
       label.element.dataset.edgeY = "center";
       label.element.dataset.edgeX = "center";
-      if (labelBounds.top < visibleTop + 8) {
-        next.y = 42;
+      if (base.top < visibleTop + 8) {
+        next.y = visibleTop + 8 - base.top;
         label.element.dataset.edgeY = "top";
-      } else if (labelBounds.bottom > visibleBottom - 8) {
-        next.y = -42;
+      } else if (base.bottom > visibleBottom - 8) {
+        next.y = visibleBottom - 8 - base.bottom;
         label.element.dataset.edgeY = "bottom";
       }
-      if (labelBounds.left < visibleLeft + 8) {
-        next.x = 52;
+      if (base.left < visibleLeft + 8) {
+        next.x = visibleLeft + 8 - base.left;
         label.element.dataset.edgeX = "left";
-      } else if (labelBounds.right > visibleRight - 8) {
-        next.x = -52;
+      } else if (base.right > visibleRight - 8) {
+        next.x = visibleRight - 8 - base.right;
         label.element.dataset.edgeX = "right";
       }
-      if (label.object.position.x === next.x && label.object.position.y === next.y) return;
-      label.object.position.set(next.x, next.y, 0);
-      graph.refresh();
-      scheduleLabelLayout();
+      label.element.dataset.offsetX = String(next.x);
+      label.element.dataset.offsetY = String(next.y);
+      label.element.style.translate = `${next.x}px ${next.y}px`;
     });
   };
   const pointerDown = (event) => {
@@ -871,6 +899,15 @@ function mount(element, scene, callbacks = {}) {
     shell.dataset.sceneCoverage = metrics.coverage.toFixed(3);
     shell.dataset.sceneOccupancy = metrics.occupancy.toFixed(3);
     shell.dataset.visibleMarks = String(metrics.visibleCount);
+    shell.dataset.visibleRegions = String(new Set(
+      nodes.filter((node) => !node.hidden).map((node) => node.regionId).filter(Boolean),
+    ).size);
+    shell.dataset.visibleAggregateLinks = String(links.filter((link) => (
+      linkVisible(link) && isAggregateLink(link)
+    )).length);
+    shell.dataset.visibleLandmarks = String(nodes.filter((node) => (
+      !node.hidden && visibleLabelIds.has(node.id) && (node.landmark || node.priority === "landmark")
+    )).length);
     return metrics;
   };
   const observeProjectedStability = () => {

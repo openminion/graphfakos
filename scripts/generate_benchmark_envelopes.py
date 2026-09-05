@@ -9,6 +9,22 @@ from math import cos, sin
 from pathlib import Path
 
 
+REGIONS = (
+    ("knowledge", "Knowledge"),
+    ("source", "Source Code"),
+    ("runtime", "Agent Runtime"),
+    ("operations", "Operations"),
+    ("evaluation", "Evaluation"),
+    ("evidence", "Evidence"),
+    ("tasks", "Tasks"),
+    ("integrations", "Integrations"),
+    ("sessions", "Sessions"),
+    ("artifacts", "Artifacts"),
+    ("warnings", "Warnings"),
+    ("research", "Research"),
+)
+
+
 def nodes_per_cluster_for(total_nodes: int) -> int:
     if total_nodes >= 200_000:
         return 1_000
@@ -76,18 +92,29 @@ def benchmark_envelope(total_nodes: int) -> dict[str, object]:
     for index in range(cluster_count):
         cluster_id = f"scale-{index + 1:04d}"
         kind = cluster_kind(index)
-        centroid_angle = index * 2.399963229728653
-        centroid_ring = ((index % 37) + 8) / 45
+        region_index = index % len(REGIONS)
+        region_id, region_label = REGIONS[region_index]
+        region_cluster_index = index // len(REGIONS) + 1
+        region_angle = region_index * 2 * 3.141592653589793 / len(REGIONS)
+        local_angle = region_cluster_index * 2.399963229728653
+        local_ring = ((region_cluster_index % 9) + 2) / 90
         cluster = {
             "id": cluster_id,
-            "label": f"Scale {index + 1:04d}",
+            "label": f"{region_label} {region_cluster_index:02d}",
             "kind": kind,
+            "region_id": region_id,
+            "region_label": region_label,
+            "landmark": region_cluster_index == 1,
             "node_count": nodes_per_cluster,
             "edge_count": int(nodes_per_cluster * 1.45),
             "color_hint": "",
             "centroid_hint": {
-                "x": round(0.5 + 0.46 * centroid_ring * cos(centroid_angle), 4),
-                "y": round(0.5 + 0.42 * centroid_ring * sin(centroid_angle), 4),
+                "x": round(
+                    0.5 + 0.32 * cos(region_angle) + local_ring * cos(local_angle), 4
+                ),
+                "y": round(
+                    0.5 + 0.29 * sin(region_angle) + local_ring * sin(local_angle), 4
+                ),
             },
             "provider_payload": {
                 "sample_window": f"{index * nodes_per_cluster}-{(index + 1) * nodes_per_cluster - 1}",
@@ -109,6 +136,9 @@ def benchmark_envelope(total_nodes: int) -> dict[str, object]:
                     "label": f"Representative {index + 1:04d}",
                     "kind": kind,
                     "cluster_id": cluster_id,
+                    "region_id": region_id,
+                    "region_label": region_label,
+                    "landmark": region_cluster_index == 1,
                     "summary": content,
                     "content": content,
                     "preview": content[:120],
@@ -133,26 +163,23 @@ def benchmark_envelope(total_nodes: int) -> dict[str, object]:
                     index,
                 )
     edge_bundles = []
-    for index in range(1, visible_cluster_count + 1):
-        targets = {((index % visible_cluster_count) + 1)}
-        if index % 5 == 0:
-            targets.add(((index + 17) % visible_cluster_count) + 1)
-        if index % 11 == 0:
-            targets.add(
-                ((index + visible_cluster_count // 3) % visible_cluster_count) + 1
-            )
-        if index % 17 == 0:
-            targets.add(((index * 7 + 23) % visible_cluster_count) + 1)
-        for target in sorted(targets):
+    for index in range(visible_cluster_count):
+        targets = {(index + len(REGIONS)) % visible_cluster_count: "local"}
+        if index < len(REGIONS):
+            targets[(index + 1) % visible_cluster_count] = "bridge"
+        if index % 29 == 0:
+            targets[(index + 37) % visible_cluster_count] = "bridge"
+        for target, scope in sorted(targets.items()):
             if target == index:
                 continue
             edge_bundles.append(
                 {
-                    "id": f"bundle:{index:04d}:{target:04d}",
-                    "source_cluster_id": f"scale-{index:04d}",
-                    "target_cluster_id": f"scale-{target:04d}",
-                    "edge_count": 120 + (index * 13 + target * 7) % 180,
+                    "id": f"bundle:{index + 1:04d}:{target + 1:04d}",
+                    "source_cluster_id": f"scale-{index + 1:04d}",
+                    "target_cluster_id": f"scale-{target + 1:04d}",
+                    "edge_count": 120 + ((index + 1) * 13 + (target + 1) * 7) % 180,
                     "kind": "aggregate_flow",
+                    "scope": scope,
                 }
             )
     visible_nodes = len(nodes) + len(clusters)
@@ -172,6 +199,7 @@ def benchmark_envelope(total_nodes: int) -> dict[str, object]:
             "visible_node_count": visible_nodes,
             "visible_edge_count": len(edge_bundles),
             "cluster_count": cluster_count,
+            "region_count": min(len(REGIONS), cluster_count),
             "min_nodes_per_cluster": nodes_per_cluster,
         },
         "render_hint": {

@@ -263,6 +263,7 @@ function mount(element, scene, callbacks = {}) {
   let focusedNodeIds = new Set();
   let contextLabelIds = new Set();
   let pointerGesture = null;
+  let labelClickGuard = 0;
   const markTouchEngaged = (event) => {
     const point = event?.touches?.[0] || event;
     if (Number.isFinite(point?.clientX) && Number.isFinite(point?.clientY)) {
@@ -545,7 +546,15 @@ function mount(element, scene, callbacks = {}) {
       const visibleTop = Math.max(0, surfaceBounds.top);
       const visibleBottom = Math.min(window.innerHeight, surfaceBounds.bottom);
       const visibleLeft = Math.max(0, surfaceBounds.left);
-      const visibleRight = Math.min(window.innerWidth, surfaceBounds.right);
+      const overlayBounds = element.closest("graphfakos-viewer")
+        ?.querySelector("[data-gf-inspect-overlay][data-open='true']")
+        ?.getBoundingClientRect?.();
+      const reservedRight = overlayBounds
+        && rectanglesOverlap(surfaceBounds, overlayBounds, 0)
+        && overlayBounds.left > visibleLeft + labelBounds.width + 24
+        ? overlayBounds.left - 12
+        : surfaceBounds.right;
+      const visibleRight = Math.min(window.innerWidth, surfaceBounds.right, reservedRight);
       const currentX = Number(label.element.dataset.offsetX || 0);
       const currentY = Number(label.element.dataset.offsetY || 0);
       const base = {
@@ -611,6 +620,10 @@ function mount(element, scene, callbacks = {}) {
     if (!node) return;
     event.preventDefault();
     event.stopPropagation();
+    window.clearTimeout(labelClickGuard);
+    labelClickGuard = window.setTimeout(() => {
+      labelClickGuard = 0;
+    }, 0);
     callbacks.onSelect?.(node, event);
   };
   const pointerCancel = () => {
@@ -960,7 +973,9 @@ function mount(element, scene, callbacks = {}) {
     .cooldownTicks(reducedMotion ? 0 : 120)
     .d3AlphaDecay(0.035)
     .d3VelocityDecay(0.36)
-    .onNodeClick((node, event) => callbacks.onSelect?.(node, event))
+    .onNodeClick((node, event) => {
+      if (!labelClickGuard) callbacks.onSelect?.(node, event);
+    })
     .onNodeHover((node) => {
       hoveredNodeId = node?.id || "";
       refreshInteractionContext();
@@ -1183,6 +1198,7 @@ function mount(element, scene, callbacks = {}) {
       window.clearTimeout(frameTimer);
       window.clearTimeout(settleTimer);
       window.clearTimeout(detailTimer);
+      window.clearTimeout(labelClickGuard);
       for (const record of nodeObjects.values()) window.clearTimeout(record.label?.hideTimer);
       window.cancelAnimationFrame(cameraFrame);
       window.cancelAnimationFrame(labelFrame);

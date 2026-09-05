@@ -392,6 +392,15 @@ def _header(
             f"<p class='gf-note'>Snapshot {escape(graph.snapshot.label or graph.snapshot.snapshot_id)}"
             f"{' generated ' + escape(graph.snapshot.created_at) if graph.snapshot.created_at else ''}.</p>"
         )
+    raw_nodes = int(
+        graph.stats.get("raw_node_count", len(graph.nodes)) or len(graph.nodes)
+    )
+    raw_edges = int(
+        graph.stats.get("raw_edge_count", len(graph.edges)) or len(graph.edges)
+    )
+    warning_summary = (
+        _badge(f"{len(graph.warnings)} warnings", "accent") if graph.warnings else ""
+    )
     return (
         "<header class='gf-header'>"
         "<div><p class='gf-eyebrow'>Graph lens</p>"
@@ -400,13 +409,15 @@ def _header(
         f"<p class='gf-note'>{escape(_layout_description(request.layout))}</p>"
         f"{snapshot_note}</div>"
         "<div class='gf-summary'>"
-        f"{_badge(graph.graph_role, 'accent')}"
-        f"{_badge(f'{len(graph.nodes)} nodes', 'blue')}"
-        f"{_badge(f'{len(graph.edges)} edges', 'neutral')}"
+        f"{_badge(f'{raw_nodes:,} nodes', 'blue')}"
+        f"{_badge(f'{raw_edges:,} links', 'neutral')}"
+        f"{warning_summary}"
+        "<details class='gf-tool-menu gf-header-context'><summary>Context</summary><div>"
         f"{_badge(graph.provider_label, 'neutral')}"
-        f"{_badge(f'render:{request.render_engine}', 'neutral')}"
-        f"{_badge(f'theme:{request.theme}', 'blue')}"
-        f"{diff_summary}{overlay_summary}"
+        f"{_badge(graph.graph_role, 'accent')}"
+        f"{_badge(request.render_engine, 'neutral')}"
+        f"{_badge(request.theme, 'blue')}"
+        f"{diff_summary}{overlay_summary}</div></details>"
         "</div></header>"
     )
 

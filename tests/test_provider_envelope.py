@@ -177,6 +177,10 @@ def test_provider_envelope_cli_renders_3d_space_route(tmp_path) -> None:
 def test_benchmark_envelopes_keep_large_clusters_and_dynamic_bundles() -> None:
     envelope = benchmark_envelope(1_000_000)
     cluster_counts = [item["node_count"] for item in envelope["clusters"]]
+    visible_clusters = envelope["clusters"][:240]
+    regions = {item["region_id"] for item in visible_clusters}
+    landmarks = [item for item in visible_clusters if item["landmark"]]
+    clusters_by_id = {item["id"]: item for item in envelope["clusters"]}
     bundle_targets = {
         (item["source_cluster_id"], item["target_cluster_id"])
         for item in envelope["edge_bundles"]
@@ -186,8 +190,23 @@ def test_benchmark_envelopes_keep_large_clusters_and_dynamic_bundles() -> None:
     assert envelope["graph_stats"]["min_nodes_per_cluster"] >= 100
     assert min(cluster_counts) >= 100
     assert len(envelope["clusters"]) == 1_000
+    assert envelope["graph_stats"]["region_count"] == 12
+    assert len(regions) == 12
+    assert len(landmarks) == 12
     assert len({item["kind"] for item in envelope["clusters"]}) > 3
     assert len(bundle_targets) > 240
+    assert all(
+        clusters_by_id[item["source_cluster_id"]]["region_id"]
+        == clusters_by_id[item["target_cluster_id"]]["region_id"]
+        for item in envelope["edge_bundles"]
+        if item["scope"] == "local"
+    )
+    assert all(
+        clusters_by_id[item["source_cluster_id"]]["region_id"]
+        != clusters_by_id[item["target_cluster_id"]]["region_id"]
+        for item in envelope["edge_bundles"]
+        if item["scope"] == "bridge"
+    )
     assert envelope["nodes"][0]["content"]
     assert envelope["content_index"][envelope["nodes"][0]["id"]]["preview"]
     assert envelope["content_index"][envelope["nodes"][0]["id"]]["source_ref"]["path"]

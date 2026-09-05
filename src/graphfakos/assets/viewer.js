@@ -1480,13 +1480,18 @@
       id: node.dataset.nodeId || "",
       label: node.dataset.label || node.dataset.nodeId || "Node",
       kind: node.dataset.kind || "node",
+      colorKind: node.dataset.colorKind || node.dataset.kind || "node",
       clusterId: node.dataset.clusterId || node.dataset.kind || "",
+      regionId: node.dataset.regionId || "",
+      regionLabel: node.dataset.regionLabel || "",
       degree: number(node.dataset.degree, 0),
       score: number(node.dataset.score, 0),
       summary: node.dataset.summary || "",
       contentPreview: node.dataset.contentPreview || node.dataset.summary || "",
       aggregate: node.dataset.kind === "cluster",
+      rawNodeCount: number(node.dataset.rawNodeCount, 1),
       priority: node.dataset.labelPriority || "ambient",
+      landmark: node.dataset.labelPriority === "landmark",
       selected: state.selected_node_ids.includes(node.dataset.nodeId || ""),
       hidden: state.hidden_groups.includes(node.dataset.kind || "")
         || state.hidden_groups.includes(node.dataset.clusterId || ""),
@@ -1497,6 +1502,8 @@
       targetId: edge.dataset.targetId || "",
       kind: edge.dataset.kind || "edge",
       aggregate: edge.dataset.kind === "edge_bundle",
+      weight: number(edge.dataset.weight, 1),
+      scope: edge.dataset.scope || "",
       selected: edge.dataset.edgeId === state.selected_edge_id,
       hidden: edge.dataset.hidden === "true",
     })),
@@ -1539,6 +1546,8 @@
         ? node.provider_payload?.kind || "cluster"
         : node.kind || "node",
       clusterId: node.provider_payload?.cluster_id || node.visual?.group || node.kind || "",
+      regionId: node.provider_payload?.region_id || "",
+      regionLabel: node.provider_payload?.region_label || "",
       degree: 0,
       score: number(node.score, 0),
       summary: node.summary || node.source || node.id,
@@ -1553,7 +1562,10 @@
       provider_payload: clone(node.provider_payload),
       aggregate: node.kind === "cluster" || number(node.provider_payload?.node_count, 0) > 1,
       rawNodeCount: number(node.provider_payload?.node_count, 1),
-      priority: state.selected_node_ids.includes(node.id) ? "focus" : "ambient",
+      priority: state.selected_node_ids.includes(node.id)
+        ? "focus"
+        : node.provider_payload?.landmark ? "landmark" : "ambient",
+      landmark: node.provider_payload?.landmark === true,
       selected: state.selected_node_ids.includes(node.id),
       hidden: state.hidden_groups.includes(node.kind || "")
         || state.hidden_groups.includes(node.provider_payload?.cluster_id || node.visual?.group || "")
@@ -1566,6 +1578,7 @@
       kind: edge.kind || "edge",
       aggregate: edge.kind === "edge_bundle",
       weight: number(edge.weight || edge.provider_payload?.edge_count, 1),
+      scope: edge.provider_payload?.scope || "",
       selected: edge.id === state.selected_edge_id,
       hidden: edge.provider_payload?.viewer_hidden === true,
       })),
@@ -3360,7 +3373,8 @@
         });
       });
       this.querySelectorAll("[data-gf-group-focus]").forEach((button) => {
-        button.addEventListener("click", () => {
+        button.addEventListener("click", (event) => {
+          event.preventDefault();
           this.focusGroup(
             button.dataset.gfGroupFocus || "",
             button.closest(".gf-canvas-panel")?.querySelector(".gf-canvas-shell"),
@@ -3369,6 +3383,19 @@
       });
       this.querySelectorAll("[data-gf-group-show-all]").forEach((button) => {
         button.addEventListener("click", () => this.dispatch({ name: "group-show-all" }));
+      });
+      this.querySelectorAll("[data-gf-cluster-search]").forEach((input) => {
+        input.addEventListener("input", () => {
+          const navigator = input.closest("[data-gf-cluster-navigator]");
+          const query = input.value.trim().toLocaleLowerCase();
+          const cards = [...navigator.querySelectorAll("[data-gf-group-card]")];
+          let shown = 0;
+          for (const card of cards) {
+            card.hidden = Boolean(query && !card.dataset.search.includes(query));
+            if (!card.hidden) shown += 1;
+          }
+          setText(navigator, "[data-gf-cluster-search-status]", `${shown} of ${cards.length}`);
+        });
       });
       this.querySelectorAll("[data-node-ref]").forEach((item) => {
         item.addEventListener("mouseenter", () => {

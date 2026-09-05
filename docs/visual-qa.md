@@ -20,13 +20,18 @@ make visual-qa
 The command regenerates benchmark fixtures, starts the same local preview
 servers used by browser E2E, verifies that each route reaches WebGL-ready
 state, checks graph-surface size, theme, performance HUD, and label-pressure
-thresholds, and writes current screenshots under `web/test-results/`.
+thresholds, verifies large-graph region and aggregate-link visibility, and
+writes current screenshots under `web/test-results/`.
 
 Current visual routes:
 
 1. dense demo in space theme,
-2. 200K aggregate provider envelope in islands layout,
-3. 1M aggregate provider envelope in islands layout.
+2. dense demo in light theme,
+3. 200K aggregate provider envelope in islands layout,
+4. 1M aggregate provider envelope in islands layout,
+5. focused relationship context,
+6. searchable 200K cluster navigation, and
+7. compact mobile graph surface.
 
 This is a review lane, not a provider-truth test. GraphFakos still renders
 provider-neutral DTOs; providers own graph truth, semantic search, persistence,

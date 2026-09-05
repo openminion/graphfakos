@@ -1259,6 +1259,8 @@ def test_explore_screen_renders_new_layout_and_group_controls() -> None:
 
     assert "Radial layout" in html
     assert "data-gf-group='artifact'" in html
+    assert "data-gf-cluster-navigator='true'" in html
+    assert "data-gf-cluster-search='true'" in html
     assert "data-kind='document'" in html
     assert "marker-end='url(#gf-arrow)'" in html
 

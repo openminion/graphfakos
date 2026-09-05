@@ -15,11 +15,17 @@ function visibleNodes(nodes) {
   return visible.length ? visible : nodes;
 }
 
+function nodeRegion(node) {
+  const payload = node.provider_payload || node.providerPayload || {};
+  return node.regionId || payload.region_id || "";
+}
+
 export function clusterCenters(nodes) {
   const clusterIds = [...new Set(nodes.map((node) => node.clusterId || node.kind || "unclustered"))].sort();
   if (clusterIds.length === 1) return new Map([[clusterIds[0], { x: 0, y: 0, z: 0 }]]);
 
   const shownNodes = visibleNodes(nodes);
+  const regionIds = [...new Set(shownNodes.map(nodeRegion).filter(Boolean))].sort();
   const visibleCount = shownNodes.length;
   const totalWeight = shownNodes.reduce((total, node) => total + clusterWeight(node), 0);
   const spread = visibleCount > 160
@@ -28,6 +34,43 @@ export function clusterCenters(nodes) {
       ? Math.min(5000, 1400 + Math.sqrt(clusterIds.length) * 280)
       : Math.min(2800, 760 + Math.sqrt(clusterIds.length) * 180);
   const goldenAngle = Math.PI * (3 - Math.sqrt(5));
+
+  if (regionIds.length > 1) {
+    const regionSpread = visibleCount > 160 ? 3800 : visibleCount > 80 ? 2900 : 1800;
+    const regionCenters = new Map(regionIds.map((regionId, index) => {
+      const ring = 0.66 + (index % 3) * 0.13;
+      const angle = index * goldenAngle;
+      return [regionId, {
+        x: Math.cos(angle) * regionSpread * ring,
+        y: Math.sin(angle) * regionSpread * ring,
+        z: ((index % 5) - 2) * regionSpread * 0.16,
+      }];
+    }));
+    const regionClusters = new Map(regionIds.map((regionId) => [
+      regionId,
+      clusterIds.filter((clusterId) => shownNodes.some((node) => (
+        (node.clusterId || node.kind || "unclustered") === clusterId
+        && nodeRegion(node) === regionId
+      ))),
+    ]));
+    return new Map(clusterIds.map((clusterId) => {
+      const member = shownNodes.find((node) => (
+        node.clusterId || node.kind || "unclustered"
+      ) === clusterId);
+      const regionId = nodeRegion(member || {});
+      const peers = regionClusters.get(regionId) || [clusterId];
+      const index = Math.max(0, peers.indexOf(clusterId));
+      const center = regionCenters.get(regionId) || { x: 0, y: 0, z: 0 };
+      const ring = Math.sqrt((index + 1) / peers.length);
+      const angle = index * goldenAngle + (stableHash(regionId) % 100) / 100;
+      const localSpread = visibleCount > 160 ? 430 : visibleCount > 80 ? 360 : 280;
+      return [clusterId, {
+        x: center.x + Math.cos(angle) * localSpread * ring,
+        y: center.y + Math.sin(angle) * localSpread * ring,
+        z: center.z + ((index % 7) - 3) * localSpread * 0.12,
+      }];
+    }));
+  }
 
   return new Map(clusterIds.map((clusterId, index) => {
     const members = shownNodes.filter((node) => (node.clusterId || node.kind || "unclustered") === clusterId);
@@ -79,10 +122,10 @@ export function clusterForce(nodes, centers) {
 
 export function forceProfile(visibleCount) {
   if (visibleCount > 160) {
-    return { charge: -1100, linkDistance: 420, linkStrength: 0.012, clusterStrength: 0.02 };
+    return { charge: -900, linkDistance: 380, linkStrength: 0.008, clusterStrength: 0.075 };
   }
   if (visibleCount > 80) {
-    return { charge: -700, linkDistance: 300, linkStrength: 0.03, clusterStrength: 0.04 };
+    return { charge: -650, linkDistance: 280, linkStrength: 0.025, clusterStrength: 0.055 };
   }
   return { charge: -300, linkDistance: 160, linkStrength: 0.1, clusterStrength: 0.085 };
 }

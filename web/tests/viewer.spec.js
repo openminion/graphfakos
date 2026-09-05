@@ -87,6 +87,26 @@ test("spreads dense 3D scenes into separated cluster islands", () => {
   expect(sceneExtent([first, later]).radius).toBeGreaterThan(450);
 });
 
+test("packs provider clusters into distinct macro regions", () => {
+  const nodes = Array.from({ length: 8 }, (_, index) => ({
+    id: `node-${index}`,
+    clusterId: `cluster-${index}`,
+    regionId: `region-${Math.floor(index / 2)}`,
+    rawNodeCount: 1_000,
+  }));
+  const centers = clusterCenters(nodes);
+  const withinRegion = Math.hypot(
+    centers.get("cluster-0").x - centers.get("cluster-1").x,
+    centers.get("cluster-0").y - centers.get("cluster-1").y,
+  );
+  const acrossRegions = Math.hypot(
+    centers.get("cluster-0").x - centers.get("cluster-4").x,
+    centers.get("cluster-0").y - centers.get("cluster-4").y,
+  );
+
+  expect(acrossRegions).toBeGreaterThan(withinRegion * 1.5);
+});
+
 test("keeps node marks readable while camera zoom changes", () => {
   expect(zoomStableNodeScale(4)).toBeLessThan(zoomStableNodeScale(1));
   expect(zoomStableNodeScale(0.25)).toBeGreaterThan(zoomStableNodeScale(1));
@@ -1043,6 +1063,7 @@ test("exposes cluster focus and connected-node navigation", async ({ page }) => 
   await page.goto("/explore?theme=space&render_engine=3d&layout=grouped");
   await expect(page.locator(".gf-canvas-shell")).toHaveAttribute("data-webgl-ready", "true");
 
+  await page.locator("[data-gf-cluster-navigator] > summary").click();
   const card = page.locator("[data-gf-group-card='provider']");
   await expect(card).toBeVisible();
   await card.locator("[data-gf-group='provider']").click();
@@ -1327,7 +1348,8 @@ test("keeps the graph primary on the narrow responsive shell", async ({ page }) 
   expect(box.width).toBeGreaterThan(700);
   expect(box.height).toBeGreaterThan(500);
   const targets = await page.locator(".gf-canvas-tools").evaluate((root) => {
-    const items = [...root.querySelectorAll("button, a")];
+    const items = [...root.querySelectorAll("button, a")]
+      .filter((item) => item.getClientRects().length);
     return items.map((item) => {
       const rect = item.getBoundingClientRect();
       return { width: rect.width, height: rect.height };
@@ -1348,9 +1370,21 @@ test("keeps mobile navigation compact until requested", async ({ page }) => {
   await expect(toggle).toHaveAttribute("aria-expanded", "false");
   await expect(menu).toBeHidden();
   expect((await nav.boundingBox()).height).toBeLessThan(64);
-  expect((await page.locator(".gf-canvas-shell").boundingBox()).y).toBeLessThan(450);
+  const canvas = page.locator(".gf-canvas-shell");
+  expect((await canvas.boundingBox()).y).toBeLessThan(300);
+  expect(await page.locator(".gf-header .gf-summary > .gf-badge:visible").count())
+    .toBeLessThanOrEqual(3);
+  await expect(page.locator("[data-gf-scene-counts]")).toBeHidden();
+  const actionBar = await page.locator(".gf-canvas-panel > .gf-panel-heading").boundingBox();
+  expect(actionBar.height).toBeLessThan(40);
+  const displayDock = await page.locator(".gf-display-dock").boundingBox();
+  const minimap = await page.locator(".gf-minimap").boundingBox();
+  expect(displayDock.x + displayDock.width).toBeLessThan(minimap.x);
   expect(await page.evaluate(() => document.documentElement.scrollWidth))
     .toBeLessThanOrEqual(await page.evaluate(() => document.documentElement.clientWidth));
+  await page.locator("summary[aria-label='More graph controls']").click();
+  await expect(page.locator(".gf-mobile-tool[data-gf-camera='zoom-in']")).toBeVisible();
+  await expect(page.locator(".gf-mobile-tool[data-gf-camera='fullscreen']")).toBeVisible();
 
   await toggle.click();
   await expect(toggle).toHaveAttribute("aria-expanded", "true");
@@ -1400,8 +1434,9 @@ for (const fixture of [
     expect(visible).toBeLessThanOrEqual(240);
     expect(firstSceneMs).toBeLessThan(fixture.maxFirstSceneMs);
     const labels = await page.locator(".gf-webgl-label").count();
-    expect(labels).toBeLessThanOrEqual(8);
+    expect(labels).toBeLessThanOrEqual(12);
     if (fixture.label === "1M") {
+      await expect(graph).toHaveAttribute("data-engine-settled", "true", { timeout: 30_000 });
       await expect.poll(async () => Number(await graph.getAttribute("data-reference-distance")))
         .toBeGreaterThan(0);
       const referenceDistance = Number(await graph.getAttribute("data-reference-distance"));
@@ -1439,7 +1474,8 @@ test("reveals more dense-scene context as the 3D camera approaches", async ({ pa
   const graph = page.locator(".gf-canvas-shell");
   const viewer = page.locator("graphfakos-viewer");
   await expect(graph).toHaveAttribute("data-webgl-ready", "true", { timeout: 15_000 });
-  await expect(graph).toHaveAttribute("data-detail-mode", "balanced");
+  await expect(graph).toHaveAttribute("data-engine-settled", "true", { timeout: 30_000 });
+  await expect(graph).toHaveAttribute("data-detail-mode", "overview");
   await expect.poll(async () => Number(await graph.getAttribute("data-reference-distance")))
     .toBeGreaterThan(0);
   const initialLabels = await page.locator(".gf-webgl-label").count();
@@ -1447,7 +1483,7 @@ test("reveals more dense-scene context as the 3D camera approaches", async ({ pa
     (element) => element.exportNavigationTrail().current.camera.distance,
   );
   const referenceDistance = Number(await graph.getAttribute("data-reference-distance"));
-  expect(initialLabels).toBeLessThanOrEqual(8);
+  expect(initialLabels).toBeLessThanOrEqual(12);
 
   const zoomIn = page.getByRole("button", { name: "Zoom in" });
   await zoomIn.click();

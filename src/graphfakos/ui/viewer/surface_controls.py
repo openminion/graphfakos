@@ -73,9 +73,9 @@ def canvas_toolbar(request: GraphFakosRequest) -> str:
         "aria-label='Previous graph focus' disabled>&larr;</button>"
         "<button type='button' data-gf-focus-history='forward' title='Next graph focus' "
         "aria-label='Next graph focus' disabled>&rarr;</button></div>"
-        "<button type='button' data-gf-camera='zoom-in' title='Zoom in' "
+        "<button type='button' class='gf-primary-zoom' data-gf-camera='zoom-in' title='Zoom in' "
         "aria-label='Zoom in'>+</button>"
-        "<button type='button' data-gf-camera='zoom-out' title='Zoom out' "
+        "<button type='button' class='gf-primary-zoom' data-gf-camera='zoom-out' title='Zoom out' "
         "aria-label='Zoom out'>-</button>"
         "<button type='button' data-gf-camera='fit' "
         "title='Fit selected or visible graph' "
@@ -86,10 +86,13 @@ def canvas_toolbar(request: GraphFakosRequest) -> str:
         f"<a class='gf-tool-link gf-theme-toggle' data-gf-theme-toggle='true' "
         f"href='{escape(theme_route)}' title='Switch graph theme' "
         f"aria-label='{theme_label}'>{theme_label}</a>"
-        "<button type='button' data-gf-camera='fullscreen' title='Fullscreen graph' "
+        "<button type='button' class='gf-primary-full' data-gf-camera='fullscreen' title='Fullscreen graph' "
         "aria-label='Fullscreen graph'>Full</button>"
         "<details class='gf-tool-menu'><summary aria-label='More graph controls'>"
         "•••</summary><div>"
+        "<button type='button' class='gf-mobile-tool' data-gf-camera='zoom-in'>Zoom in</button>"
+        "<button type='button' class='gf-mobile-tool' data-gf-camera='zoom-out'>Zoom out</button>"
+        "<button type='button' class='gf-mobile-tool' data-gf-camera='fullscreen'>Fullscreen</button>"
         "<button type='button' data-gf-camera='reset'>Reset camera</button>"
         "<button type='button' data-gf-history='undo' disabled>Undo</button>"
         "<button type='button' data-gf-history='redo' disabled>Redo</button>"
@@ -157,7 +160,7 @@ def render_budget_panel(
 
 def group_controls(graph: GraphFakosGraph, request: GraphFakosRequest) -> str:
     kinds = _facet_values(graph, "node_kind")
-    clusters = _cluster_control_rows(graph)
+    clusters = _cluster_control_rows(graph, request)
     if not kinds and not clusters:
         return ""
     hidden = set(request.hidden_groups)
@@ -172,46 +175,67 @@ def group_controls(graph: GraphFakosGraph, request: GraphFakosRequest) -> str:
         for kind in kinds
     )
     cluster_buttons = "".join(
-        f"<article class='gf-cluster-card' data-gf-group-card='{escape(cluster_id)}' data-active='{str(cluster_id not in hidden).lower()}'>"
-        f"<button type='button' class='gf-cluster-focus' data-gf-group-focus='{escape(cluster_id)}' aria-label='Focus cluster {escape(label)}'><span>cluster</span><strong>{escape(label)}</strong><small>{count} nodes · {hub}</small>"
-        f"</button><button type='button' class='gf-cluster-toggle' data-gf-group='{escape(cluster_id)}' "
-        f"data-active='{str(cluster_id not in hidden).lower()}' aria-pressed='{str(cluster_id not in hidden).lower()}' aria-label='Show or hide cluster {escape(label)}'>Visible</button></article>"
-        for cluster_id, label, count, hub in clusters
+        f"<article class='gf-cluster-card' data-gf-group-card='{escape(cluster_id)}' "
+        f"data-search='{escape(f'{label} {region} {hub}'.casefold())}' "
+        f"data-active='{str(cluster_id not in hidden).lower()}'>"
+        f"<a href='{escape(route)}' class='gf-cluster-focus' "
+        f"data-gf-group-focus='{escape(cluster_id)}' "
+        f"aria-label='Focus cluster {escape(label)}'><span>{escape(region or 'cluster')}</span>"
+        f"<strong>{escape(label)}</strong><small>{count:,} nodes · {escape(hub)}</small></a>"
+        f"<button type='button' class='gf-cluster-toggle' data-gf-group='{escape(cluster_id)}' "
+        f"data-active='{str(cluster_id not in hidden).lower()}' "
+        f"aria-pressed='{str(cluster_id not in hidden).lower()}' "
+        f"aria-label='Show or hide cluster {escape(label)}'>Visible</button></article>"
+        for cluster_id, label, count, hub, region, route in clusters
     )
     return (
-        "<div class='gf-group-controls' aria-label='Node group controls'>"
-        "<div class='gf-group-controls-head'>"
-        "<span>Dense navigation</span>"
-        f"<button type='button' data-gf-group-show-all='true'>Show all</button></div>"
+        "<details class='gf-cluster-navigator' data-gf-cluster-navigator='true'>"
+        f"<summary><span>Clusters</span><strong>{len(clusters)}</strong></summary>"
+        "<div class='gf-cluster-navigator-body'>"
+        "<div class='gf-cluster-search-row'><input type='search' "
+        "data-gf-cluster-search='true' placeholder='Find a cluster or region' "
+        "aria-label='Find a cluster or region'>"
+        f"<span data-gf-cluster-search-status='true'>{len(clusters)} shown</span>"
+        "<button type='button' data-gf-group-show-all='true'>Show all</button></div>"
         f"<div class='gf-group-kind-row'>{kind_buttons}</div>"
         f"<div class='gf-group-cluster-row'>{cluster_buttons}</div>"
-        f"<div class='gf-group-fallback'>{kind_links}</div></div>"
+        f"<div class='gf-group-fallback'>{kind_links}</div></div></details>"
     )
 
 
 def _cluster_control_rows(
-    graph: GraphFakosGraph,
-) -> list[tuple[str, str, int, str]]:
+    graph: GraphFakosGraph, request: GraphFakosRequest
+) -> list[tuple[str, str, int, str, str, str]]:
     buckets: dict[str, list[GraphFakosNode]] = defaultdict(list)
     for node in graph.nodes:
         buckets[_node_cluster_id(node)].append(node)
     rows = []
-    for cluster_id, nodes in sorted(
-        buckets.items(),
-        key=lambda item: (-len(item[1]), item[0]),
-    )[:12]:
+    for cluster_id, nodes in sorted(buckets.items()):
         if not cluster_id:
             continue
         hub = max(nodes, key=lambda node: node.score or 0.0)
-        rows.append(
-            (cluster_id, _cluster_label(cluster_id, hub), len(nodes), hub.label)
+        count = int(hub.provider_payload.get("node_count") or len(nodes))
+        region = str(hub.provider_payload.get("region_label") or "")
+        route = _route_href(
+            request,
+            overrides={"focus_node_id": hub.id, "scene_level": "cluster"},
         )
-    return rows
+        rows.append(
+            (
+                cluster_id,
+                _cluster_label(cluster_id, hub),
+                count,
+                hub.label,
+                region,
+                route,
+            )
+        )
+    return sorted(rows, key=lambda row: (row[4].casefold(), row[1].casefold()))
 
 
 def _cluster_label(cluster_id: str, hub: GraphFakosNode) -> str:
     if cluster_id.startswith("scale-"):
-        return "Scale " + cluster_id.removeprefix("scale-").upper()
+        return hub.label
     if cluster_id.startswith("cluster-"):
         return "Cluster " + cluster_id.removeprefix("cluster-").upper()
     return hub.visual.group or hub.kind.title()

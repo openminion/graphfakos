@@ -1,5 +1,8 @@
 # GraphFakos engineering patterns
 
+Status: active
+Last updated: 2026-11-01
+
 This reference records the package-local engineering baseline for contributors
 and automation working on GraphFakos.
 
@@ -22,6 +25,46 @@ and automation working on GraphFakos.
 4. Put fixture-only behavior in adapters and tests; do not promote demo
    assumptions into the public package core.
 5. Extract a focused owner before a module becomes a mixed-purpose catch-all.
+
+## Viewer composition
+
+1. Keep `GraphFakosRequest`, graph records, provider capabilities, commands,
+   events, and persisted viewer state provider-neutral and serializable.
+2. Keep route parsing, graph filtering, traversal, layout, canvas composition,
+   controls, discovery, analysis, navigation, authoring, and evidence behavior
+   with their existing `ui/viewer/` owners; do not grow `ui/app.py` back into a
+   mixed viewer implementation.
+3. Keep the static SVG/HTML surface complete enough for inspection and export.
+   WebGL is an enhancement, not the only representation of graph truth.
+4. Edit the 3D renderer in `web/src/` and rebuild the packaged asset. Do not
+   hand-edit generated `src/graphfakos/assets/renderer-3d.js` output.
+5. Keep the framework-neutral custom element and packaged browser assets local;
+   host packages should adapt their data instead of copying the viewer.
+
+## Provider and side-effect rules
+
+1. GraphFakos may validate and present knowledge-capture or graph-action
+   requests, but the provider owns authorization, persistence, semantic truth,
+   and final status.
+2. Keep demo, fixture, file-backed, Sophiagraph, and PragmaGraph adapters behind
+   the same public contracts. Do not special-case provider meaning in shared
+   rendering code.
+3. Preserve revision, cursor, replay, and action identifiers across local
+   server and browser boundaries so retries do not silently duplicate work.
+4. Treat provider errors and unavailable capabilities as typed facts; do not
+   infer success from an HTTP response or optimistic browser state alone.
+
+## Scale and accessibility truth
+
+1. Report raw, rendered, clustered, and omitted counts separately. A 1M graph
+   envelope does not mean the browser allocated or drew one million objects.
+2. Keep layout and benchmark fixtures deterministic so visual and browser
+   regressions are reproducible.
+3. Preserve keyboard navigation, visible focus, reduced-motion behavior,
+   readable labels, fallback rendering, and responsive controls when changing
+   the graph surface.
+4. Use real-browser checks for interaction, WebGL, responsive, accessibility,
+   or scale claims; static HTML or unit tests do not prove those behaviors.
 
 ## Implementation style
 

@@ -89,3 +89,6 @@ Run `make release-check` for packaging or public-surface changes and
 [Code quality enforcement](code-quality-enforcement.md) and
 [Cleanup workflow](cleanup-workflow.md) for the active ratchets and broader
 sweep process.
+
+Apply the [comment and docstring review](../CODE_QUALITY.md#comment-and-docstring-review)
+to the final diff, including tests and scripts.
